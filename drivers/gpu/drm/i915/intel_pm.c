@@ -54,26 +54,6 @@
 
 static void gen9_init_clock_gating(struct drm_device *dev)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	/*
-	 * WaDisableSDEUnitClockGating:skl
-	 * This seems to be a pre-production w/a.
-	 */
-	I915_WRITE(GEN8_UCGCTL6, I915_READ(GEN8_UCGCTL6) |
-		   GEN8_SDEUNIT_CLOCK_GATE_DISABLE);
-
-	/*
-	 * WaDisableDgMirrorFixInHalfSliceChicken5:skl
-	 * This is a pre-production w/a.
-	 */
-	I915_WRITE(GEN9_HALF_SLICE_CHICKEN5,
-		   I915_READ(GEN9_HALF_SLICE_CHICKEN5) &
-		   ~GEN9_DG_MIRROR_FIX_ENABLE);
-
-	/* Wa4x4STCOptimizationDisable:skl */
-	I915_WRITE(CACHE_MODE_1,
-		   _MASKED_BIT_ENABLE(GEN8_4x4_STC_OPTIMIZATION_DISABLE));
 }
 
 static void i8xx_disable_fbc(struct drm_device *dev)
@@ -7119,6 +7099,8 @@ void intel_init_pm(struct drm_device *dev)
 			dev_priv->display.init_clock_gating = haswell_init_clock_gating;
 		else if (INTEL_INFO(dev)->gen == 8)
 			dev_priv->display.init_clock_gating = broadwell_init_clock_gating;
+		else if (INTEL_INFO(dev)->gen == 9)
+			dev_priv->display.init_clock_gating = gen9_init_clock_gating;
 	} else if (IS_CHERRYVIEW(dev)) {
 		dev_priv->display.update_wm = cherryview_update_wm;
 		dev_priv->display.update_sprite_wm = valleyview_update_sprite_wm;
