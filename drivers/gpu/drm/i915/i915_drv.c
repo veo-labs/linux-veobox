@@ -358,13 +358,11 @@ static const struct intel_device_info intel_cherryview_info = {
 
 static const struct intel_device_info intel_skylake_info = {
 	.is_preliminary = 1,
-	.is_skylake = 1,
 	.gen = 9, .num_pipes = 3,
 	.need_gfx_hws = 1, .has_hotplug = 1,
 	.ring_mask = RENDER_RING | BSD_RING | BLT_RING | VEBOX_RING,
 	.has_llc = 1,
 	.has_ddi = 1,
-	.has_fbc = 1,
 	GEN_DEFAULT_PIPEOFFSETS,
 	IVB_CURSOR_OFFSETS,
 };
