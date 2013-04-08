@@ -4442,7 +4442,7 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 		dev->driver->enable_vblank = valleyview_enable_vblank;
 		dev->driver->disable_vblank = valleyview_disable_vblank;
 		dev_priv->display.hpd_irq_setup = i915_hpd_irq_setup;
-	} else if (INTEL_INFO(dev_priv)->gen >= 8) {
+	} else if (INTEL_INFO(dev)->gen >= 8) {
 		dev->driver->irq_handler = gen8_irq_handler;
 		dev->driver->irq_preinstall = gen8_irq_reset;
 		dev->driver->irq_postinstall = gen8_irq_postinstall;
