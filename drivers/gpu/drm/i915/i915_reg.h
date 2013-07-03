@@ -4699,39 +4699,6 @@ enum punit_power_well {
 #define SPCONSTALPHA(pipe, plane) _PIPE(pipe * 2 + plane, _SPACONSTALPHA, _SPBCONSTALPHA)
 #define SPGAMC(pipe, plane) _PIPE(pipe * 2 + plane, _SPAGAMC, _SPBGAMC)
 
-/*
- * CHV pipe B sprite CSC
- *
- * |cr|   |c0 c1 c2|   |cr + cr_ioff|   |cr_ooff|
- * |yg| = |c3 c4 c5| x |yg + yg_ioff| + |yg_ooff|
- * |cb|   |c6 c7 c8|   |cb + cr_ioff|   |cb_ooff|
- */
-#define SPCSCYGOFF(sprite)	(VLV_DISPLAY_BASE + 0x6d900 + (sprite) * 0x1000)
-#define SPCSCCBOFF(sprite)	(VLV_DISPLAY_BASE + 0x6d904 + (sprite) * 0x1000)
-#define SPCSCCROFF(sprite)	(VLV_DISPLAY_BASE + 0x6d908 + (sprite) * 0x1000)
-#define  SPCSC_OOFF(x)		(((x) & 0x7ff) << 16) /* s11 */
-#define  SPCSC_IOFF(x)		(((x) & 0x7ff) << 0) /* s11 */
-
-#define SPCSCC01(sprite)	(VLV_DISPLAY_BASE + 0x6d90c + (sprite) * 0x1000)
-#define SPCSCC23(sprite)	(VLV_DISPLAY_BASE + 0x6d910 + (sprite) * 0x1000)
-#define SPCSCC45(sprite)	(VLV_DISPLAY_BASE + 0x6d914 + (sprite) * 0x1000)
-#define SPCSCC67(sprite)	(VLV_DISPLAY_BASE + 0x6d918 + (sprite) * 0x1000)
-#define SPCSCC8(sprite)		(VLV_DISPLAY_BASE + 0x6d91c + (sprite) * 0x1000)
-#define  SPCSC_C1(x)		(((x) & 0x7fff) << 16) /* s3.12 */
-#define  SPCSC_C0(x)		(((x) & 0x7fff) << 0) /* s3.12 */
-
-#define SPCSCYGICLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d920 + (sprite) * 0x1000)
-#define SPCSCCBICLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d924 + (sprite) * 0x1000)
-#define SPCSCCRICLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d928 + (sprite) * 0x1000)
-#define  SPCSC_IMAX(x)		(((x) & 0x7ff) << 16) /* s11 */
-#define  SPCSC_IMIN(x)		(((x) & 0x7ff) << 0) /* s11 */
-
-#define SPCSCYGOCLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d92c + (sprite) * 0x1000)
-#define SPCSCCBOCLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d930 + (sprite) * 0x1000)
-#define SPCSCCROCLAMP(sprite)	(VLV_DISPLAY_BASE + 0x6d934 + (sprite) * 0x1000)
-#define  SPCSC_OMAX(x)		((x) << 16) /* u10 */
-#define  SPCSC_OMIN(x)		((x) << 0) /* u10 */
-
 /* Skylake plane registers */
 
 #define _PLANE_CTL_1_A				0x70180
@@ -4749,9 +4716,7 @@ enum punit_power_well {
 #define   PLANE_CTL_FORMAT_INDEXED		( 12 << 24)
 #define   PLANE_CTL_FORMAT_RGB_565		( 14 << 24)
 #define   PLANE_CTL_PIPE_CSC_ENABLE		(1 << 23)
-#define   PLANE_CTL_KEY_ENABLE_MASK		(0x3 << 21)
-#define   PLANE_CTL_KEY_ENABLE_SOURCE		(  1 << 21)
-#define   PLANE_CTL_KEY_ENABLE_DESTINATION	(  2 << 21)
+#define   PLANE_CTL_KEY_ENABLE			(1 << 22)
 #define   PLANE_CTL_ORDER_BGRX			(0 << 20)
 #define   PLANE_CTL_ORDER_RGBX			(1 << 20)
 #define   PLANE_CTL_YUV422_ORDER_MASK		(0x3 << 16)
@@ -4771,9 +4736,6 @@ enum punit_power_well {
 #define   PLANE_CTL_ALPHA_DISABLE		(  0 << 4)
 #define   PLANE_CTL_ALPHA_SW_PREMULTIPLY	(  2 << 4)
 #define   PLANE_CTL_ALPHA_HW_PREMULTIPLY	(  3 << 4)
-#define   PLANE_CTL_ROTATE_MASK			0x3
-#define   PLANE_CTL_ROTATE_0			0x0
-#define   PLANE_CTL_ROTATE_180			0x2
 #define _PLANE_STRIDE_1_A			0x70188
 #define _PLANE_STRIDE_2_A			0x70288
 #define _PLANE_STRIDE_3_A			0x70388
@@ -4789,14 +4751,6 @@ enum punit_power_well {
 #define _PLANE_OFFSET_1_A			0x701a4
 #define _PLANE_OFFSET_2_A			0x702a4
 #define _PLANE_OFFSET_3_A			0x703a4
-#define _PLANE_KEYVAL_1_A			0x70194
-#define _PLANE_KEYVAL_2_A			0x70294
-#define _PLANE_KEYMSK_1_A			0x70198
-#define _PLANE_KEYMSK_2_A			0x70298
-#define _PLANE_KEYMAX_1_A			0x701a0
-#define _PLANE_KEYMAX_2_A			0x702a0
-#define _PLANE_BUF_CFG_1_A			0x7027c
-#define _PLANE_BUF_CFG_2_A			0x7037c
 
 #define _PLANE_CTL_1_B				0x71180
 #define _PLANE_CTL_2_B				0x71280
@@ -4852,41 +4806,6 @@ enum punit_power_well {
 #define _PLANE_OFFSET_2(pipe) _PIPE(pipe, _PLANE_OFFSET_2_A, _PLANE_OFFSET_2_B)
 #define PLANE_OFFSET(pipe, plane)	\
 	_PLANE(plane, _PLANE_OFFSET_1(pipe), _PLANE_OFFSET_2(pipe))
-
-#define _PLANE_KEYVAL_1_B			0x71194
-#define _PLANE_KEYVAL_2_B			0x71294
-#define _PLANE_KEYVAL_1(pipe) _PIPE(pipe, _PLANE_KEYVAL_1_A, _PLANE_KEYVAL_1_B)
-#define _PLANE_KEYVAL_2(pipe) _PIPE(pipe, _PLANE_KEYVAL_2_A, _PLANE_KEYVAL_2_B)
-#define PLANE_KEYVAL(pipe, plane)	\
-	_PLANE(plane, _PLANE_KEYVAL_1(pipe), _PLANE_KEYVAL_2(pipe))
-
-#define _PLANE_KEYMSK_1_B			0x71198
-#define _PLANE_KEYMSK_2_B			0x71298
-#define _PLANE_KEYMSK_1(pipe) _PIPE(pipe, _PLANE_KEYMSK_1_A, _PLANE_KEYMSK_1_B)
-#define _PLANE_KEYMSK_2(pipe) _PIPE(pipe, _PLANE_KEYMSK_2_A, _PLANE_KEYMSK_2_B)
-#define PLANE_KEYMSK(pipe, plane)	\
-	_PLANE(plane, _PLANE_KEYMSK_1(pipe), _PLANE_KEYMSK_2(pipe))
-
-#define _PLANE_KEYMAX_1_B			0x711a0
-#define _PLANE_KEYMAX_2_B			0x712a0
-#define _PLANE_KEYMAX_1(pipe) _PIPE(pipe, _PLANE_KEYMAX_1_A, _PLANE_KEYMAX_1_B)
-#define _PLANE_KEYMAX_2(pipe) _PIPE(pipe, _PLANE_KEYMAX_2_A, _PLANE_KEYMAX_2_B)
-#define PLANE_KEYMAX(pipe, plane)	\
-	_PLANE(plane, _PLANE_KEYMAX_1(pipe), _PLANE_KEYMAX_2(pipe))
-
-#define _PLANE_BUF_CFG_1_B			0x7127c
-#define _PLANE_BUF_CFG_2_B			0x7137c
-#define _PLANE_BUF_CFG_1(pipe)	\
-	_PIPE(pipe, _PLANE_BUF_CFG_1_A, _PLANE_BUF_CFG_1_B)
-#define _PLANE_BUF_CFG_2(pipe)	\
-	_PIPE(pipe, _PLANE_BUF_CFG_2_A, _PLANE_BUF_CFG_2_B)
-#define PLANE_BUF_CFG(pipe, plane)	\
-	_PLANE(plane, _PLANE_BUF_CFG_1(pipe), _PLANE_BUF_CFG_2(pipe))
-
-/* SKL new cursor registers */
-#define _CUR_BUF_CFG_A				0x7017c
-#define _CUR_BUF_CFG_B				0x7117c
-#define CUR_BUF_CFG(pipe)	_PIPE(pipe, _CUR_BUF_CFG_A, _CUR_BUF_CFG_B)
 
 /* VBIOS regs */
 #define VGACNTRL		0x71400
