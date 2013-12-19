@@ -167,10 +167,18 @@
 
 			ipu2_csi0: port@0 {
 				reg = <0>;
+
+				ipu2_csi0_from_csi2ipu: endpoint {
+					remote-endpoint = <&csi2ipu_to_ipu2_csi0>;
+				};
 			};
 
 			ipu2_csi1: port@1 {
 				reg = <1>;
+
+				ipu2_csi1_from_mipi_ipu2_mux: endpoint {
+					remote-endpoint = <&mipi_ipu2_mux_to_ipu2_csi1>;
+				};
 			};
 
 			ipu2_di0: port@2 {
@@ -246,6 +254,78 @@
 	};
 };
 
+&gpr {
+	mipi_ipu1_mux {
+		compatible = "video-multiplexer";
+		reg = <0x04>;
+		bit-mask = <1>;
+		bit-shift = <19>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			mipi_ipu1_mux_from_mipi_csi0: endpoint {
+				remote-endpoint = <&mipi_csi0_to_mipi_ipu1_mux>;
+			};
+		};
+
+		csi0: port@1 {
+			reg = <1>;
+		};
+
+		port@2 {
+			reg = <2>;
+
+			mipi_ipu1_mux_to_ipu1_csi0: endpoint {
+				remote-endpoint = <&ipu1_csi0_from_mipi_ipu1_mux>;
+			};
+		};
+	};
+
+	mipi_ipu2_mux {
+		compatible = "video-multiplexer";
+		reg = <0x04>;
+		bit-mask = <1>;
+		bit-shift = <20>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			mipi_ipu2_mux_from_mipi_csi3: endpoint {
+				remote-endpoint = <&mipi_csi3_to_mipi_ipu2_mux>;
+			};
+		};
+
+		csi1: port@1 {
+			reg = <1>;
+		};
+
+		port@2 {
+			reg = <2>;
+
+			mipi_ipu2_mux_to_ipu2_csi1: endpoint {
+				remote-endpoint = <&ipu2_csi1_from_mipi_ipu2_mux>;
+			};
+		};
+	};
+};
+
+&ipu1_csi1 {
+	ipu1_csi1_from_mipi_csi1: endpoint {
+		remote-endpoint = <&mipi_csi1_to_ipu1_csi1>;
+	};
+};
+
+&ipu2_csi0 {
+	ipu2_csi0_from_mipi_csi2: endpoint {
+		remote-endpoint = <&mipi_csi2_to_ipu2_csi0>;
+	};
+};
+
 &ldb {
 	clocks = <&clks IMX6QDL_CLK_LDB_DI0_SEL>, <&clks IMX6QDL_CLK_LDB_DI1_SEL>,
 		 <&clks IMX6QDL_CLK_IPU1_DI0_SEL>, <&clks IMX6QDL_CLK_IPU1_DI1_SEL>,
@@ -288,6 +368,44 @@
 			lvds1_mux_3: endpoint {
 				remote-endpoint = <&ipu2_di1_lvds1>;
 			};
+		};
+	};
+};
+
+&mipi_csi {
+	port@0 {
+		reg = <0>;
+	};
+
+	port@1 {
+		reg = <1>;
+
+		mipi_csi0_to_mipi_ipu1_mux: endpoint {
+			remote-endpoint = <&mipi_ipu1_mux_from_mipi_csi0>;
+		};
+	};
+
+	port@2 {
+		reg = <2>;
+
+		mipi_csi1_to_ipu1_csi1: endpoint {
+			remote-endpoint = <&ipu1_csi1_from_mipi_csi1>;
+		};
+	};
+
+	port@3 {
+		reg = <3>;
+
+		mipi_csi2_to_ipu2_csi0: endpoint {
+			remote-endpoint = <&ipu2_csi0_from_mipi_csi2>;
+		};
+	};
+
+	port@4 {
+		reg = <4>;
+
+		mipi_csi3_to_mipi_ipu2_mux: endpoint {
+			remote-endpoint = <&mipi_ipu2_mux_from_mipi_csi3>;
 		};
 	};
 };

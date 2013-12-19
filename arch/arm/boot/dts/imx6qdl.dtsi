@@ -702,6 +702,8 @@
 			gpr: iomuxc-gpr@020e0000 {
 				compatible = "fsl,imx6q-iomuxc-gpr", "syscon";
 				reg = <0x020e0000 0x38>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 			};
 
 			iomuxc: iomuxc@020e0000 {
@@ -1016,6 +1018,8 @@
 
 			mipi_csi: mipi@021dc000 {
 				reg = <0x021dc000 0x4000>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 			};
 
 			mipi_dsi: mipi@021e0000 {
@@ -1110,6 +1114,10 @@
 
 			ipu1_csi0: port@0 {
 				reg = <0>;
+
+				ipu1_csi0_from_mipi_ipu1_mux: endpoint {
+					remote-endpoint = <&mipi_ipu1_mux_to_ipu1_csi0>;
+				};
 			};
 
 			ipu1_csi1: port@1 {
