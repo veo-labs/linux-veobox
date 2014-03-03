@@ -690,9 +690,12 @@ static void sbp2_agent_reset_no_wait(struct sbp2_logical_unit *lu)
 
 static inline void sbp2_allow_block(struct sbp2_target *tgt)
 {
-	spin_lock_irq(&tgt->lock);
+	struct sbp2_target *tgt = lu->tgt;
+	struct fw_card *card = target_parent_device(tgt)->card;
+
+	spin_lock_irq(&card->lock);
 	--tgt->dont_block;
-	spin_unlock_irq(&tgt->lock);
+	spin_unlock_irq(&card->lock);
 }
 
 /*
