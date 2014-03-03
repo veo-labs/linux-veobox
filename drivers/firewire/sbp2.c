@@ -529,9 +529,9 @@ static int sbp2_cancel_orbs(struct sbp2_logical_unit *lu)
 	int retval = -ENOENT;
 
 	INIT_LIST_HEAD(&list);
-	spin_lock_irq(&lu->tgt->lock);
+	spin_lock_irq(&device->card->lock);
 	list_splice_init(&lu->orb_list, &list);
-	spin_unlock_irq(&lu->tgt->lock);
+	spin_unlock_irq(&device->card->lock);
 
 	list_for_each_entry_safe(orb, next, &list, link) {
 		retval = 0;
@@ -740,12 +740,12 @@ static void sbp2_conditionally_unblock(struct sbp2_logical_unit *lu)
 		container_of((void *)tgt, struct Scsi_Host, hostdata[0]);
 	bool unblock = false;
 
-	spin_lock_irq(&tgt->lock);
+	spin_lock_irq(&card->lock);
 	if (lu->blocked && lu->generation == card->generation) {
 		lu->blocked = false;
 		unblock = --tgt->blocked == 0;
 	}
-	spin_unlock_irq(&tgt->lock);
+	spin_unlock_irq(&card->lock);
 
 	if (unblock)
 		scsi_unblock_requests(shost);
@@ -762,9 +762,9 @@ static void sbp2_unblock(struct sbp2_target *tgt)
 	struct Scsi_Host *shost =
 		container_of((void *)tgt, struct Scsi_Host, hostdata[0]);
 
-	spin_lock_irq(&tgt->lock);
+	spin_lock_irq(&card->lock);
 	++tgt->dont_block;
-	spin_unlock_irq(&tgt->lock);
+	spin_unlock_irq(&card->lock);
 
 	scsi_unblock_requests(shost);
 }
