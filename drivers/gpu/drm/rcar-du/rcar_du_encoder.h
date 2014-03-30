@@ -40,8 +40,6 @@ struct rcar_du_encoder {
 
 #define rcar_encoder_to_drm_encoder(e)	(&(e)->slave.base)
 
-#define rcar_encoder_to_drm_encoder(e)	(&(e)->encoder)
-
 struct rcar_du_connector {
 	struct drm_connector connector;
 	struct rcar_du_encoder *encoder;
