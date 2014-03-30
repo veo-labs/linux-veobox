@@ -25,8 +25,7 @@
 
 static int rcar_du_hdmi_connector_get_modes(struct drm_connector *connector)
 {
-	struct rcar_du_connector *con = to_rcar_connector(connector);
-	struct drm_encoder *encoder = rcar_encoder_to_drm_encoder(con->encoder);
+	struct drm_encoder *encoder = connector->encoder;
 	struct drm_encoder_slave_funcs *sfuncs = to_slave_funcs(encoder);
 
 	if (sfuncs->get_modes == NULL)
@@ -38,8 +37,7 @@ static int rcar_du_hdmi_connector_get_modes(struct drm_connector *connector)
 static int rcar_du_hdmi_connector_mode_valid(struct drm_connector *connector,
 					     struct drm_display_mode *mode)
 {
-	struct rcar_du_connector *con = to_rcar_connector(connector);
-	struct drm_encoder *encoder = rcar_encoder_to_drm_encoder(con->encoder);
+	struct drm_encoder *encoder = connector->encoder;
 	struct drm_encoder_slave_funcs *sfuncs = to_slave_funcs(encoder);
 
 	if (sfuncs->mode_valid == NULL)
@@ -63,8 +61,7 @@ static void rcar_du_hdmi_connector_destroy(struct drm_connector *connector)
 static enum drm_connector_status
 rcar_du_hdmi_connector_detect(struct drm_connector *connector, bool force)
 {
-	struct rcar_du_connector *con = to_rcar_connector(connector);
-	struct drm_encoder *encoder = rcar_encoder_to_drm_encoder(con->encoder);
+	struct drm_encoder *encoder = connector->encoder;
 	struct drm_encoder_slave_funcs *sfuncs = to_slave_funcs(encoder);
 
 	if (sfuncs->detect == NULL)
