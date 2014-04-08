@@ -6192,58 +6192,8 @@ static void intel_gen6_powersave_work(struct work_struct *work)
 	if (INTEL_INFO(dev)->gen < 9)
 		gen6_reset_rps_interrupts(dev);
 
-	if (IS_CHERRYVIEW(dev)) {
-		cherryview_enable_rps(dev);
-	} else if (IS_VALLEYVIEW(dev)) {
-		valleyview_enable_rps(dev);
-	} else if (INTEL_INFO(dev)->gen >= 9) {
-		gen9_enable_rc6(dev);
-		gen9_enable_rps(dev);
-		__gen6_update_ring_freq(dev);
-	} else if (IS_BROADWELL(dev)) {
-		gen8_enable_rps(dev);
-		__gen6_update_ring_freq(dev);
-	} else {
-		gen6_enable_rps(dev);
-		__gen6_update_ring_freq(dev);
-	}
-	dev_priv->rps.enabled = true;
-
-	if (INTEL_INFO(dev)->gen < 9)
-		gen6_enable_rps_interrupts(dev);
-
-	mutex_unlock(&dev_priv->rps.hw_lock);
-
-	intel_runtime_pm_put(dev_priv);
-}
-
-void intel_enable_gt_powersave(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	if (IS_IRONLAKE_M(dev)) {
-		mutex_lock(&dev->struct_mutex);
-		ironlake_enable_drps(dev);
-		ironlake_enable_rc6(dev);
-		intel_init_emon(dev);
-		mutex_unlock(&dev->struct_mutex);
-	} else if (INTEL_INFO(dev)->gen >= 6) {
-		/*
-		 * PCU communication is slow and this doesn't need to be
-		 * done at any specific time, so do this out of our fast path
-		 * to make resume and init faster.
-		 *
-		 * We depend on the HW RC6 power context save/restore
-		 * mechanism when entering D3 through runtime PM suspend. So
-		 * disable RPM until RPS/RC6 is properly setup. We can only
-		 * get here via the driver load/system resume/runtime resume
-		 * paths, so the _noresume version is enough (and in case of
-		 * runtime resume it's necessary).
-		 */
-		if (schedule_delayed_work(&dev_priv->rps.delayed_resume_work,
-					   round_jiffies_up_relative(HZ)))
-			intel_runtime_pm_get_noresume(dev_priv);
-	}
+	if (IS_BROADWELL(dev) || (INTEL_INFO(dev)->gen >= 9))
+		gen8_irq_power_well_post_enable(dev_priv);
 }
 
 void intel_reset_gt_powersave(struct drm_device *dev)
