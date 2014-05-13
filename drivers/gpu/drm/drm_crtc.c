@@ -4139,7 +4139,7 @@ done:
 
 static struct drm_property_blob *
 drm_property_create_blob(struct drm_device *dev, size_t length,
-			 const void *data)
+			 void *data)
 {
 	struct drm_property_blob *blob;
 	int ret;
