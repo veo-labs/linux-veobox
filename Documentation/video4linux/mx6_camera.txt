@@ -1,0 +1,187 @@
+                         i.MX6 Video Capture Driver
+                         ==========================
+
+Introduction
+------------
+
+The Freescale i.MX6 contains an Image Processing Unit (IPU), which
+handles the flow of image frames to and from capture devices and
+display devices.
+
+For image capture, the IPU contains the following subunits:
+
+- Image DMA Controller (IDMAC)
+- Camera Serial Interface (CSI)
+- Image Converter (IC)
+- Sensor Multi-FIFO Controller (SMFC)
+- Image Rotator (IRT)
+- Video De-Interlace Controller (VDIC)
+
+The IDMAC is the DMA controller for transfer of image frames to and from
+memory. Various dedicated DMA channels exist for both video capture and
+display paths.
+
+The CSI is the frontend capture unit that interfaces directly with
+capture devices over Parallel, BT.656, and MIPI CSI-2 busses.
+
+The IC handles color-space conversion, resizing, and rotation
+operations.
+
+The SMFC is used to send image frames directly to memory, bypassing the
+IC. The SMFC is used when no color-space conversion or resizing is
+required, i.e. the requested V4L2 formats and color-space are identical
+to raw frames from the capture device.
+
+The IRT carries out 90 and 270 degree image rotation operations.
+
+Finally, the VDIC handles the conversion of interlaced video to
+progressive, with support for different motion compensation modes (low
+and high).
+
+For more info, refer to the latest versions of the i.MX6 reference
+manuals listed under References.
+
+
+Features
+--------
+
+Some of the features of this driver include:
+
+- Supports parallel, BT.565, and MIPI CSI-2 interfaces.
+
+- Camera Preview mode.
+
+- Multiple subdev sensors can be registered and controlled by a single
+  interface driver instance. Input enumeration will list every registered
+  sensor's inputs and input names, and setting an input will switch to
+  a different sensor if the input index is handled by a different sensor.
+
+- Simultaneous streaming from two separate sensors is possible with two
+  interface driver instances, each instance controlling a different
+  sensor. This is currently possible with the SabreSD reference board
+  with OV5642 and MIPI CSI-2 OV5640 sensors.
+
+- Separate rotation control for both streaming and preview. Streaming
+  rotation control is via main video device node, and preview rotation
+  control via subdevice node.
+
+- Scaling and color-space conversion for both streaming and preview.
+
+- Many pixel formats supported (RGB, packed and planar YUV, partial
+  planar YUV).
+
+- Full device-tree support using OF graph bindings.
+
+- Analog decoder input video source hot-swap support (during streaming)
+  via decoder status change subdev notification.
+
+- MMAP, USERPTR, and DMABUF importer/exporter buffers supported.
+
+- Motion compensated de-interlacing using the VDIC, with three
+  motion compensation modes: low, medium, and high motion. The mode is
+  specified with a custom control.
+
+
+Usage Notes
+-----------
+
+The i.MX6 capture driver is a standardized driver that supports the
+following community V4L2 tools:
+
+- v4l2-ctl
+- v4l2-cap
+- v4l2src gstreamer plugin
+
+
+The following platforms have been tested:
+
+
+SabreLite with parallel-interface OV5642
+----------------------------------------
+
+This platform requires the OmniVision OV5642 module with a parallel
+camera interface from Boundary Devices for the SabreLite
+(http://boundarydevices.com/products/nit6x_5mp/).
+
+There is a pin conflict between OV5642 and ethernet devices on this
+platform, so by default video capture is disabled in the device tree. To
+enable video capture, edit arch/arm/boot/dts/imx6qdl-sabrelite.dtsi and
+uncomment the macro __OV5642_CAPTURE__.
+
+
+SabreAuto with ADV7180 decoder
+------------------------------
+
+This platform accepts Composite Video analog inputs on Ain1 (connector
+J42) and Ain3 (connector J43).
+
+To switch to Ain1:
+
+# v4l2-ctl -i0
+
+To switch to Ain3:
+
+# v4l2-ctl -i1
+
+
+SabreSD with MIPI CSI-2 OV5640
+------------------------------
+
+The default device tree for SabreSD includes endpoints for both the
+parallel OV5642 and the MIPI CSI-2 OV5640, but as of this writing only
+the MIPI CSI-2 OV5640 has been tested. The OV5640 module connects to
+MIPI connector J5 (sorry I don't have the compatible module part number
+or URL).
+
+Inputs are registered for both the OV5642 and OV5640, and by default the
+OV5642 is selected. To switch to the OV5640:
+
+# v4l2-ctl -i1
+
+
+Preview Notes
+-------------
+
+Preview accepts a framebuffer physaddr via standard VIDIOC_S_FBUF. The
+driver is agnostic about the source of this framebuffer, it could come
+from a DRM-based background or overlay plane, or from legacy fbdev.
+
+Preview is implemented as a sub-device, and exports controls to
+allow preview horizontal/vertical flip and rotation settings independent
+of the same settings for streaming. These controls are available on
+/dev/v4l-subdev0.
+
+
+Known Issues
+------------
+
+There is one currently known issue. When using 90 or 270 degree rotation
+control at capture resolutions near the IC resizer limit of 1024x1024,
+and combined with planar pixel formats (YUV420, YUV422p), frame capture
+will often fail with no end-of-frame interrupts from the IDMAC channel.
+To work around this, use lower resolution and/or packed formats (YUYV,
+RGB3, etc.) when 90 or 270 rotations are needed.
+
+
+File list
+---------
+
+drivers/staging/media/imx6/capture/
+include/media/imx6.h
+
+
+References
+----------
+
+[1] "i.MX 6Dual/6Quad Applications Processor Reference Manual"
+[2] "i.MX 6Solo/6DualLite Applications Processor Reference Manual"
+
+
+Authors
+-------
+Steve Longerbeam <steve_longerbeam@mentor.com>
+Dmitry Eremin-Solenikov <dmitry_eremin@mentor.com>
+Jiada Wang <jiada_wang@mentor.com>
+Vladimir Zapolskiy <vladimir_zapolskiy@mentor.com>
+
+Copyright (C) 2012-2014 Mentor Graphics Inc.

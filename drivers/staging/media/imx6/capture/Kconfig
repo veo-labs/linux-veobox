@@ -1,0 +1,11 @@
+menu "i.MX6 Camera Sensors"
+
+config IMX6_MIPI_CSI2
+       tristate "MIPI CSI2 Receiver Driver"
+       depends on VIDEO_IMX6_CAMERA
+       default y
+       ---help---
+         MIPI CSI-2 Receiver driver support. This driver is required
+	 for sensor drivers with a MIPI CSI2 interface.
+
+endmenu
