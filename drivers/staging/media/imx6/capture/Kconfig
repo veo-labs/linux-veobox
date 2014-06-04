@@ -8,4 +8,12 @@ config IMX6_MIPI_CSI2
          MIPI CSI-2 Receiver driver support. This driver is required
 	 for sensor drivers with a MIPI CSI2 interface.
 
+config IMX6_CAMERA_OV5640_MIPI
+       tristate "OmniVision OV5640 MIPI CSI-2 camera support"
+       depends on VIDEO_IMX6_CAMERA
+       select IMX6_MIPI_CSI2
+       default y
+       ---help---
+         MIPI CSI-2 OV5640 Camera support.
+
 endmenu
