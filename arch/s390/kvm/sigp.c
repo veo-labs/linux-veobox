@@ -115,16 +115,28 @@ static int __sigp_external_call(struct kvm_vcpu *vcpu,
 	return rc ? rc : SIGP_CC_ORDER_CODE_ACCEPTED;
 }
 
-static int __sigp_stop(struct kvm_vcpu *vcpu, struct kvm_vcpu *dst_vcpu,
-		       int action)
+static int __sigp_stop(struct kvm_vcpu *vcpu, struct kvm_vcpu *dst_vcpu)
 {
 	struct kvm_s390_irq irq = {
 		.type = KVM_S390_SIGP_STOP,
 	};
 	int rc;
 
-	rc = __inject_sigp_stop(dst_vcpu, action);
+	rc = __inject_sigp_stop(dst_vcpu, ACTION_STOP_ON_STOP);
 	VCPU_EVENT(vcpu, 4, "sent sigp stop to cpu %x", dst_vcpu->vcpu_id);
+
+	return rc;
+}
+
+static int __sigp_stop_and_store_status(struct kvm_vcpu *vcpu,
+					struct kvm_vcpu *dst_vcpu, u64 *reg)
+{
+	int rc;
+
+	rc = __inject_sigp_stop(dst_vcpu, ACTION_STOP_ON_STOP |
+					      ACTION_STORE_ON_STOP);
+	VCPU_EVENT(vcpu, 4, "sent sigp stop and store status to cpu %x",
+		   dst_vcpu->vcpu_id);
 
 	if (rc == -ESHUTDOWN) {
 		/* If the CPU has already been stopped, we still have
@@ -298,12 +310,11 @@ static int handle_sigp_dst(struct kvm_vcpu *vcpu, u8 order_code,
 		break;
 	case SIGP_STOP:
 		vcpu->stat.instruction_sigp_stop++;
-		rc = __sigp_stop(vcpu, dst_vcpu, ACTION_STOP_ON_STOP);
+		rc = __sigp_stop(vcpu, dst_vcpu);
 		break;
 	case SIGP_STOP_AND_STORE_STATUS:
 		vcpu->stat.instruction_sigp_stop_store_status++;
-		rc = __sigp_stop(vcpu, dst_vcpu, ACTION_STORE_ON_STOP |
-						 ACTION_STOP_ON_STOP);
+		rc = __sigp_stop_and_store_status(vcpu, dst_vcpu, status_reg);
 		break;
 	case SIGP_STORE_STATUS_AT_ADDRESS:
 		vcpu->stat.instruction_sigp_store_status++;
