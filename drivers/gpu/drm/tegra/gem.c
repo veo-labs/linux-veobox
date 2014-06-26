@@ -92,6 +92,88 @@ static const struct host1x_bo_ops tegra_bo_ops = {
 	.kunmap = tegra_bo_kunmap,
 };
 
+/*
+ * A generic iommu_map_sg() function is being reviewed and will hopefully be
+ * merged soon. At that point this function can be dropped in favour of the
+ * one provided by the IOMMU API.
+ */
+static ssize_t __iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
+			      struct scatterlist *sg, unsigned int nents,
+			      int prot)
+{
+	struct scatterlist *s;
+	size_t offset = 0;
+	unsigned int i;
+	int err;
+
+	for_each_sg(sg, s, nents, i) {
+		phys_addr_t phys = page_to_phys(sg_page(s));
+		size_t length = s->offset + s->length;
+
+		err = iommu_map(domain, iova + offset, phys, length, prot);
+		if (err < 0) {
+			iommu_unmap(domain, iova, offset);
+			return err;
+		}
+
+		offset += length;
+	}
+
+	return offset;
+}
+
+static int tegra_bo_iommu_map(struct tegra_drm *tegra, struct tegra_bo *bo)
+{
+	int prot = IOMMU_READ | IOMMU_WRITE;
+	ssize_t err;
+
+	if (bo->mm)
+		return -EBUSY;
+
+	bo->mm = kzalloc(sizeof(*bo->mm), GFP_KERNEL);
+	if (!bo->mm)
+		return -ENOMEM;
+
+	err = drm_mm_insert_node_generic(&tegra->mm, bo->mm, bo->gem.size,
+					 PAGE_SIZE, 0, 0, 0);
+	if (err < 0) {
+		dev_err(tegra->drm->dev, "out of I/O virtual memory: %zd\n",
+			err);
+		goto free;
+	}
+
+	bo->paddr = bo->mm->start;
+
+	err = __iommu_map_sg(tegra->domain, bo->paddr, bo->sgt->sgl,
+			     bo->sgt->nents, prot);
+	if (err < 0) {
+		dev_err(tegra->drm->dev, "failed to map buffer: %zd\n", err);
+		goto remove;
+	}
+
+	bo->size = err;
+
+	return 0;
+
+remove:
+	drm_mm_remove_node(bo->mm);
+free:
+	kfree(bo->mm);
+	return err;
+}
+
+static int tegra_bo_iommu_unmap(struct tegra_drm *tegra, struct tegra_bo *bo)
+{
+	if (!bo->mm)
+		return 0;
+
+	iommu_unmap(tegra->domain, bo->paddr, bo->size);
+	drm_mm_remove_node(bo->mm);
+	kfree(bo->mm);
+
+	return 0;
+}
+
 static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 					      size_t size)
 {
@@ -122,27 +204,64 @@ free:
 	return ERR_PTR(err);
 }
 
-static void tegra_bo_destroy(struct drm_device *drm, struct tegra_bo *bo)
+static void tegra_bo_free(struct drm_device *drm, struct tegra_bo *bo)
 {
-	struct scatterlist *s;
-	size_t offset = 0;
-	unsigned int i;
-	int err;
+	if (bo->pages) {
+		drm_gem_put_pages(&bo->gem, bo->pages, true, true);
+		sg_free_table(bo->sgt);
+		kfree(bo->sgt);
+	} else {
+		dma_free_writecombine(drm->dev, bo->gem.size, bo->vaddr,
+				      bo->paddr);
+	}
+}
 
-	for_each_sg(sg, s, nents, i) {
-		phys_addr_t phys = page_to_phys(sg_page(s));
-		size_t length = s->offset + s->length;
+static int tegra_bo_get_pages(struct drm_device *drm, struct tegra_bo *bo,
+			      size_t size)
+{
+	bo->pages = drm_gem_get_pages(&bo->gem);
+	if (IS_ERR(bo->pages))
+		return PTR_ERR(bo->pages);
 
-		err = iommu_map(domain, iova + offset, phys, length, prot);
-		if (err < 0) {
-			iommu_unmap(domain, iova, offset);
-			return err;
-		}
+	bo->num_pages = size >> PAGE_SHIFT;
 
-		offset += length;
+	bo->sgt = drm_prime_pages_to_sg(bo->pages, bo->num_pages);
+	if (IS_ERR(bo->sgt)) {
+		drm_gem_put_pages(&bo->gem, bo->pages, false, false);
+		return PTR_ERR(bo->sgt);
 	}
 
-	return offset;
+	return 0;
+}
+
+static int tegra_bo_alloc(struct drm_device *drm, struct tegra_bo *bo,
+			  size_t size)
+{
+	struct tegra_drm *tegra = drm->dev_private;
+	int err;
+
+	if (tegra->domain) {
+		err = tegra_bo_get_pages(drm, bo, size);
+		if (err < 0)
+			return err;
+
+		err = tegra_bo_iommu_map(tegra, bo);
+		if (err < 0) {
+			tegra_bo_free(drm, bo);
+			return err;
+		}
+	} else {
+		bo->vaddr = dma_alloc_writecombine(drm->dev, size, &bo->paddr,
+						   GFP_KERNEL | __GFP_NOWARN);
+		if (!bo->vaddr) {
+			dev_err(drm->dev,
+				"failed to allocate buffer of size %zu\n",
+				size);
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
 }
 
 static int tegra_bo_iommu_map(struct tegra_drm *tegra, struct tegra_bo *bo)
@@ -207,14 +326,9 @@ static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 	if (IS_ERR(bo))
 		return bo;
 
-	bo->vaddr = dma_alloc_writecombine(drm->dev, size, &bo->paddr,
-					   GFP_KERNEL | __GFP_NOWARN);
-	if (!bo->vaddr) {
-		dev_err(drm->dev, "failed to allocate buffer with size %u\n",
-			size);
-		err = -ENOMEM;
-		goto err_dma;
-	}
+	err = tegra_bo_alloc(drm, bo, size);
+	if (err < 0)
+		goto release;
 
 	if (flags & DRM_TEGRA_GEM_CREATE_TILED)
 		bo->tiling.mode = TEGRA_BO_TILING_MODE_TILED;
@@ -224,7 +338,8 @@ static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 
 	return bo;
 
-err_dma:
+release:
+	drm_gem_object_release(&bo->gem);
 	kfree(bo);
 	return ERR_PTR(err);
 }
@@ -415,7 +530,6 @@ const struct vm_operations_struct tegra_bo_vm_ops = {
 
 int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	unsigned long vm_pgoff = vma->vm_pgoff;
 	struct drm_gem_object *gem;
 	struct tegra_bo *bo;
 	int ret;
@@ -427,17 +541,28 @@ int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma)
 	gem = vma->vm_private_data;
 	bo = to_tegra_bo(gem);
 
-	vma->vm_flags &= ~VM_PFNMAP;
-	vma->vm_pgoff = 0;
+	if (!bo->pages) {
+		unsigned long vm_pgoff = vma->vm_pgoff;
 
-	ret = dma_mmap_writecombine(gem->dev->dev, vma, bo->vaddr, bo->paddr,
-				    gem->size);
-	if (ret) {
-		drm_gem_vm_close(vma);
-		return ret;
+		vma->vm_flags &= ~VM_PFNMAP;
+		vma->vm_pgoff = 0;
+
+		ret = dma_mmap_writecombine(gem->dev->dev, vma, bo->vaddr,
+					    bo->paddr, gem->size);
+		if (ret) {
+			drm_gem_vm_close(vma);
+			return ret;
+		}
+
+		vma->vm_pgoff = vm_pgoff;
+	} else {
+		pgprot_t prot = vm_get_page_prot(vma->vm_flags);
+
+		vma->vm_flags |= VM_MIXEDMAP;
+		vma->vm_flags &= ~VM_PFNMAP;
+
+		vma->vm_page_prot = pgprot_writecombine(prot);
 	}
-
-	vma->vm_pgoff = vm_pgoff;
 
 	return 0;
 }

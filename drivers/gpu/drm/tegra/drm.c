@@ -191,6 +191,12 @@ fbdev:
 	tegra_drm_fb_free(drm);
 config:
 	drm_mode_config_cleanup(drm);
+
+	if (tegra->domain) {
+		iommu_domain_free(tegra->domain);
+		drm_mm_takedown(&tegra->mm);
+	}
+free:
 	kfree(tegra);
 	return err;
 }
@@ -214,8 +220,6 @@ static int tegra_drm_unload(struct drm_device *drm)
 		iommu_domain_free(tegra->domain);
 		drm_mm_takedown(&tegra->mm);
 	}
-
-	kfree(tegra);
 
 	return 0;
 }

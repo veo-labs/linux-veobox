@@ -1677,25 +1677,7 @@ static int tegra_dc_init(struct host1x_client *client)
 		dc->domain = tegra->domain;
 	}
 
-	primary = tegra_dc_primary_plane_create(drm, dc);
-	if (IS_ERR(primary)) {
-		err = PTR_ERR(primary);
-		goto cleanup;
-	}
-
-	if (dc->soc->supports_cursor) {
-		cursor = tegra_dc_cursor_plane_create(drm, dc);
-		if (IS_ERR(cursor)) {
-			err = PTR_ERR(cursor);
-			goto cleanup;
-		}
-	}
-
-	err = drm_crtc_init_with_planes(drm, &dc->base, primary, cursor,
-					&tegra_crtc_funcs);
-	if (err < 0)
-		goto cleanup;
-
+	drm_crtc_init(drm, &dc->base, &tegra_crtc_funcs);
 	drm_mode_crtc_set_gamma_size(&dc->base, 256);
 	drm_crtc_helper_add(&dc->base, &tegra_crtc_helper_funcs);
 
