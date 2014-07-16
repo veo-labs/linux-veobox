@@ -25,16 +25,10 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include "kfd_priv.h"
-#include "kfd_device_queue_manager.h"
-#include "kfd_pm4_headers.h"
-
-#define MQD_SIZE_ALIGNED 768
 
 static const struct kfd_device_info kaveri_device_info = {
 	.asic_family = CHIP_KAVERI,
 	.max_pasid_bits = 16,
-	.ih_ring_entry_size = 4 * sizeof(uint32_t),
-	.mqd_size_aligned = MQD_SIZE_ALIGNED
 };
 
 static const struct kfd_device_info carrizo_device_info = {
@@ -111,222 +105,41 @@ struct kfd_dev *kgd2kfd_probe(struct kgd_dev *kgd, struct pci_dev *pdev)
 	kfd->kgd = kgd;
 	kfd->device_info = device_info;
 	kfd->pdev = pdev;
-	kfd->init_complete = false;
 
 	return kfd;
-}
-
-static bool device_iommu_pasid_init(struct kfd_dev *kfd)
-{
-	const u32 required_iommu_flags = AMD_IOMMU_DEVICE_FLAG_ATS_SUP |
-					AMD_IOMMU_DEVICE_FLAG_PRI_SUP |
-					AMD_IOMMU_DEVICE_FLAG_PASID_SUP;
-
-	struct amd_iommu_device_info iommu_info;
-	unsigned int pasid_limit;
-	int err;
-
-	err = amd_iommu_device_info(kfd->pdev, &iommu_info);
-	if (err < 0) {
-		dev_err(kfd_device,
-			"error getting iommu info. is the iommu enabled?\n");
-		return false;
-	}
-
-	if ((iommu_info.flags & required_iommu_flags) != required_iommu_flags) {
-		dev_err(kfd_device, "error required iommu flags ats(%i), pri(%i), pasid(%i)\n",
-		       (iommu_info.flags & AMD_IOMMU_DEVICE_FLAG_ATS_SUP) != 0,
-		       (iommu_info.flags & AMD_IOMMU_DEVICE_FLAG_PRI_SUP) != 0,
-		       (iommu_info.flags & AMD_IOMMU_DEVICE_FLAG_PASID_SUP) != 0);
-		return false;
-	}
-
-	pasid_limit = min_t(unsigned int,
-			(unsigned int)1 << kfd->device_info->max_pasid_bits,
-			iommu_info.max_pasids);
-	/*
-	 * last pasid is used for kernel queues doorbells
-	 * in the future the last pasid might be used for a kernel thread.
-	 */
-	pasid_limit = min_t(unsigned int,
-				pasid_limit,
-				kfd->doorbell_process_limit - 1);
-
-	err = amd_iommu_init_device(kfd->pdev, pasid_limit);
-	if (err < 0) {
-		dev_err(kfd_device, "error initializing iommu device\n");
-		return false;
-	}
-
-	if (!kfd_set_pasid_limit(pasid_limit)) {
-		dev_err(kfd_device, "error setting pasid limit\n");
-		amd_iommu_free_device(kfd->pdev);
-		return false;
-	}
-
-	return true;
-}
-
-static void iommu_pasid_shutdown_callback(struct pci_dev *pdev, int pasid)
-{
-	struct kfd_dev *dev = kfd_device_by_pci_dev(pdev);
-
-	if (dev)
-		kfd_unbind_process_from_device(dev, pasid);
 }
 
 bool kgd2kfd_device_init(struct kfd_dev *kfd,
 			 const struct kgd2kfd_shared_resources *gpu_resources)
 {
-	unsigned int size;
-
 	kfd->shared_resources = *gpu_resources;
-
-	/* calculate max size of mqds needed for queues */
-	size = max_num_of_queues_per_device *
-			kfd->device_info->mqd_size_aligned;
-
-	/*
-	 * calculate max size of runlist packet.
-	 * There can be only 2 packets at once
-	 */
-	size += (KFD_MAX_NUM_OF_PROCESSES * sizeof(struct pm4_map_process) +
-		max_num_of_queues_per_device *
-		sizeof(struct pm4_map_queues) + sizeof(struct pm4_runlist)) * 2;
-
-	/* Add size of HIQ & DIQ */
-	size += KFD_KERNEL_QUEUE_SIZE * 2;
-
-	/* add another 512KB for all other allocations on gart (HPD, fences) */
-	size += 512 * 1024;
-
-	if (kfd2kgd->init_gtt_mem_allocation(kfd->kgd, size, &kfd->gtt_mem,
-			&kfd->gtt_start_gpu_addr, &kfd->gtt_start_cpu_ptr)) {
-		dev_err(kfd_device,
-			"Could not allocate %d bytes for device (%x:%x)\n",
-			size, kfd->pdev->vendor, kfd->pdev->device);
-		goto out;
-	}
-
-	dev_info(kfd_device,
-		"Allocated %d bytes on gart for device(%x:%x)\n",
-		size, kfd->pdev->vendor, kfd->pdev->device);
-
-	/* Initialize GTT sa with 512 byte chunk size */
-	if (kfd_gtt_sa_init(kfd, size, 512) != 0) {
-		dev_err(kfd_device,
-			"Error initializing gtt sub-allocator\n");
-		goto kfd_gtt_sa_init_error;
-	}
-
-	kfd_doorbell_init(kfd);
-
-	if (kfd_topology_add_device(kfd) != 0) {
-		dev_err(kfd_device,
-			"Error adding device (%x:%x) to topology\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto kfd_topology_add_device_error;
-	}
-
-	if (!device_iommu_pasid_init(kfd)) {
-		dev_err(kfd_device,
-			"Error initializing iommuv2 for device (%x:%x)\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto device_iommu_pasid_error;
-	}
-	amd_iommu_set_invalidate_ctx_cb(kfd->pdev,
-						iommu_pasid_shutdown_callback);
-
-	kfd->dqm = device_queue_manager_init(kfd);
-	if (!kfd->dqm) {
-		dev_err(kfd_device,
-			"Error initializing queue manager for device (%x:%x)\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto device_queue_manager_error;
-	}
-
-	if (kfd->dqm->ops.start(kfd->dqm) != 0) {
-		dev_err(kfd_device,
-			"Error starting queuen manager for device (%x:%x)\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto dqm_start_error;
-	}
 
 	kfd->init_complete = true;
 	dev_info(kfd_device, "added device (%x:%x)\n", kfd->pdev->vendor,
 		 kfd->pdev->device);
 
-	pr_debug("kfd: Starting kfd with the following scheduling policy %d\n",
-		sched_policy);
-
-	goto out;
-
-dqm_start_error:
-	device_queue_manager_uninit(kfd->dqm);
-device_queue_manager_error:
-	amd_iommu_free_device(kfd->pdev);
-device_iommu_pasid_error:
-	kfd_topology_remove_device(kfd);
-kfd_topology_add_device_error:
-	kfd_gtt_sa_fini(kfd);
-kfd_gtt_sa_init_error:
-	kfd2kgd->free_gtt_mem(kfd->kgd, kfd->gtt_mem);
-	dev_err(kfd_device,
-		"device (%x:%x) NOT added due to errors\n",
-		kfd->pdev->vendor, kfd->pdev->device);
-out:
-	return kfd->init_complete;
+	return true;
 }
 
 void kgd2kfd_device_exit(struct kfd_dev *kfd)
 {
-	if (kfd->init_complete) {
-		device_queue_manager_uninit(kfd->dqm);
-		amd_iommu_free_device(kfd->pdev);
-		kfd_topology_remove_device(kfd);
-		kfd_gtt_sa_fini(kfd);
-		kfd2kgd->free_gtt_mem(kfd->kgd, kfd->gtt_mem);
-	}
-
 	kfree(kfd);
 }
 
 void kgd2kfd_suspend(struct kfd_dev *kfd)
 {
 	BUG_ON(kfd == NULL);
-
-	if (kfd->init_complete) {
-		kfd->dqm->ops.stop(kfd->dqm);
-		amd_iommu_set_invalidate_ctx_cb(kfd->pdev, NULL);
-		amd_iommu_free_device(kfd->pdev);
-	}
 }
 
 int kgd2kfd_resume(struct kfd_dev *kfd)
 {
-	unsigned int pasid_limit;
-	int err;
-
 	BUG_ON(kfd == NULL);
-
-	pasid_limit = kfd_get_pasid_limit();
-
-	if (kfd->init_complete) {
-		err = amd_iommu_init_device(kfd->pdev, pasid_limit);
-		if (err < 0)
-			return -ENXIO;
-		amd_iommu_set_invalidate_ctx_cb(kfd->pdev,
-						iommu_pasid_shutdown_callback);
-		kfd->dqm->ops.start(kfd->dqm);
-	}
 
 	return 0;
 }
 
-/* This is called directly from KGD at ISR. */
-void kgd2kfd_interrupt(struct kfd_dev *kfd, const void *ih_ring_entry)
+void kgd2kfd_interrupt(struct kfd_dev *dev, const void *ih_ring_entry)
 {
-	/* Process interrupts / schedule work as necessary */
 }
 
 static int kfd_gtt_sa_init(struct kfd_dev *kfd, unsigned int buf_size,
