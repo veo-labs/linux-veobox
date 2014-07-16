@@ -32,6 +32,7 @@
 static const struct kfd_device_info kaveri_device_info = {
 	.asic_family = CHIP_KAVERI,
 	.max_pasid_bits = 16,
+	.ih_ring_entry_size = 4 * sizeof(uint32_t),
 	.mqd_size_aligned = MQD_SIZE_ALIGNED
 };
 
@@ -204,6 +205,13 @@ bool kgd2kfd_device_init(struct kfd_dev *kfd,
 		goto kfd_topology_add_device_error;
 	}
 
+	if (kfd_interrupt_init(kfd)) {
+		dev_err(kfd_device,
+			"Error initializing interrupts for device (%x:%x)\n",
+			kfd->pdev->vendor, kfd->pdev->device);
+		goto kfd_interrupt_error;
+	}
+
 	if (!device_iommu_pasid_init(kfd)) {
 		dev_err(kfd_device,
 			"Error initializing iommuv2 for device (%x:%x)\n",
@@ -242,6 +250,8 @@ dqm_start_error:
 device_queue_manager_error:
 	amd_iommu_free_device(kfd->pdev);
 device_iommu_pasid_error:
+	kfd_interrupt_exit(kfd);
+kfd_interrupt_error:
 	kfd_topology_remove_device(kfd);
 kfd_topology_add_device_error:
 	kfd2kgd->fini_sa_manager(kfd->kgd);
@@ -257,6 +267,7 @@ void kgd2kfd_device_exit(struct kfd_dev *kfd)
 	if (kfd->init_complete) {
 		device_queue_manager_uninit(kfd->dqm);
 		amd_iommu_free_device(kfd->pdev);
+		kfd_interrupt_exit(kfd);
 		kfd_topology_remove_device(kfd);
 	}
 
@@ -294,8 +305,18 @@ int kgd2kfd_resume(struct kfd_dev *kfd)
 	return 0;
 }
 
-void kgd2kfd_interrupt(struct kfd_dev *dev, const void *ih_ring_entry)
+/* This is called directly from KGD at ISR. */
+void kgd2kfd_interrupt(struct kfd_dev *kfd, const void *ih_ring_entry)
 {
+	if (kfd->init_complete) {
+		spin_lock(&kfd->interrupt_lock);
+
+		if (kfd->interrupts_active
+		    && enqueue_ih_ring_entry(kfd, ih_ring_entry))
+			schedule_work(&kfd->interrupt_work);
+
+		spin_unlock(&kfd->interrupt_lock);
+	}
 }
 
 static int kfd_gtt_sa_init(struct kfd_dev *kfd, unsigned int buf_size,
