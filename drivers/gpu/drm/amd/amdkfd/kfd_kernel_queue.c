@@ -25,7 +25,6 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/printk.h>
-#include <linux/sched.h>
 #include "kfd_kernel_queue.h"
 #include "kfd_priv.h"
 #include "kfd_device_queue_manager.h"
@@ -67,7 +66,8 @@ static bool initialize(struct kernel_queue *kq, struct kfd_dev *dev,
 	if (kq->mqd == NULL)
 		return false;
 
-	prop.doorbell_ptr = kfd_get_kernel_doorbell(dev, &prop.doorbell_off);
+	prop.doorbell_ptr =
+		(uint32_t *)kfd_get_kernel_doorbell(dev, &prop.doorbell_off);
 
 	if (prop.doorbell_ptr == NULL)
 		goto err_get_kernel_doorbell;
@@ -166,7 +166,7 @@ err_eop_allocate_vidmem:
 	kfd_gtt_sa_free(dev, kq->pq);
 err_pq_allocate_vidmem:
 	pr_err("kfd: error init pq\n");
-	kfd_release_kernel_doorbell(dev, prop.doorbell_ptr);
+	kfd_release_kernel_doorbell(dev, (u32 *)prop.doorbell_ptr);
 err_get_kernel_doorbell:
 	pr_err("kfd: error init doorbell");
 	return false;
@@ -192,7 +192,7 @@ static void uninitialize(struct kernel_queue *kq)
 	kq->ops_asic_specific.uninitialize(kq);
 	kfd_gtt_sa_free(kq->dev, kq->pq);
 	kfd_release_kernel_doorbell(kq->dev,
-					kq->queue->properties.doorbell_ptr);
+				(u32 *)kq->queue->properties.doorbell_ptr);
 	uninit_queue(kq->queue);
 }
 
@@ -218,14 +218,8 @@ static int acquire_packet_buffer(struct kernel_queue *kq,
 							queue_size_dwords;
 
 	if (packet_size_in_dwords >= queue_size_dwords ||
-			packet_size_in_dwords >= available_size) {
-		/*
-		 * make sure calling functions know
-		 * acquire_packet_buffer() failed
-		 */
-		*buffer_ptr = NULL;
+			packet_size_in_dwords >= available_size)
 		return -ENOMEM;
-	}
 
 	if (wptr + packet_size_in_dwords >= queue_size_dwords) {
 		while (wptr > 0) {
@@ -258,8 +252,30 @@ static void submit_packet(struct kernel_queue *kq)
 #endif
 
 	*kq->wptr_kernel = kq->pending_wptr;
-	write_kernel_doorbell(kq->queue->properties.doorbell_ptr,
+	write_kernel_doorbell((u32 *)kq->queue->properties.doorbell_ptr,
 				kq->pending_wptr);
+}
+
+static int sync_with_hw(struct kernel_queue *kq, unsigned long timeout_ms)
+{
+	unsigned long org_timeout_ms;
+
+	BUG_ON(!kq);
+
+	org_timeout_ms = timeout_ms;
+	timeout_ms += jiffies * 1000 / HZ;
+	while (*kq->wptr_kernel != *kq->rptr_kernel) {
+		if (time_after(jiffies * 1000 / HZ, timeout_ms)) {
+			pr_err("kfd: kernel_queue %s timeout expired %lu\n",
+				__func__, org_timeout_ms);
+			pr_err("kfd: wptr: %d rptr: %d\n",
+				*kq->wptr_kernel, *kq->rptr_kernel);
+			return -ETIME;
+		}
+		cpu_relax();
+	}
+
+	return 0;
 }
 
 static void rollback_packet(struct kernel_queue *kq)
@@ -311,7 +327,7 @@ void kernel_queue_uninit(struct kernel_queue *kq)
 	kfree(kq);
 }
 
-static __attribute__((unused)) void test_kq(struct kfd_dev *dev)
+void test_kq(struct kfd_dev *dev)
 {
 	struct kernel_queue *kq;
 	uint32_t *buffer, i;
