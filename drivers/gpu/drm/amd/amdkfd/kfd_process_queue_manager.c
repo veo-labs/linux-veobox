@@ -212,7 +212,7 @@ int pqm_create_queue(struct process_queue_manager *pqm,
 	case KFD_QUEUE_TYPE_DIQ:
 		kq = kernel_queue_init(dev, KFD_QUEUE_TYPE_DIQ);
 		if (kq == NULL) {
-			retval = -ENOMEM;
+			kernel_queue_uninit(kq);
 			goto err_create_queue;
 		}
 		kq->queue->properties.queue_id = *qid;
@@ -341,8 +341,7 @@ int pqm_update_queue(struct process_queue_manager *pqm, unsigned int qid,
 	return 0;
 }
 
-static __attribute__((unused)) struct kernel_queue *pqm_get_kernel_queue(
-					struct process_queue_manager *pqm,
+struct kernel_queue *pqm_get_kernel_queue(struct process_queue_manager *pqm,
 					unsigned int qid)
 {
 	struct process_queue_node *pqn;
