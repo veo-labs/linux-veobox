@@ -127,6 +127,11 @@ void kfd_chardev_exit(void);
 struct device *kfd_chardev(void);
 
 
+enum kfd_preempt_type {
+	KFD_PREEMPT_TYPE_WAVEFRONT,
+	KFD_PREEMPT_TYPE_WAVEFRONT_RESET
+};
+
 /**
  * enum kfd_queue_type
  *
@@ -143,6 +148,11 @@ enum kfd_queue_type  {
 	KFD_QUEUE_TYPE_SDMA,
 	KFD_QUEUE_TYPE_HIQ,
 	KFD_QUEUE_TYPE_DIQ
+};
+
+enum kfd_queue_format {
+	KFD_QUEUE_FORMAT_PM4,
+	KFD_QUEUE_FORMAT_AQL
 };
 
 /**
@@ -191,6 +201,7 @@ enum kfd_queue_type  {
  */
 struct queue_properties {
 	enum kfd_queue_type type;
+	enum kfd_queue_format format;
 	unsigned int queue_id;
 	uint64_t queue_address;
 	uint64_t  queue_size;
@@ -248,6 +259,17 @@ struct queue {
 
 	struct kfd_process	*process;
 	struct kfd_dev		*device;
+};
+
+/*
+ * Please read the kfd_mqd_manager.h description.
+ */
+enum KFD_MQD_TYPE {
+	KFD_MQD_TYPE_CIK_COMPUTE = 0, /* for no cp scheduling */
+	KFD_MQD_TYPE_CIK_HIQ, /* for hiq */
+	KFD_MQD_TYPE_CIK_CP, /* for cp queues and diq */
+	KFD_MQD_TYPE_CIK_SDMA, /* for sdma queues */
+	KFD_MQD_TYPE_MAX
 };
 
 /* Data that is per-process-per device. */
