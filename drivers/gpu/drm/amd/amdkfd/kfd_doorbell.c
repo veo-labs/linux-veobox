@@ -23,7 +23,6 @@
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/slab.h>
-#include <linux/io.h>
 
 /*
  * This extension supports a kernel level doorbells management for

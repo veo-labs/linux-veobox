@@ -276,22 +276,21 @@
  */
 
 #define MAKE_GPUVM_APP_BASE(gpu_num) \
-	(((uint64_t)(gpu_num) << 61) + 0x1000000000000L)
+	(((uint64_t)(gpu_num) << 61) + 0x1000000000000)
 
 #define MAKE_GPUVM_APP_LIMIT(base) \
-	(((uint64_t)(base) & \
-		0xFFFFFF0000000000UL) | 0xFFFFFFFFFFL)
+	(((uint64_t)(base) & 0xFFFFFF0000000000) | 0xFFFFFFFFFF)
 
 #define MAKE_SCRATCH_APP_BASE(gpu_num) \
-	(((uint64_t)(gpu_num) << 61) + 0x100000000L)
+	(((uint64_t)(gpu_num) << 61) + 0x100000000)
 
 #define MAKE_SCRATCH_APP_LIMIT(base) \
-	(((uint64_t)base & 0xFFFFFFFF00000000UL) | 0xFFFFFFFF)
+	(((uint64_t)base & 0xFFFFFFFF00000000) | 0xFFFFFFFF)
 
 #define MAKE_LDS_APP_BASE(gpu_num) \
 	(((uint64_t)(gpu_num) << 61) + 0x0)
 #define MAKE_LDS_APP_LIMIT(base) \
-	(((uint64_t)(base) & 0xFFFFFFFF00000000UL) | 0xFFFFFFFF)
+	(((uint64_t)(base) & 0xFFFFFFFF00000000) | 0xFFFFFFFF)
 
 int kfd_init_apertures(struct kfd_process *process)
 {
@@ -299,15 +298,14 @@ int kfd_init_apertures(struct kfd_process *process)
 	struct kfd_dev *dev;
 	struct kfd_process_device *pdd;
 
+	mutex_lock(&process->mutex);
+
 	/*Iterating over all devices*/
 	while ((dev = kfd_topology_enum_kfd_devices(id)) != NULL &&
 		id < NUM_OF_SUPPORTED_GPUS) {
 
-		pdd = kfd_create_process_device_data(dev, process);
-		if (pdd == NULL) {
-			pr_err("Failed to create process device data\n");
-			return -1;
-		}
+		pdd = kfd_get_process_device_data(dev, process, 1);
+
 		/*
 		 * For 64 bit process aperture will be statically reserved in
 		 * the x86_64 non canonical process address space
@@ -348,6 +346,8 @@ int kfd_init_apertures(struct kfd_process *process)
 
 		id++;
 	}
+
+	mutex_unlock(&process->mutex);
 
 	return 0;
 }

@@ -24,10 +24,7 @@
 #include <linux/log2.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/amd-iommu.h>
 #include <linux/notifier.h>
-#include <linux/compat.h>
-
 struct mm_struct;
 
 #include "kfd_priv.h"
@@ -166,7 +163,6 @@ static void kfd_process_wq_release(struct work_struct *work)
 
 	list_for_each_entry_safe(pdd, temp, &p->per_device_data,
 							per_device_list) {
-		amd_iommu_unbind_pasid(pdd->dev->pdev, p->pasid);
 		list_del(&pdd->per_device_list);
 
 		kfree(pdd);
@@ -198,7 +194,7 @@ static void kfd_process_destroy_delayed(struct rcu_head *rcu)
 	mmdrop(p->mm);
 
 	work = (struct kfd_process_release_work *)
-		kmalloc(sizeof(struct kfd_process_release_work), GFP_ATOMIC);
+		kmalloc(sizeof(struct kfd_process_release_work), GFP_KERNEL);
 
 	if (work) {
 		INIT_WORK((struct work_struct *) work, kfd_process_wq_release);
@@ -223,13 +219,6 @@ static void kfd_process_notifier_release(struct mmu_notifier *mn,
 	hash_del_rcu(&p->kfd_processes);
 	mutex_unlock(&kfd_processes_mutex);
 	synchronize_srcu(&kfd_processes_srcu);
-
-	mutex_lock(&p->mutex);
-
-	/* In case our notifier is called before IOMMU notifier */
-	pqm_uninit(&p->pqm);
-
-	mutex_unlock(&p->mutex);
 
 	/*
 	 * Because we drop mm_count inside kfd_process_destroy_delayed
@@ -283,23 +272,8 @@ static struct kfd_process *create_process(const struct task_struct *thread)
 
 	INIT_LIST_HEAD(&process->per_device_data);
 
-	err = pqm_init(&process->pqm, process);
-	if (err != 0)
-		goto err_process_pqm_init;
-
-	/* init process apertures*/
-	process->is_32bit_user_mode = is_compat_task();
-	if (kfd_init_apertures(process) != 0)
-		goto err_init_apretures;
-
 	return process;
 
-err_init_apretures:
-	pqm_uninit(&process->pqm);
-err_process_pqm_init:
-	hash_del_rcu(&process->kfd_processes);
-	synchronize_rcu();
-	mmu_notifier_unregister_no_release(&process->mmu_notifier, process->mm);
 err_mmu_notifier:
 	kfd_pasid_free(process->pasid);
 err_alloc_pasid:
@@ -317,23 +291,14 @@ struct kfd_process_device *kfd_get_process_device_data(struct kfd_dev *dev,
 
 	list_for_each_entry(pdd, &p->per_device_data, per_device_list)
 		if (pdd->dev == dev)
-			break;
+			return pdd;
 
-	return pdd;
-}
-
-struct kfd_process_device *kfd_create_process_device_data(struct kfd_dev *dev,
-							struct kfd_process *p)
-{
-	struct kfd_process_device *pdd = NULL;
-
-	pdd = kzalloc(sizeof(*pdd), GFP_KERNEL);
-	if (pdd != NULL) {
-		pdd->dev = dev;
-		INIT_LIST_HEAD(&pdd->qpd.queues_list);
-		INIT_LIST_HEAD(&pdd->qpd.priv_queue_list);
-		pdd->qpd.dqm = dev->dqm;
-		list_add(&pdd->per_device_list, &p->per_device_data);
+	if (create_pdd) {
+		pdd = kzalloc(sizeof(*pdd), GFP_KERNEL);
+		if (pdd != NULL) {
+			pdd->dev = dev;
+			list_add(&pdd->per_device_list, &p->per_device_data);
+		}
 	}
 
 	return pdd;
@@ -349,8 +314,7 @@ struct kfd_process_device *kfd_create_process_device_data(struct kfd_dev *dev,
 struct kfd_process_device *kfd_bind_process_to_device(struct kfd_dev *dev,
 							struct kfd_process *p)
 {
-	struct kfd_process_device *pdd;
-	int err;
+	struct kfd_process_device *pdd = kfd_get_process_device_data(dev, p, 1);
 
 	pdd = kfd_get_process_device_data(dev, p);
 	if (!pdd) {
@@ -360,10 +324,6 @@ struct kfd_process_device *kfd_bind_process_to_device(struct kfd_dev *dev,
 
 	if (pdd->bound)
 		return pdd;
-
-	err = amd_iommu_bind_pasid(dev->pdev, p->pasid, p->lead_thread);
-	if (err < 0)
-		return ERR_PTR(err);
 
 	pdd->bound = true;
 
@@ -390,9 +350,7 @@ void kfd_unbind_process_from_device(struct kfd_dev *dev, unsigned int pasid)
 
 	mutex_lock(&p->mutex);
 
-	pqm_uninit(&p->pqm);
-
-	pdd = kfd_get_process_device_data(dev, p);
+	pdd = kfd_get_process_device_data(dev, p, 0);
 
 	/*
 	 * Just mark pdd as unbound, because we still need it to call
