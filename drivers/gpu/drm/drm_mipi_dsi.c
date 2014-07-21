@@ -366,238 +366,6 @@ int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
 EXPORT_SYMBOL(mipi_dsi_create_packet);
 
 /**
- * mipi_dsi_dcs_write - send DCS write command
- * @dsi: DSI device
- * @data: pointer to the command followed by parameters
- * @len: length of @data
- */
-bool mipi_dsi_packet_format_is_short(u8 type)
-{
-	switch (type) {
-	case MIPI_DSI_V_SYNC_START:
-	case MIPI_DSI_V_SYNC_END:
-	case MIPI_DSI_H_SYNC_START:
-	case MIPI_DSI_H_SYNC_END:
-	case MIPI_DSI_END_OF_TRANSMISSION:
-	case MIPI_DSI_COLOR_MODE_OFF:
-	case MIPI_DSI_COLOR_MODE_ON:
-	case MIPI_DSI_SHUTDOWN_PERIPHERAL:
-	case MIPI_DSI_TURN_ON_PERIPHERAL:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM:
-	case MIPI_DSI_DCS_SHORT_WRITE:
-	case MIPI_DSI_DCS_SHORT_WRITE_PARAM:
-	case MIPI_DSI_DCS_READ:
-	case MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE:
-		return true;
-	}
-
-	return false;
-}
-EXPORT_SYMBOL(mipi_dsi_packet_format_is_short);
-
-/**
- * mipi_dsi_packet_format_is_long - check if a packet is of the long format
- * @type: MIPI DSI data type of the packet
- *
- * Return: true if the packet for the given data type is a long packet, false
- * otherwise.
- */
-bool mipi_dsi_packet_format_is_long(u8 type)
-{
-	switch (type) {
-	case MIPI_DSI_NULL_PACKET:
-	case MIPI_DSI_BLANKING_PACKET:
-	case MIPI_DSI_GENERIC_LONG_WRITE:
-	case MIPI_DSI_DCS_LONG_WRITE:
-	case MIPI_DSI_LOOSELY_PACKED_PIXEL_STREAM_YCBCR20:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_YCBCR24:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_YCBCR16:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_30:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_36:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_YCBCR12:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_16:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_18:
-	case MIPI_DSI_PIXEL_STREAM_3BYTE_18:
-	case MIPI_DSI_PACKED_PIXEL_STREAM_24:
-		return true;
-	}
-
-	return false;
-}
-EXPORT_SYMBOL(mipi_dsi_packet_format_is_long);
-
-/**
- * mipi_dsi_create_packet - create a packet from a message according to the
- *     DSI protocol
- * @packet: pointer to a DSI packet structure
- * @msg: message to translate into a packet
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int mipi_dsi_create_packet(struct mipi_dsi_packet *packet,
-			   const struct mipi_dsi_msg *msg)
-{
-	if (!packet || !msg)
-		return -EINVAL;
-
-	/* do some minimum sanity checking */
-	if (!mipi_dsi_packet_format_is_short(msg->type) &&
-	    !mipi_dsi_packet_format_is_long(msg->type))
-		return -EINVAL;
-
-	if (msg->channel > 3)
-		return -EINVAL;
-
-	memset(packet, 0, sizeof(*packet));
-	packet->header[0] = ((msg->channel & 0x3) << 6) | (msg->type & 0x3f);
-
-	/* TODO: compute ECC if hardware support is not available */
-
-	/*
-	 * Long write packets contain the word count in header bytes 1 and 2.
-	 * The payload follows the header and is word count bytes long.
-	 *
-	 * Short write packets encode up to two parameters in header bytes 1
-	 * and 2.
-	 */
-	if (mipi_dsi_packet_format_is_long(msg->type)) {
-		packet->header[1] = (msg->tx_len >> 0) & 0xff;
-		packet->header[2] = (msg->tx_len >> 8) & 0xff;
-
-		packet->payload_length = msg->tx_len;
-		packet->payload = msg->tx_buf;
-	} else {
-		const u8 *tx = msg->tx_buf;
-
-		packet->header[1] = (msg->tx_len > 0) ? tx[0] : 0;
-		packet->header[2] = (msg->tx_len > 1) ? tx[1] : 0;
-	}
-
-	packet->size = sizeof(packet->header) + packet->payload_length;
-
-	return 0;
-}
-EXPORT_SYMBOL(mipi_dsi_create_packet);
-
-/*
- * mipi_dsi_set_maximum_return_packet_size() - specify the maximum size of the
- *    the payload in a long packet transmitted from the peripheral back to the
- *    host processor
- * @dsi: DSI peripheral device
- * @value: the maximum size of the payload
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int mipi_dsi_set_maximum_return_packet_size(struct mipi_dsi_device *dsi,
-					    u16 value)
-{
-	u8 tx[2] = { value & 0xff, value >> 8 };
-	struct mipi_dsi_msg msg = {
-		.channel = dsi->channel,
-		.type = MIPI_DSI_SET_MAXIMUM_RETURN_PACKET_SIZE,
-		.tx_len = sizeof(tx),
-		.tx_buf = tx,
-	};
-
-	return mipi_dsi_device_transfer(dsi, &msg);
-}
-EXPORT_SYMBOL(mipi_dsi_set_maximum_return_packet_size);
-
-/**
- * mipi_dsi_generic_write() - transmit data using a generic write packet
- * @dsi: DSI peripheral device
- * @payload: buffer containing the payload
- * @size: size of payload buffer
- *
- * This function will automatically choose the right data type depending on
- * the payload length.
- *
- * Return: The number of bytes transmitted on success or a negative error code
- * on failure.
- */
-ssize_t mipi_dsi_generic_write(struct mipi_dsi_device *dsi, const void *payload,
-			       size_t size)
-{
-	struct mipi_dsi_msg msg = {
-		.channel = dsi->channel,
-		.tx_buf = payload,
-		.tx_len = size
-	};
-
-	switch (size) {
-	case 0:
-		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM;
-		break;
-
-	case 1:
-		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM;
-		break;
-
-	case 2:
-		msg.type = MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM;
-		break;
-
-	default:
-		msg.type = MIPI_DSI_GENERIC_LONG_WRITE;
-		break;
-	}
-
-	return mipi_dsi_device_transfer(dsi, &msg);
-}
-EXPORT_SYMBOL(mipi_dsi_generic_write);
-
-/**
- * mipi_dsi_generic_read() - receive data using a generic read packet
- * @dsi: DSI peripheral device
- * @params: buffer containing the request parameters
- * @num_params: number of request parameters
- * @data: buffer in which to return the received data
- * @size: size of receive buffer
- *
- * This function will automatically choose the right data type depending on
- * the number of parameters passed in.
- *
- * Return: The number of bytes successfully read or a negative error code on
- * failure.
- */
-ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
-			      size_t num_params, void *data, size_t size)
-{
-	struct mipi_dsi_msg msg = {
-		.channel = dsi->channel,
-		.tx_len = num_params,
-		.tx_buf = params,
-		.rx_len = size,
-		.rx_buf = data
-	};
-
-	switch (num_params) {
-	case 0:
-		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM;
-		break;
-
-	case 1:
-		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM;
-		break;
-
-	case 2:
-		msg.type = MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM;
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	return mipi_dsi_device_transfer(dsi, &msg);
-}
-EXPORT_SYMBOL(mipi_dsi_generic_read);
-
-/**
  * mipi_dsi_dcs_write_buffer() - transmit a DCS command with payload
  * @dsi: DSI peripheral device
  * @data: buffer containing data to be transmitted
@@ -636,6 +404,50 @@ ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 	}
 
 	return mipi_dsi_device_transfer(dsi, &msg);
+}
+EXPORT_SYMBOL(mipi_dsi_dcs_write_buffer);
+
+/**
+ * mipi_dsi_dcs_write() - send DCS write command
+ * @dsi: DSI peripheral device
+ * @cmd: DCS command
+ * @data: buffer containing the command payload
+ * @len: command payload length
+ *
+ * This function will automatically choose the right data type depending on
+ * the command payload length.
+ *
+ * Return: The number of bytes successfully transmitted or a negative error
+ * code on failure.
+ */
+ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
+			   const void *data, size_t len)
+{
+	ssize_t err;
+	size_t size;
+	u8 *tx;
+
+	if (len > 0) {
+		size = 1 + len;
+
+		tx = kmalloc(size, GFP_KERNEL);
+		if (!tx)
+			return -ENOMEM;
+
+		/* concatenate the DCS command byte and the payload */
+		tx[0] = cmd;
+		memcpy(&tx[1], data, len);
+	} else {
+		tx = &cmd;
+		size = 1;
+	}
+
+	err = mipi_dsi_dcs_write_buffer(dsi, tx, size);
+
+	if (len > 0)
+		kfree(tx);
+
+	return err;
 }
 EXPORT_SYMBOL(mipi_dsi_dcs_write);
 

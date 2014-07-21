@@ -166,32 +166,6 @@ static inline struct mipi_dsi_device *to_mipi_dsi_device(struct device *dev)
 struct mipi_dsi_device *of_find_mipi_dsi_device_by_node(struct device_node *np);
 int mipi_dsi_attach(struct mipi_dsi_device *dsi);
 int mipi_dsi_detach(struct mipi_dsi_device *dsi);
-int mipi_dsi_set_maximum_return_packet_size(struct mipi_dsi_device *dsi,
-					    u16 value);
-
-ssize_t mipi_dsi_generic_write(struct mipi_dsi_device *dsi, const void *payload,
-			       size_t size);
-ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
-			      size_t num_params, void *data, size_t size);
-
-/**
- * enum mipi_dsi_dcs_tear_mode - Tearing Effect Output Line mode
- * @MIPI_DSI_DCS_TEAR_MODE_VBLANK: the TE output line consists of V-Blanking
- *    information only
- * @MIPI_DSI_DCS_TEAR_MODE_VHBLANK : the TE output line consists of both
- *    V-Blanking and H-Blanking information
- */
-enum mipi_dsi_dcs_tear_mode {
-	MIPI_DSI_DCS_TEAR_MODE_VBLANK,
-	MIPI_DSI_DCS_TEAR_MODE_VHBLANK,
-};
-
-#define MIPI_DSI_DCS_POWER_MODE_DISPLAY (1 << 2)
-#define MIPI_DSI_DCS_POWER_MODE_NORMAL  (1 << 3)
-#define MIPI_DSI_DCS_POWER_MODE_SLEEP   (1 << 4)
-#define MIPI_DSI_DCS_POWER_MODE_PARTIAL (1 << 5)
-#define MIPI_DSI_DCS_POWER_MODE_IDLE    (1 << 6)
-
 ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				  const void *data, size_t len);
 ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
