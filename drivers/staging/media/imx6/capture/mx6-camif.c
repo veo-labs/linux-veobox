@@ -39,6 +39,8 @@
 #define MAX_H      4096
 #define MAX_W_IC   1024
 #define MAX_H_IC   1024
+#define MAX_W_VDIC  968
+#define MAX_H_VDIC 2048
 
 #define H_ALIGN    1 /* multiple of 2 */
 #define S_ALIGN    1 /* multiple of 2 */
@@ -201,6 +203,34 @@ static bool update_signal_lock_status(struct mx6cam_dev *dev)
 	dev->signal_locked = locked;
 
 	return changed;
+}
+
+/*
+ * Return true if the VDIC deinterlacer is needed. We need the VDIC
+ * if the sensor is transmitting fields, and userland is requesting
+ * motion compensation (rather than simple weaving).
+ */
+static bool need_vdic(struct mx6cam_dev *dev,
+		      struct v4l2_mbus_framefmt *sf)
+{
+	return dev->motion != MOTION_NONE && V4L2_FIELD_HAS_BOTH(sf->field);
+}
+
+/*
+ * Return true if sensor format currently meets the VDIC
+ * restrictions:
+ *     o the full-frame resolution to the VDIC must be at or below 968x2048.
+ *     o the pixel format to the VDIC must be YUV422
+ */
+static bool can_use_vdic(struct mx6cam_dev *dev,
+			 struct v4l2_mbus_framefmt *sf)
+{
+	return sf->width <= MAX_W_VDIC &&
+		sf->height <= MAX_H_VDIC &&
+		(sf->code == V4L2_MBUS_FMT_UYVY8_2X8 ||
+		 sf->code == V4L2_MBUS_FMT_UYVY8_1X16 ||
+		 sf->code == V4L2_MBUS_FMT_YUYV8_2X8 ||
+		 sf->code == V4L2_MBUS_FMT_YUYV8_1X16);
 }
 
 /*
@@ -409,6 +439,7 @@ static int sensor_set_stream(struct mx6cam_dev *dev, int on)
  */
 static int start_encoder(struct mx6cam_dev *dev)
 {
+	struct v4l2_subdev *streaming_sd;
 	int ret;
 
 	if (dev->encoder_on)
@@ -421,8 +452,10 @@ static int start_encoder(struct mx6cam_dev *dev)
 		return ret;
 	}
 
-	/* encoder stream on */
-	ret = v4l2_subdev_call(dev->encoder_sd, video, s_stream, 1);
+	/* encoder/vdic stream on */
+	streaming_sd = dev->using_vdic ? dev->vdic_sd : dev->encoder_sd;
+
+	ret = v4l2_subdev_call(streaming_sd, video, s_stream, 1);
 	if (ret) {
 		v4l2_err(&dev->v4l2_dev, "encoder stream on failed\n");
 		return ret;
@@ -437,13 +470,16 @@ static int start_encoder(struct mx6cam_dev *dev)
  */
 static int stop_encoder(struct mx6cam_dev *dev)
 {
+	struct v4l2_subdev *streaming_sd;
 	int ret;
 
 	if (!dev->encoder_on)
 		return 0;
 
-	/* encoder off */
-	ret = v4l2_subdev_call(dev->encoder_sd, video, s_stream, 0);
+	streaming_sd = dev->using_vdic ? dev->vdic_sd : dev->encoder_sd;
+
+	/* encoder/vdic off */
+	ret = v4l2_subdev_call(streaming_sd, video, s_stream, 0);
 	if (ret)
 		v4l2_err(&dev->v4l2_dev, "encoder stream off failed\n");
 
@@ -538,6 +574,9 @@ static int set_stream(struct mx6cam_ctx *ctx, bool on)
 			(need_ic(dev, &dev->sensor_fmt, &dev->user_fmt,
 				 &dev->crop) &&
 			 can_use_ic(dev, &dev->sensor_fmt, &dev->user_fmt));
+
+		dev->using_vdic = need_vdic(dev, &dev->sensor_fmt) &&
+			can_use_vdic(dev, &dev->sensor_fmt);
 
 		if (dev->preview_on)
 			stop_preview(dev);
@@ -684,6 +723,13 @@ static int mx6cam_set_motion(struct mx6cam_dev *dev,
 			v4l2_err(&dev->v4l2_dev,
 				 "Preview is on, cannot enable deinterlace\n");
 			return -EBUSY;
+		}
+
+		if (motion != MOTION_NONE &&
+		    !can_use_vdic(dev, &dev->sensor_fmt)) {
+			v4l2_err(&dev->v4l2_dev,
+				 "sensor format does not allow deinterlace\n");
+			return -EINVAL;
 		}
 	}
 
@@ -2071,6 +2117,9 @@ static void mx6cam_unregister_subdevs(struct mx6cam_dev *dev)
 	if (!IS_ERR_OR_NULL(dev->preview_sd))
 		v4l2_device_unregister_subdev(dev->preview_sd);
 
+	if (!IS_ERR_OR_NULL(dev->vdic_sd))
+		v4l2_device_unregister_subdev(dev->vdic_sd);
+
 	if (!IS_ERR_OR_NULL(dev->csi2_sd))
 		v4l2_device_unregister_subdev(dev->csi2_sd);
 
@@ -2229,6 +2278,12 @@ static int mx6cam_probe(struct platform_device *pdev)
 		goto unreg_subdevs;
 	}
 
+	dev->vdic_sd = mx6cam_vdic_init(dev);
+	if (IS_ERR(dev->vdic_sd)) {
+		ret = PTR_ERR(dev->vdic_sd);
+		goto unreg_subdevs;
+	}
+
 	ret = v4l2_device_register_subdev(&dev->v4l2_dev, dev->encoder_sd);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev,
@@ -2246,6 +2301,15 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->preview_sd->name);
+
+	ret = v4l2_device_register_subdev(&dev->v4l2_dev, dev->vdic_sd);
+	if (ret < 0) {
+		v4l2_err(&dev->v4l2_dev,
+			 "failed to register vdic subdev\n");
+		goto unreg_subdevs;
+	}
+	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
+		  dev->vdic_sd->name);
 
 	ret = v4l2_device_register_subdev_nodes(&dev->v4l2_dev);
 	if (ret)
