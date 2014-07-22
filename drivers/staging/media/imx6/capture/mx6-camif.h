@@ -159,10 +159,12 @@ struct mx6cam_dev {
 	bool                    encoder_on;    /* encode is on */
 	bool                    preview_on;    /* preview is on */
 	bool                    using_ic;      /* IC is being used for encode */
+	bool                    using_vdic;    /* VDIC is used for encode */
 
-	/* encoder, preview, and mipi csi2 subdevices */
+	/* encoder, preview, vdic, and mipi csi2 subdevices */
 	struct v4l2_subdev     *encoder_sd;
 	struct v4l2_subdev     *preview_sd;
+	struct v4l2_subdev     *vdic_sd;
 	struct v4l2_subdev     *csi2_sd;
 
 	/* sensor endpoints */
@@ -199,5 +201,6 @@ struct mx6cam_ctx {
 
 struct v4l2_subdev *mx6cam_encoder_init(struct mx6cam_dev *dev);
 struct v4l2_subdev *mx6cam_preview_init(struct mx6cam_dev *dev);
+struct v4l2_subdev *mx6cam_vdic_init(struct mx6cam_dev *dev);
 
 #endif /* _MX6_CAMIF_H */
