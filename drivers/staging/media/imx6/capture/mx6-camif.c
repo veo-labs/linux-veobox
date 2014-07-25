@@ -668,10 +668,34 @@ static int mx6cam_set_rotation(struct mx6cam_dev *dev,
 	return 0;
 }
 
+static int mx6cam_set_motion(struct mx6cam_dev *dev,
+			     enum ipu_motion_sel motion)
+{
+	if (motion != dev->motion) {
+		/* can't change motion setting mid-streaming */
+		if (vb2_is_streaming(&dev->buffer_queue)) {
+			v4l2_err(&dev->v4l2_dev,
+				 "%s: not allowed while streaming\n",
+				 __func__);
+			return -EBUSY;
+		}
+
+		if (motion != MOTION_NONE && dev->preview_on) {
+			v4l2_err(&dev->v4l2_dev,
+				 "Preview is on, cannot enable deinterlace\n");
+			return -EBUSY;
+		}
+	}
+
+	dev->motion = motion;
+	return 0;
+}
+
 static int mx6cam_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct mx6cam_dev *dev = container_of(ctrl->handler,
 					      struct mx6cam_dev, ctrl_hdlr);
+	enum ipu_motion_sel motion;
 	bool hflip, vflip;
 	int rotation;
 
@@ -689,6 +713,9 @@ static int mx6cam_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_ROTATE:
 		rotation = ctrl->val;
 		break;
+	case V4L2_CID_IMX6_MOTION:
+		motion = ctrl->val;
+		return mx6cam_set_motion(dev, motion);
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control\n");
 		return -EINVAL;
@@ -701,12 +728,23 @@ static const struct v4l2_ctrl_ops mx6cam_ctrl_ops = {
 	.s_ctrl = mx6cam_s_ctrl,
 };
 
+static const struct v4l2_ctrl_config motion_cfg = {
+	.ops = &mx6cam_ctrl_ops,
+	.id = V4L2_CID_IMX6_MOTION,
+	.name = "Motion Compensation",
+	.type = V4L2_CTRL_TYPE_INTEGER,
+	.def = MOTION_NONE,
+	.min = MOTION_NONE,
+	.max = HIGH_MOTION,
+	.step = 1,
+};
+
 static int mx6cam_init_controls(struct mx6cam_dev *dev)
 {
 	struct v4l2_ctrl_handler *hdlr = &dev->ctrl_hdlr;
 	int ret;
 
-	v4l2_ctrl_handler_init(hdlr, 3);
+	v4l2_ctrl_handler_init(hdlr, 4);
 
 	v4l2_ctrl_new_std(hdlr, &mx6cam_ctrl_ops, V4L2_CID_HFLIP,
 			  0, 1, 1, 0);
@@ -714,6 +752,7 @@ static int mx6cam_init_controls(struct mx6cam_dev *dev)
 			  0, 1, 1, 0);
 	v4l2_ctrl_new_std(hdlr, &mx6cam_ctrl_ops, V4L2_CID_ROTATE,
 			  0, 270, 90, 0);
+	v4l2_ctrl_new_custom(hdlr, &motion_cfg, NULL);
 
 	if (hdlr->error) {
 		ret = hdlr->error;
@@ -1405,6 +1444,13 @@ static int vidioc_overlay(struct file *file, void *priv,
 		if (vb2_is_streaming(&dev->buffer_queue) && !dev->using_ic) {
 			v4l2_err(&dev->v4l2_dev,
 				 "%s: not allowed while streaming w/o IC\n",
+				 __func__);
+			return -EBUSY;
+		}
+
+		if (dev->motion != MOTION_NONE) {
+			v4l2_err(&dev->v4l2_dev,
+				 "%s: not allowed with deinterlacing\n",
 				 __func__);
 			return -EBUSY;
 		}
