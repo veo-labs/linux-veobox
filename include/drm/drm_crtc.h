@@ -248,7 +248,7 @@ struct drm_bridge;
 struct drm_atomic_state;
 
 /**
- * struct drm_crtc_state - mutable crtc state
+ * struct drm_crtc_state - mutable CRTC state
  * @enable: whether the CRTC should be enabled, gates all other state
  * @mode: current mode timings
  * @event: optional pointer to a DRM event to signal upon completion of the
@@ -256,7 +256,7 @@ struct drm_atomic_state;
  * @state: backpointer to global drm_atomic_state
  */
 struct drm_crtc_state {
-	bool enable        : 1;
+	bool enable;
 
 	struct drm_display_mode mode;
 
@@ -338,7 +338,7 @@ struct drm_crtc_funcs {
 	/* atomic update handling */
 	struct drm_crtc_state *(*atomic_duplicate_state)(struct drm_crtc *crtc);
 	void (*atomic_destroy_state)(struct drm_crtc *crtc,
-				     struct drm_crtc_state *cstate);
+				     struct drm_crtc_state *state);
 	int (*atomic_set_property)(struct drm_crtc *crtc,
 				   struct drm_crtc_state *state,
 				   struct drm_property *property,
@@ -445,7 +445,7 @@ struct drm_crtc {
 
 /**
  * struct drm_connector_state - mutable connector state
- * @crtc: crtc to connect connector to, NULL if disabled
+ * @crtc: CRTC to connect connector to, NULL if disabled
  * @state: backpointer to global drm_atomic_state
  */
 struct drm_connector_state {
@@ -471,7 +471,6 @@ struct drm_connector_state {
  *    (do not call directly, use drm_atomic_connector_set_property())
  * @atomic_get_property: get a property on an atomic state for this connector
  *    (do not call directly, use drm_atomic_connector_get_property())
- *
  *
  * Each CRTC may have one or more connectors attached to it.  The functions
  * below allow the core DRM code to control connectors, enumerate available modes,
@@ -500,7 +499,7 @@ struct drm_connector_funcs {
 	/* atomic update handling */
 	struct drm_connector_state *(*atomic_duplicate_state)(struct drm_connector *connector);
 	void (*atomic_destroy_state)(struct drm_connector *connector,
-				     struct drm_connector_state *cstate);
+				     struct drm_connector_state *state);
 	int (*atomic_set_property)(struct drm_connector *connector,
 				   struct drm_connector_state *state,
 				   struct drm_property *property,
@@ -678,7 +677,7 @@ struct drm_connector {
  * struct drm_plane_state - mutable plane state
  * @plane: backpointer to the plane
  * @crtc: currently bound CRTC, NULL if disabled
- * @fb: currently bound fb
+ * @fb: currently bound framebuffer
  * @crtc_x: left position of visible portion of plane on crtc
  * @crtc_y: upper position of visible portion of plane on crtc
  * @crtc_w: width of visible portion of plane on crtc
@@ -741,7 +740,7 @@ struct drm_plane_funcs {
 	/* atomic update handling */
 	struct drm_plane_state *(*atomic_duplicate_state)(struct drm_plane *plane);
 	void (*atomic_destroy_state)(struct drm_plane *plane,
-				     struct drm_plane_state *cstate);
+				     struct drm_plane_state *state);
 	int (*atomic_set_property)(struct drm_plane *plane,
 				   struct drm_plane_state *state,
 				   struct drm_property *property,
@@ -845,6 +844,32 @@ struct drm_bridge {
 	const struct drm_bridge_funcs *funcs;
 	void *driver_private;
 };
+
+/**
+ * struct struct drm_atomic_state - the global state object for atomic updates
+ * @dev: parent DRM device
+ * @flags: state flags like async update
+ * @planes: pointer to array of plane pointers
+ * @plane_states: pointer to array of plane states pointers
+ * @crtcs: pointer to array of CRTC pointers
+ * @crtc_states: pointer to array of CRTC states pointers
+ * @connectors: pointer to array of connector pointers
+ * @connector_states: pointer to array of connector states pointers
+ * @acquire_ctx: acquire context for this atomic modeset state update
+ */
+struct drm_atomic_state {
+	struct drm_device *dev;
+	uint32_t flags;
+	struct drm_plane **planes;
+	struct drm_plane_state **plane_states;
+	struct drm_crtc **crtcs;
+	struct drm_crtc_state **crtc_states;
+	struct drm_connector **connectors;
+	struct drm_connector_state **connector_states;
+
+	struct drm_modeset_acquire_ctx *acquire_ctx;
+};
+
 
 /**
  * struct drm_mode_set - new values for a CRTC config change

@@ -56,13 +56,6 @@ drm_atomic_state_alloc(struct drm_device *dev)
 	if (!state)
 		return NULL;
 
-	/* TODO legacy paths should maybe do a better job about
-	 * setting this appropriately?
-	 */
-	state->allow_modeset = true;
-
-	state->num_connector = ACCESS_ONCE(dev->mode_config.num_connector);
-
 	state->crtcs = kcalloc(dev->mode_config.num_crtc,
 			       sizeof(*state->crtcs), GFP_KERNEL);
 	if (!state->crtcs)
@@ -79,12 +72,12 @@ drm_atomic_state_alloc(struct drm_device *dev)
 				      sizeof(*state->plane_states), GFP_KERNEL);
 	if (!state->plane_states)
 		goto fail;
-	state->connectors = kcalloc(state->num_connector,
+	state->connectors = kcalloc(dev->mode_config.num_connector,
 				    sizeof(*state->connectors),
 				    GFP_KERNEL);
 	if (!state->connectors)
 		goto fail;
-	state->connector_states = kcalloc(state->num_connector,
+	state->connector_states = kcalloc(dev->mode_config.num_connector,
 					  sizeof(*state->connector_states),
 					  GFP_KERNEL);
 	if (!state->connector_states)
@@ -119,25 +112,22 @@ EXPORT_SYMBOL(drm_atomic_state_alloc);
 void drm_atomic_state_clear(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
-	struct drm_mode_config *config = &dev->mode_config;
 	int i;
 
 	DRM_DEBUG_KMS("Clearing atomic state %p\n", state);
 
-	for (i = 0; i < state->num_connector; i++) {
+	for (i = 0; i < dev->mode_config.num_connector; i++) {
 		struct drm_connector *connector = state->connectors[i];
 
 		if (!connector)
 			continue;
-
-		WARN_ON(!drm_modeset_is_locked(&config->connection_mutex));
 
 		connector->funcs->atomic_destroy_state(connector,
 						       state->connector_states[i]);
 		state->connector_states[i] = NULL;
 	}
 
-	for (i = 0; i < config->num_crtc; i++) {
+	for (i = 0; i < dev->mode_config.num_crtc; i++) {
 		struct drm_crtc *crtc = state->crtcs[i];
 
 		if (!crtc)
@@ -148,7 +138,7 @@ void drm_atomic_state_clear(struct drm_atomic_state *state)
 		state->crtc_states[i] = NULL;
 	}
 
-	for (i = 0; i < config->num_total_plane; i++) {
+	for (i = 0; i < dev->mode_config.num_total_plane; i++) {
 		struct drm_plane *plane = state->planes[i];
 
 		if (!plane)
@@ -328,7 +318,13 @@ drm_atomic_get_plane_state(struct drm_atomic_state *state,
 	if (state->plane_states[index])
 		return state->plane_states[index];
 
-	ret = drm_modeset_lock(&plane->mutex, state->acquire_ctx);
+	/*
+	 * TODO: We currently don't have per-plane mutexes. So instead of trying
+	 * crazy tricks with deferring plane->crtc and hoping for the best just
+	 * grab all crtc locks. Once we have per-plane locks we must update this
+	 * to only take the plane mutex.
+	 */
+	ret = drm_modeset_lock_all_crtcs(state->dev, state->acquire_ctx);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -558,29 +554,14 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 	struct drm_mode_config *config = &connector->dev->mode_config;
 	struct drm_connector_state *connector_state;
 
-	ret = drm_modeset_lock(&config->connection_mutex, state->acquire_ctx);
-	if (ret)
-		return ERR_PTR(ret);
-
 	index = drm_connector_index(connector);
-
-	/*
-	 * Construction of atomic state updates can race with a connector
-	 * hot-add which might overflow. In this case flip the table and just
-	 * restart the entire ioctl - no one is fast enough to livelock a cpu
-	 * with physical hotplug events anyway.
-	 *
-	 * Note that we only grab the indexes once we have the right lock to
-	 * prevent hotplug/unplugging of connectors. So removal is no problem,
-	 * at most the array is a bit too large.
-	 */
-	if (index >= state->num_connector) {
-		DRM_DEBUG_KMS("Hot-added connector would overflow state array, restarting\n");
-		return ERR_PTR(-EAGAIN);
-	}
 
 	if (state->connector_states[index])
 		return state->connector_states[index];
+
+	ret = drm_modeset_lock(&config->connection_mutex, state->acquire_ctx);
+	if (ret)
+		return ERR_PTR(ret);
 
 	connector_state = connector->funcs->atomic_duplicate_state(connector);
 	if (!connector_state)
@@ -713,7 +694,7 @@ int drm_atomic_get_property(struct drm_mode_object *obj,
 
 /**
  * drm_atomic_set_crtc_for_plane - set crtc for plane
- * @plane_state: the plane whose incoming state to update
+ * @plane_state: atomic state object for the plane
  * @crtc: crtc to use for the plane
  *
  * Changing the assigned crtc for a plane requires us to grab the lock and state
@@ -729,27 +710,16 @@ int
 drm_atomic_set_crtc_for_plane(struct drm_plane_state *plane_state,
 			      struct drm_crtc *crtc)
 {
-	struct drm_plane *plane = plane_state->plane;
 	struct drm_crtc_state *crtc_state;
-
-	if (plane_state->crtc) {
-		crtc_state = drm_atomic_get_crtc_state(plane_state->state,
-						       plane_state->crtc);
-		if (WARN_ON(IS_ERR(crtc_state)))
-			return PTR_ERR(crtc_state);
-
-		crtc_state->plane_mask &= ~(1 << drm_plane_index(plane));
-	}
-
-	plane_state->crtc = crtc;
 
 	if (crtc) {
 		crtc_state = drm_atomic_get_crtc_state(plane_state->state,
 						       crtc);
 		if (IS_ERR(crtc_state))
 			return PTR_ERR(crtc_state);
-		crtc_state->plane_mask |= (1 << drm_plane_index(plane));
 	}
+
+	plane_state->crtc = crtc;
 
 	if (crtc)
 		DRM_DEBUG_KMS("Link plane state %p to [CRTC:%d]\n",
@@ -760,34 +730,6 @@ drm_atomic_set_crtc_for_plane(struct drm_plane_state *plane_state,
 	return 0;
 }
 EXPORT_SYMBOL(drm_atomic_set_crtc_for_plane);
-
-/**
- * drm_atomic_set_fb_for_plane - set crtc for plane
- * @plane_state: atomic state object for the plane
- * @fb: fb to use for the plane
- *
- * Changing the assigned framebuffer for a plane requires us to grab a reference
- * to the new fb and drop the reference to the old fb, if there is one. This
- * function takes care of all these details besides updating the pointer in the
- * state object itself.
- */
-void
-drm_atomic_set_fb_for_plane(struct drm_plane_state *plane_state,
-			    struct drm_framebuffer *fb)
-{
-	if (plane_state->fb)
-		drm_framebuffer_unreference(plane_state->fb);
-	if (fb)
-		drm_framebuffer_reference(fb);
-	plane_state->fb = fb;
-
-	if (fb)
-		DRM_DEBUG_KMS("Set [FB:%d] for plane state %p\n",
-			      fb->base.id, plane_state);
-	else
-		DRM_DEBUG_KMS("Set [NOFB] for plane state %p\n", plane_state);
-}
-EXPORT_SYMBOL(drm_atomic_set_fb_for_plane);
 
 /**
  * drm_atomic_set_crtc_for_connector - set crtc for connector
@@ -890,9 +832,10 @@ int
 drm_atomic_connectors_for_crtc(struct drm_atomic_state *state,
 			       struct drm_crtc *crtc)
 {
+	int nconnectors = state->dev->mode_config.num_connector;
 	int i, num_connected_connectors = 0;
 
-	for (i = 0; i < state->num_connector; i++) {
+	for (i = 0; i < nconnectors; i++) {
 		struct drm_connector_state *conn_state;
 
 		conn_state = state->connector_states[i];
