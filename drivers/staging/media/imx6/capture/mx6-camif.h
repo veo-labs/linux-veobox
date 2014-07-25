@@ -118,6 +118,8 @@ struct mx6cam_dev {
 	int                      rotation; /* degrees */
 	bool                     hflip;
 	bool                     vflip;
+	enum ipu_motion_sel      motion;
+
 	/* derived from rotation, hflip, vflip controls */
 	enum ipu_rotate_mode     rot_mode;
 

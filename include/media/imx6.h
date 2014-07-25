@@ -10,6 +10,8 @@
 #ifndef __MEDIA_IMX6_H__
 #define __MEDIA_IMX6_H__
 
+#define V4L2_CID_IMX6_MOTION   (V4L2_CID_USER_BASE + 0x1000)
+
 /*
  * Analog decoder status change notifications
  */
