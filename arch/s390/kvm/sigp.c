@@ -57,7 +57,7 @@ static int __inject_sigp_emergency(struct kvm_vcpu *vcpu,
 	};
 	int rc = 0;
 
-	rc = kvm_s390_inject_vcpu(dst_vcpu, &s390int);
+	rc = kvm_s390_inject_vcpu(dst_vcpu, &irq);
 	if (!rc)
 		VCPU_EVENT(vcpu, 4, "sent sigp emerg to cpu %x",
 			   dst_vcpu->vcpu_id);
@@ -106,7 +106,7 @@ static int __sigp_external_call(struct kvm_vcpu *vcpu,
 	};
 	int rc;
 
-	rc = kvm_s390_inject_vcpu(dst_vcpu, &s390int);
+	rc = kvm_s390_inject_vcpu(dst_vcpu, &irq);
 	if (!rc)
 		VCPU_EVENT(vcpu, 4, "sent sigp ext call to cpu %x",
 			   dst_vcpu->vcpu_id);
@@ -178,7 +178,6 @@ static int __sigp_set_prefix(struct kvm_vcpu *vcpu, struct kvm_vcpu *dst_vcpu,
 			     u32 address, u64 *reg)
 {
 	struct kvm_s390_local_interrupt *li;
-	struct kvm_s390_interrupt_info *inti;
 	int rc;
 
 	/*
