@@ -27,9 +27,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_rect.h>
-#include <drm/drm_atomic.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_atomic_helper.h>
 
 #define SUBPIXEL_MASK 0xffff
 
@@ -409,9 +407,9 @@ int drm_crtc_init(struct drm_device *dev, struct drm_crtc *crtc,
 }
 EXPORT_SYMBOL(drm_crtc_init);
 
-int drm_plane_helper_commit(struct drm_plane *plane,
-			    struct drm_plane_state *plane_state,
-			    struct drm_framebuffer *old_fb)
+static int
+plane_commit(struct drm_plane *plane, struct drm_plane_state *plane_state,
+	     struct drm_framebuffer *old_fb)
 {
 	struct drm_plane_helper_funcs *plane_funcs;
 	struct drm_crtc *crtc[2];
@@ -450,15 +448,7 @@ int drm_plane_helper_commit(struct drm_plane *plane,
 			crtc_funcs[i]->atomic_begin(crtc[i]);
 	}
 
-	/*
-	 * Drivers may optionally implement the ->atomic_disable callback, so
-	 * special-case that here.
-	 */
-	if (drm_atomic_plane_disabling(plane, plane_state) &&
-	    plane_funcs->atomic_disable)
-		plane_funcs->atomic_disable(plane, plane_state);
-	else
-		plane_funcs->atomic_update(plane, plane_state);
+	plane_funcs->atomic_update(plane);
 
 	for (i = 0; i < 2; i++) {
 		if (crtc_funcs[i] && crtc_funcs[i]->atomic_flush)
@@ -493,7 +483,7 @@ out:
 		if (plane->funcs->atomic_destroy_state)
 			plane->funcs->atomic_destroy_state(plane, plane_state);
 		else
-			drm_atomic_helper_plane_destroy_state(plane, plane_state);
+			kfree(plane_state);
 	}
 
 	return ret;
@@ -534,7 +524,8 @@ int drm_plane_helper_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	if (plane->funcs->atomic_duplicate_state)
 		plane_state = plane->funcs->atomic_duplicate_state(plane);
 	else if (plane->state)
-		plane_state = drm_atomic_helper_plane_duplicate_state(plane);
+		plane_state = kmemdup(plane->state, sizeof(*plane_state),
+				      GFP_KERNEL);
 	else
 		plane_state = kzalloc(sizeof(*plane_state), GFP_KERNEL);
 	if (!plane_state)
@@ -542,7 +533,7 @@ int drm_plane_helper_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	plane_state->plane = plane;
 
 	plane_state->crtc = crtc;
-	drm_atomic_set_fb_for_plane(plane_state, fb);
+	plane_state->fb = fb;
 	plane_state->crtc_x = crtc_x;
 	plane_state->crtc_y = crtc_y;
 	plane_state->crtc_h = crtc_h;
@@ -552,7 +543,7 @@ int drm_plane_helper_update(struct drm_plane *plane, struct drm_crtc *crtc,
 	plane_state->src_h = src_h;
 	plane_state->src_w = src_w;
 
-	return drm_plane_helper_commit(plane, plane_state, plane->fb);
+	return plane_commit(plane, plane_state, plane->fb);
 }
 EXPORT_SYMBOL(drm_plane_helper_update);
 
@@ -581,7 +572,8 @@ int drm_plane_helper_disable(struct drm_plane *plane)
 	if (plane->funcs->atomic_duplicate_state)
 		plane_state = plane->funcs->atomic_duplicate_state(plane);
 	else if (plane->state)
-		plane_state = drm_atomic_helper_plane_duplicate_state(plane);
+		plane_state = kmemdup(plane->state, sizeof(*plane_state),
+				      GFP_KERNEL);
 	else
 		plane_state = kzalloc(sizeof(*plane_state), GFP_KERNEL);
 	if (!plane_state)
@@ -589,8 +581,8 @@ int drm_plane_helper_disable(struct drm_plane *plane)
 	plane_state->plane = plane;
 
 	plane_state->crtc = NULL;
-	drm_atomic_set_fb_for_plane(plane_state, NULL);
+	plane_state->fb = NULL;
 
-	return drm_plane_helper_commit(plane, plane_state, plane->fb);
+	return plane_commit(plane, plane_state, plane->fb);
 }
 EXPORT_SYMBOL(drm_plane_helper_disable);
