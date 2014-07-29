@@ -32,8 +32,6 @@
 #define PFAULT_DONE 0x0680
 #define VIRTIO_PARAM 0x0d00
 
-static int __must_check deliver_ckc_interrupt(struct kvm_vcpu *vcpu);
-
 static int is_ioint(u64 type)
 {
 	return ((type & 0xfffe0000u) != 0xfffe0000u);
@@ -286,7 +284,6 @@ static u16 get_ilc(struct kvm_vcpu *vcpu)
 
 static int __must_check __deliver_cpu_timer(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 	int rc;
 
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_INT_CPU_TIMER,
@@ -294,18 +291,15 @@ static int __must_check __deliver_cpu_timer(struct kvm_vcpu *vcpu)
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_CPU_TIMER,
 			   (u16 *)__LC_EXT_INT_CODE);
-	rc |= put_guest_lc(vcpu, 0, (u16 *)__LC_EXT_CPU_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	clear_bit(IRQ_PEND_EXT_CPU_TIMER, &li->pending_irqs);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_ckc(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 	int rc;
 
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_INT_CLOCK_COMP,
@@ -313,32 +307,24 @@ static int __must_check __deliver_ckc(struct kvm_vcpu *vcpu)
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_CLK_COMP,
 			   (u16 __user *)__LC_EXT_INT_CODE);
-	rc |= put_guest_lc(vcpu, 0, (u16 *)__LC_EXT_CPU_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	clear_bit(IRQ_PEND_EXT_CLOCK_COMP, &li->pending_irqs);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
-static int __must_check __deliver_pfault_init(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_pfault_init(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_ext_info ext;
+	struct kvm_s390_ext_info *ext = &inti->ext;
 	int rc;
 
-	spin_lock(&li->lock);
-	ext = li->irq.ext;
-	clear_bit(IRQ_PEND_PFAULT_INIT, &li->pending_irqs);
-	li->irq.ext.ext_params2 = 0;
-	spin_unlock(&li->lock);
-
 	VCPU_EVENT(vcpu, 4, "interrupt: pfault init parm:%x,parm64:%llx",
-		   0, ext.ext_params2);
+		   0, ext->ext_params2);
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
 					 KVM_S390_INT_PFAULT_INIT,
-					 0, ext.ext_params2);
+					 0, ext->ext_params2);
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_CP_SERVICE, (u16 *) __LC_EXT_INT_CODE);
 	rc |= put_guest_lc(vcpu, PFAULT_INIT, (u16 *) __LC_EXT_CPU_ADDR);
@@ -346,50 +332,37 @@ static int __must_check __deliver_pfault_init(struct kvm_vcpu *vcpu)
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	rc |= put_guest_lc(vcpu, ext.ext_params2, (u64 *) __LC_EXT_PARAMS2);
-	return rc ? -EFAULT : 0;
+	rc |= put_guest_lc(vcpu, ext->ext_params2, (u64 *) __LC_EXT_PARAMS2);
+	return rc;
 }
 
-static int __must_check __deliver_machine_check(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_machine_check(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_mchk_info mchk;
+	struct kvm_s390_mchk_info *mchk = &inti->mchk;
 	int rc;
 
-	spin_lock(&li->lock);
-	mchk = li->irq.mchk;
-	/*
-	 * If there was an exigent machine check pending, then any repressible
-	 * machine checks that might have been pending are indicated along
-	 * with it, so always clear both bits
-	 */
-	clear_bit(IRQ_PEND_MCHK_EX, &li->pending_irqs);
-	clear_bit(IRQ_PEND_MCHK_REP, &li->pending_irqs);
-	memset(&li->irq.mchk, 0, sizeof(mchk));
-	spin_unlock(&li->lock);
-
 	VCPU_EVENT(vcpu, 4, "interrupt: machine check mcic=%llx",
-		   mchk.mcic);
+		   mchk->mcic);
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_MCHK,
-					 mchk.cr14, mchk.mcic);
+					 mchk->cr14, mchk->mcic);
 
 	rc  = kvm_s390_vcpu_store_status(vcpu, KVM_S390_STORE_STATUS_PREFIXED);
-	rc |= put_guest_lc(vcpu, mchk.mcic,
+	rc |= put_guest_lc(vcpu, mchk->mcic,
 			   (u64 __user *) __LC_MCCK_CODE);
-	rc |= put_guest_lc(vcpu, mchk.failing_storage_address,
+	rc |= put_guest_lc(vcpu, mchk->failing_storage_address,
 			   (u64 __user *) __LC_MCCK_FAIL_STOR_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_PSW_SAVE_AREA,
-			     &mchk.fixed_logout, sizeof(mchk.fixed_logout));
+			     &mchk->fixed_logout, sizeof(mchk->fixed_logout));
 	rc |= write_guest_lc(vcpu, __LC_MCK_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_MCK_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_restart(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
 	int rc;
 
 	VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu restart");
@@ -401,107 +374,92 @@ static int __must_check __deliver_restart(struct kvm_vcpu *vcpu)
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, offsetof(struct _lowcore, restart_psw),
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	clear_bit(IRQ_PEND_RESTART, &li->pending_irqs);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
-static int __must_check __deliver_set_prefix(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_stop(struct kvm_vcpu *vcpu)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_prefix_info prefix;
+	VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu stop");
+	vcpu->stat.deliver_stop_signal++;
+	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_SIGP_STOP,
+					 0, 0);
 
-	spin_lock(&li->lock);
-	prefix = li->irq.prefix;
-	li->irq.prefix.address = 0;
-	clear_bit(IRQ_PEND_SET_PREFIX, &li->pending_irqs);
-	spin_unlock(&li->lock);
-
-	VCPU_EVENT(vcpu, 4, "interrupt: set prefix to %x", prefix.address);
-	vcpu->stat.deliver_prefix_signal++;
-	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
-					 KVM_S390_SIGP_SET_PREFIX,
-					 prefix.address, 0);
-
-	kvm_s390_set_prefix(vcpu, prefix.address);
+	__set_cpuflag(vcpu, CPUSTAT_STOP_INT);
 	return 0;
 }
 
-static int __must_check __deliver_emergency_signal(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_set_prefix(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	int rc;
-	int cpu_addr;
+	struct kvm_s390_prefix_info *prefix = &inti->prefix;
 
-	spin_lock(&li->lock);
-	cpu_addr = find_first_bit(li->sigp_emerg_pending, KVM_MAX_VCPUS);
-	clear_bit(cpu_addr, li->sigp_emerg_pending);
-	if (bitmap_empty(li->sigp_emerg_pending, KVM_MAX_VCPUS))
-		clear_bit(IRQ_PEND_EXT_EMERGENCY, &li->pending_irqs);
-	spin_unlock(&li->lock);
+	VCPU_EVENT(vcpu, 4, "interrupt: set prefix to %x", prefix->address);
+	vcpu->stat.deliver_prefix_signal++;
+	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
+					 KVM_S390_SIGP_SET_PREFIX,
+					 prefix->address, 0);
+
+	kvm_s390_set_prefix(vcpu, prefix->address);
+	return 0;
+}
+
+static int __must_check __deliver_emergency_signal(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
+{
+	struct kvm_s390_emerg_info *emerg = &inti->emerg;
+	int rc;
 
 	VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp emerg");
 	vcpu->stat.deliver_emergency_signal++;
-	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_INT_EMERGENCY,
-					 cpu_addr, 0);
+	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+					 inti->emerg.code, 0);
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_EMERGENCY_SIG,
 			   (u16 *)__LC_EXT_INT_CODE);
-	rc |= put_guest_lc(vcpu, cpu_addr, (u16 *)__LC_EXT_CPU_ADDR);
+	rc |= put_guest_lc(vcpu, emerg->code, (u16 *)__LC_EXT_CPU_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
-static int __must_check __deliver_external_call(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_external_call(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_extcall_info extcall;
+	struct kvm_s390_extcall_info *extcall = &inti->extcall;
 	int rc;
-
-	spin_lock(&li->lock);
-	extcall = li->irq.extcall;
-	li->irq.extcall.code = 0;
-	clear_bit(IRQ_PEND_EXT_EXTERNAL, &li->pending_irqs);
-	spin_unlock(&li->lock);
 
 	VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp ext call");
 	vcpu->stat.deliver_external_call++;
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id,
 					 KVM_S390_INT_EXTERNAL_CALL,
-					 extcall.code, 0);
+					 extcall->code, 0);
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_EXTERNAL_CALL,
 			   (u16 *)__LC_EXT_INT_CODE);
-	rc |= put_guest_lc(vcpu, extcall.code, (u16 *)__LC_EXT_CPU_ADDR);
+	rc |= put_guest_lc(vcpu, extcall->code, (u16 *)__LC_EXT_CPU_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW, &vcpu->arch.sie_block->gpsw,
 			    sizeof(psw_t));
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
-static int __must_check __deliver_prog(struct kvm_vcpu *vcpu)
+static int __must_check __deliver_prog(struct kvm_vcpu *vcpu,
+					   struct kvm_s390_interrupt_info *inti)
 {
-	struct kvm_s390_local_interrupt *li = &vcpu->arch.local_int;
-	struct kvm_s390_pgm_info pgm_info;
+	struct kvm_s390_pgm_info *pgm_info = &inti->pgm;
 	int rc = 0;
 	u16 ilc = get_ilc(vcpu);
 
-	spin_lock(&li->lock);
-	pgm_info = li->irq.pgm;
-	clear_bit(IRQ_PEND_PROG, &li->pending_irqs);
-	memset(&li->irq.pgm, 0, sizeof(pgm_info));
-	spin_unlock(&li->lock);
-
 	VCPU_EVENT(vcpu, 4, "interrupt: pgm check code:%x, ilc:%x",
-		   pgm_info.code, ilc);
+		   pgm_info->code, ilc);
 	vcpu->stat.deliver_program_int++;
 	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_PROGRAM_INT,
-					 pgm_info.code, 0);
+					 pgm_info->code, 0);
 
-	switch (pgm_info.code & ~PGM_PER) {
+	switch (pgm_info->code & ~PGM_PER) {
 	case PGM_AFX_TRANSLATION:
 	case PGM_ASX_TRANSLATION:
 	case PGM_EX_TRANSLATION:
@@ -573,7 +531,7 @@ static int __must_check __deliver_prog(struct kvm_vcpu *vcpu)
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_PGM_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_service(struct kvm_vcpu *vcpu,
@@ -588,14 +546,13 @@ static int __must_check __deliver_service(struct kvm_vcpu *vcpu,
 					 inti->ext.ext_params, 0);
 
 	rc  = put_guest_lc(vcpu, EXT_IRQ_SERVICE_SIG, (u16 *)__LC_EXT_INT_CODE);
-	rc |= put_guest_lc(vcpu, 0, (u16 *)__LC_EXT_CPU_ADDR);
 	rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= put_guest_lc(vcpu, inti->ext.ext_params,
 			   (u32 *)__LC_EXT_PARAMS);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_pfault_done(struct kvm_vcpu *vcpu,
@@ -615,7 +572,7 @@ static int __must_check __deliver_pfault_done(struct kvm_vcpu *vcpu,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
 			   (u64 *)__LC_EXT_PARAMS2);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_virtio(struct kvm_vcpu *vcpu,
@@ -640,7 +597,7 @@ static int __must_check __deliver_virtio(struct kvm_vcpu *vcpu,
 			   (u32 *)__LC_EXT_PARAMS);
 	rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
 			   (u64 *)__LC_EXT_PARAMS2);
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
 static int __must_check __deliver_io(struct kvm_vcpu *vcpu,
@@ -668,173 +625,53 @@ static int __must_check __deliver_io(struct kvm_vcpu *vcpu,
 			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
 	rc |= read_guest_lc(vcpu, __LC_IO_NEW_PSW,
 			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	return rc ? -EFAULT : 0;
+	return rc;
 }
 
-static int __must_check __deliver_mchk_floating(struct kvm_vcpu *vcpu,
-					   struct kvm_s390_interrupt_info *inti)
-{
-	struct kvm_s390_mchk_info *mchk = &inti->mchk;
-	int rc;
-
-	VCPU_EVENT(vcpu, 4, "interrupt: machine check mcic=%llx",
-		   mchk->mcic);
-	trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, KVM_S390_MCHK,
-					 mchk->cr14, mchk->mcic);
-
-	rc  = kvm_s390_vcpu_store_status(vcpu, KVM_S390_STORE_STATUS_PREFIXED);
-	rc |= put_guest_lc(vcpu, mchk->mcic,
-			(u64 __user *) __LC_MCCK_CODE);
-	rc |= put_guest_lc(vcpu, mchk->failing_storage_address,
-			(u64 __user *) __LC_MCCK_FAIL_STOR_ADDR);
-	rc |= write_guest_lc(vcpu, __LC_PSW_SAVE_AREA,
-			     &mchk->fixed_logout, sizeof(mchk->fixed_logout));
-	rc |= write_guest_lc(vcpu, __LC_MCK_OLD_PSW,
-			     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	rc |= read_guest_lc(vcpu, __LC_MCK_NEW_PSW,
-			    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-	return rc ? -EFAULT : 0;
-}
-
-typedef int (*deliver_irq_t)(struct kvm_vcpu *vcpu);
-
-static const deliver_irq_t deliver_irq_funcs[] = {
-	[IRQ_PEND_MCHK_EX]        = __deliver_machine_check,
-	[IRQ_PEND_PROG]           = __deliver_prog,
-	[IRQ_PEND_EXT_EMERGENCY]  = __deliver_emergency_signal,
-	[IRQ_PEND_EXT_EXTERNAL]   = __deliver_external_call,
-	[IRQ_PEND_EXT_CLOCK_COMP] = __deliver_ckc,
-	[IRQ_PEND_EXT_CPU_TIMER]  = __deliver_cpu_timer,
-	[IRQ_PEND_RESTART]        = __deliver_restart,
-	[IRQ_PEND_SET_PREFIX]     = __deliver_set_prefix,
-	[IRQ_PEND_PFAULT_INIT]    = __deliver_pfault_init,
-};
-
-static int __must_check __deliver_floating_interrupt(struct kvm_vcpu *vcpu,
+static int __must_check __deliver_pfault_done(struct kvm_vcpu *vcpu,
 					   struct kvm_s390_interrupt_info *inti)
 {
 	int rc;
 
 	switch (inti->type) {
 	case KVM_S390_INT_EMERGENCY:
-		VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp emerg");
-		vcpu->stat.deliver_emergency_signal++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 inti->emerg.code, 0);
-		rc  = put_guest_lc(vcpu, 0x1201, (u16 *)__LC_EXT_INT_CODE);
-		rc |= put_guest_lc(vcpu, inti->emerg.code,
-				   (u16 *)__LC_EXT_CPU_ADDR);
-		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
-				     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
-				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc = __deliver_emergency_signal(vcpu, inti);
 		break;
 	case KVM_S390_INT_EXTERNAL_CALL:
-		VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp ext call");
-		vcpu->stat.deliver_external_call++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 inti->extcall.code, 0);
-		rc  = put_guest_lc(vcpu, 0x1202, (u16 *)__LC_EXT_INT_CODE);
-		rc |= put_guest_lc(vcpu, inti->extcall.code,
-				   (u16 *)__LC_EXT_CPU_ADDR);
-		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
-				     &vcpu->arch.sie_block->gpsw,
-				     sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
-				    &vcpu->arch.sie_block->gpsw,
-				    sizeof(psw_t));
+		rc = __deliver_external_call(vcpu, inti);
 		break;
 	case KVM_S390_INT_CLOCK_COMP:
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 0, 0);
-		rc = deliver_ckc_interrupt(vcpu);
+		rc = __deliver_ckc(vcpu);
 		break;
 	case KVM_S390_INT_CPU_TIMER:
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 0, 0);
-		rc  = put_guest_lc(vcpu, EXT_IRQ_CPU_TIMER,
-				   (u16 *)__LC_EXT_INT_CODE);
-		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
-				     &vcpu->arch.sie_block->gpsw,
-				     sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
-				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc = __deliver_cpu_timer(vcpu);
 		break;
 	case KVM_S390_INT_SERVICE:
 		rc = __deliver_service(vcpu, inti);
 		break;
+	case KVM_S390_INT_PFAULT_INIT:
+		rc = __deliver_pfault_init(vcpu, inti);
+		break;
 	case KVM_S390_INT_PFAULT_DONE:
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type, 0,
-						 inti->ext.ext_params2);
-		rc  = put_guest_lc(vcpu, 0x2603, (u16 *)__LC_EXT_INT_CODE);
-		rc |= put_guest_lc(vcpu, PFAULT_DONE, (u16 *)__LC_EXT_CPU_ADDR);
-		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
-				     &vcpu->arch.sie_block->gpsw,
-				     sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
-				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-		rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
-				   (u64 *)__LC_EXT_PARAMS2);
+		rc = __deliver_pfault_done(vcpu, inti);
 		break;
 	case KVM_S390_INT_VIRTIO:
-		VCPU_EVENT(vcpu, 4, "interrupt: virtio parm:%x,parm64:%llx",
-			   inti->ext.ext_params, inti->ext.ext_params2);
-		vcpu->stat.deliver_virtio_interrupt++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 inti->ext.ext_params,
-						 inti->ext.ext_params2);
-		rc  = put_guest_lc(vcpu, 0x2603, (u16 *)__LC_EXT_INT_CODE);
-		rc |= put_guest_lc(vcpu, VIRTIO_PARAM, (u16 *)__LC_EXT_CPU_ADDR);
-		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
-				     &vcpu->arch.sie_block->gpsw,
-				     sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
-				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-		rc |= put_guest_lc(vcpu, inti->ext.ext_params,
-				   (u32 *)__LC_EXT_PARAMS);
-		rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
-				   (u64 *)__LC_EXT_PARAMS2);
+		rc = __deliver_virtio(vcpu, inti);
 		break;
 	case KVM_S390_SIGP_STOP:
-		VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu stop");
-		vcpu->stat.deliver_stop_signal++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 0, 0);
-		__set_intercept_indicator(vcpu, inti);
+		rc = __deliver_stop(vcpu);
 		break;
-
 	case KVM_S390_SIGP_SET_PREFIX:
-		VCPU_EVENT(vcpu, 4, "interrupt: set prefix to %x",
-			   inti->prefix.address);
-		vcpu->stat.deliver_prefix_signal++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 inti->prefix.address, 0);
-		kvm_s390_set_prefix(vcpu, inti->prefix.address);
+		rc = __deliver_set_prefix(vcpu, inti);
 		break;
-
 	case KVM_S390_RESTART:
-		VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu restart");
-		vcpu->stat.deliver_restart_signal++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 0, 0);
-		rc  = write_guest_lc(vcpu,
-				     offsetof(struct _lowcore, restart_old_psw),
-				     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
-		rc |= read_guest_lc(vcpu, offsetof(struct _lowcore, restart_psw),
-				    &vcpu->arch.sie_block->gpsw,
-				    sizeof(psw_t));
+		rc = __deliver_restart(vcpu);
 		break;
 	case KVM_S390_PROGRAM_INT:
-		VCPU_EVENT(vcpu, 4, "interrupt: pgm check code:%x, ilc:%x",
-			   inti->pgm.code,
-			   table[vcpu->arch.sie_block->ipa >> 14]);
-		vcpu->stat.deliver_program_int++;
-		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
-						 inti->pgm.code, 0);
-		rc = __deliver_prog_irq(vcpu, &inti->pgm);
+		rc = __deliver_prog(vcpu, inti);
 		break;
 	case KVM_S390_MCHK:
-		rc = __deliver_mchk_floating(vcpu, inti);
+		rc = __deliver_machine_check(vcpu, inti);
 		break;
 	case KVM_S390_INT_IO_MIN...KVM_S390_INT_IO_MAX:
 		rc = __deliver_io(vcpu, inti);
@@ -1004,27 +841,8 @@ int __must_check kvm_s390_deliver_pending_interrupts(struct kvm_vcpu *vcpu)
 
 	__reset_intercept_indicators(vcpu);
 
-	/* pending ckc conditions might have been invalidated */
-	clear_bit(IRQ_PEND_EXT_CLOCK_COMP, &li->pending_irqs);
-	if (kvm_cpu_has_pending_timer(vcpu))
-		set_bit(IRQ_PEND_EXT_CLOCK_COMP, &li->pending_irqs);
-
-	do {
-		deliverable_irqs = deliverable_local_irqs(vcpu);
-		/* bits are in the order of interrupt priority */
-		irq_type = find_first_bit(&deliverable_irqs, IRQ_PEND_COUNT);
-		if (irq_type == IRQ_PEND_COUNT)
-			break;
-		func = deliver_irq_funcs[irq_type];
-		if (!func) {
-			WARN_ON_ONCE(func == NULL);
-			clear_bit(irq_type, &li->pending_irqs);
-			continue;
-		}
-		rc = func(vcpu);
-	} while (!rc && irq_type != IRQ_PEND_COUNT);
-
-	set_intercept_indicators_local(vcpu);
+	if (!rc && kvm_cpu_has_pending_timer(vcpu))
+		rc = __deliver_ckc(vcpu);
 
 	if (!rc && atomic_read(&fi->active)) {
 		do {
