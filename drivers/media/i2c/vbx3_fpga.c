@@ -43,6 +43,50 @@ MODULE_LICENSE("GPL");
 #define	VBX3_FPGA_REG_EVENT_CHAN0		0x07
 #define	VBX3_FPGA_REG_EVENT_CHAN1		0x08
 
+#define	VBX3_FPGA_SINK_CHAN0	0
+#define	VBX3_FPGA_SINK_CHAN1	1
+#define	VBX3_FPGA_SOURCE_CHAN0	2
+#define	VBX3_FPGA_SOURCE_CHAN1	3
+
+#define	VBX3_FPGA_PADS_NUM	4
+
+enum vbx3_fpga_input_channel0 {
+	VBX3_FPGA_INPUT_SDI0,
+	VBX3_FPGA_INPUT_ADV7611_HDMI,
+};
+enum vbx3_fpga_input_channel1 {
+	VBX3_FPGA_INPUT_SDI1,
+	VBX3_FPGA_INPUT_ADV7604_HDMI,
+	VBX3_FPGA_INPUT_ADV7604_VGA,
+};
+
+struct vbx3_fpga_state {
+	struct v4l2_subdev sd;
+	struct media_pad pads[VBX3_FPGA_PADS_NUM];
+	enum vbx3_fpga_input_channel0 input_channel0;
+	enum vbx3_fpga_input_channel1 input_channel1;
+};
+
+static inline struct vbx3_fpga_state *to_state(struct v4l2_subdev *sd)
+{
+	return container_of(sd, struct vbx3_fpga_state, sd);
+}
+
+static int vbx3_fpga_s_routing (struct v4l2_subdev *sd,
+				u32 input, u32 output, u32 config)
+{
+	struct vbx3_fpga_state *state = to_state(sd);
+	return 0;
+}
+
+static const struct v4l2_subdev_video_ops vbx3_fpga_video_ops = {
+	.s_routing = vbx3_fpga_s_routing,
+};
+
+static const struct v4l2_subdev_ops vbx3_fpga_ops = {
+	.video = &vbx3_fpga_video_ops,
+};
+
 
 /* i2c implementation */
 
@@ -50,7 +94,9 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct v4l2_subdev *sd;
+	struct vbx3_fpga_state *state;
 	int version;
+	int ret = 0;
 
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -67,13 +113,33 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 		v4l_info(client, "version read : 0x%x\n", version);
 	}
 
-	return 0;
+	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
+	if (state == NULL)
+		return -ENOMEM;
+
+	sd = &state->sd;
+	v4l2_i2c_subdev_init(sd, client, &vbx3_fpga_ops);
+	strlcpy(sd->name, "VBX3 FPGA video switch", sizeof(sd->name));
+
+	state->pads[VBX3_FPGA_SINK_CHAN0].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_SINK_CHAN1].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_SOURCE_CHAN0].flags = MEDIA_PAD_FL_SOURCE;
+	state->pads[VBX3_FPGA_SOURCE_CHAN1].flags = MEDIA_PAD_FL_SOURCE;
+
+	ret = media_entity_init(&state->sd.entity, VBX3_FPGA_PADS_NUM, state->pads, 0);
+	if (ret < 0)
+		v4l2_err(client, "media entity failed with error %d\n", ret);
+
+	return ret;
 }
 
 static int vbx3_fpga_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
+	struct vbx3_fpga_state *state;
 
+	sd = &state->sd;
+	media_entity_cleanup(&sd->entity);
 	v4l2_device_unregister_subdev(sd);
 	return 0;
 }
