@@ -43,28 +43,25 @@ MODULE_LICENSE("GPL");
 #define	VBX3_FPGA_REG_EVENT_CHAN0		0x07
 #define	VBX3_FPGA_REG_EVENT_CHAN1		0x08
 
-#define	VBX3_FPGA_SINK_CHAN0	0
-#define	VBX3_FPGA_SINK_CHAN1	1
-#define	VBX3_FPGA_SOURCE_CHAN0	2
-#define	VBX3_FPGA_SOURCE_CHAN1	3
-
-#define	VBX3_FPGA_PADS_NUM	4
-
-enum vbx3_fpga_input_channel0 {
+enum vbx3_fpga_input_pads {
 	VBX3_FPGA_INPUT_SDI0,
 	VBX3_FPGA_INPUT_ADV7611_HDMI,
-};
-enum vbx3_fpga_input_channel1 {
 	VBX3_FPGA_INPUT_SDI1,
 	VBX3_FPGA_INPUT_ADV7604_HDMI,
 	VBX3_FPGA_INPUT_ADV7604_VGA,
 };
+enum vbx3_fpga_output_pads {
+	VBX3_FPGA_OUTPUT_CHANNEL0,
+	VBX3_FPGA_OUTPUT_CHANNEL1,
+};
+
+#define	VBX3_FPGA_PADS_INPUT_NUM	5
+#define	VBX3_FPGA_PADS_OUTPUT_NUM	2
+#define	VBX3_FPGA_PADS_NUM		VBX3_FPGA_PADS_INPUT_NUM+VBX3_FPGA_PADS_OUTPUT_NUM
 
 struct vbx3_fpga_state {
 	struct v4l2_subdev sd;
 	struct media_pad pads[VBX3_FPGA_PADS_NUM];
-	enum vbx3_fpga_input_channel0 input_channel0;
-	enum vbx3_fpga_input_channel1 input_channel1;
 };
 
 static inline struct vbx3_fpga_state *to_state(struct v4l2_subdev *sd)
@@ -97,6 +94,7 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	struct vbx3_fpga_state *state;
 	int version;
 	int ret = 0;
+	int pad;
 
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -121,10 +119,11 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	v4l2_i2c_subdev_init(sd, client, &vbx3_fpga_ops);
 	strlcpy(sd->name, "VBX3 FPGA video switch", sizeof(sd->name));
 
-	state->pads[VBX3_FPGA_SINK_CHAN0].flags = MEDIA_PAD_FL_SINK;
-	state->pads[VBX3_FPGA_SINK_CHAN1].flags = MEDIA_PAD_FL_SINK;
-	state->pads[VBX3_FPGA_SOURCE_CHAN0].flags = MEDIA_PAD_FL_SOURCE;
-	state->pads[VBX3_FPGA_SOURCE_CHAN1].flags = MEDIA_PAD_FL_SOURCE;
+	for (pad = VBX3_FPGA_INPUT_SDI0; pad < VBX3_FPGA_INPUT_ADV7604_VGA; pad++)
+		state->pads[pad].flags = MEDIA_PAD_FL_SINK;
+
+	state->pads[VBX3_FPGA_OUTPUT_CHANNEL0].flags = MEDIA_PAD_FL_SOURCE;
+	state->pads[VBX3_FPGA_OUTPUT_CHANNEL1].flags = MEDIA_PAD_FL_SOURCE;
 
 	ret = media_entity_init(&state->sd.entity, VBX3_FPGA_PADS_NUM, state->pads, 0);
 	if (ret < 0)
