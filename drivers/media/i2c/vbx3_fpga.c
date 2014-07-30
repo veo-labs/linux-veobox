@@ -33,12 +33,24 @@ MODULE_DESCRIPTION("i2c device driver for VBX3 fpga source switch");
 MODULE_AUTHOR("Jean-Michel Hautbois");
 MODULE_LICENSE("GPL");
 
+#define	VBX3_FPGA_REG_VERSION			0x00
+#define	VBX3_FPGA_REG_CTRL_CHAN0		0x01
+#define	VBX3_FPGA_REG_CTRL_CHAN1		0x02
+#define	VBX3_FPGA_REG_CTRL_PATTERN_CHAN0	0x03
+#define	VBX3_FPGA_REG_GLOBAL_STATUS		0x04
+#define	VBX3_FPGA_REG_STATUS_SDI0		0x05
+#define	VBX3_FPGA_REG_STATUS_SDI1		0x06
+#define	VBX3_FPGA_REG_EVENT_CHAN0		0x07
+#define	VBX3_FPGA_REG_EVENT_CHAN1		0x08
+
+
 /* i2c implementation */
 
 static int vbx3_fpga_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct v4l2_subdev *sd;
+	int version;
 
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -46,6 +58,14 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 
 	v4l_info(client, "chip found @ 0x%x (%s)\n",
 			client->addr << 1, client->adapter->name);
+
+	version = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_VERSION);
+	if (version < 0) {
+		v4l_err(client, "could not get version of FPGA\n");
+		return -EPROBE_DEFER;
+	} else {
+		v4l_info(client, "version read : 0x%x\n", version);
+	}
 
 	return 0;
 }
