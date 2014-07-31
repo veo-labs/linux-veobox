@@ -30,7 +30,7 @@
 #include <linux/of_device.h>
 
 #include <drm/drm_fourcc.h>
-
+#include <media/imx.h>
 #include <video/imx-ipu-v3.h>
 #include "ipu-prv.h"
 
@@ -1315,6 +1315,10 @@ static int ipu_probe(struct platform_device *pdev)
 	if (ret)
 		goto failed_submodules_init;
 
+	ret = ipu_media_device_register(ipu->dev);
+	if (ret)
+		goto failed_media_device;
+
 	ret = ipu_add_client_devices(ipu, ipu_base);
 	if (ret) {
 		dev_err(&pdev->dev, "adding client devices failed with %d\n",
@@ -1327,6 +1331,7 @@ static int ipu_probe(struct platform_device *pdev)
 	return 0;
 
 failed_add_clients:
+failed_media_device:
 	ipu_submodules_exit(ipu);
 failed_submodules_init:
 out_failed_reset:
