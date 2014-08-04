@@ -59,6 +59,29 @@ int ipu_smfc_set_burstsize(struct ipu_smfc *smfc, int burstsize)
 }
 EXPORT_SYMBOL_GPL(ipu_smfc_set_burstsize);
 
+int ipu_smfc_set_csi(struct ipu_soc *ipu, int chno, int csi_id)
+{
+	struct ipu_smfc_priv *priv = ipu->smfc_priv;
+	unsigned long flags;
+	u32 val, shift;
+
+	spin_lock_irqsave(&priv->lock, flags);
+	if (priv->channel[chno].inuse) {
+		spin_unlock_irqrestore(&priv->lock, flags);
+		return -EBUSY;
+	}
+
+	shift = chno * 3;
+	val = readl(priv->base + SMFC_MAP);
+	val &= ~(0x4 << shift);
+	val |= (csi_id << 2) << shift;
+	writel(val, priv->base + SMFC_MAP);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+	return 0;
+}
+
 int ipu_smfc_map_channel(struct ipu_smfc *smfc, int csi_id, int mipi_id)
 {
 	struct ipu_smfc_priv *priv = smfc->priv;
@@ -69,8 +92,8 @@ int ipu_smfc_map_channel(struct ipu_smfc *smfc, int csi_id, int mipi_id)
 
 	shift = smfc->chno * 3;
 	val = readl(priv->base + SMFC_MAP);
-	val &= ~(0x7 << shift);
-	val |= ((csi_id << 2) | mipi_id) << shift;
+	val &= ~(0x3 << shift);
+	val |= mipi_id << shift;
 	writel(val, priv->base + SMFC_MAP);
 
 	spin_unlock_irqrestore(&priv->lock, flags);

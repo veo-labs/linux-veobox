@@ -428,5 +428,6 @@ void ipu_cpmem_exit(struct ipu_soc *ipu);
 
 int ipu_smfc_init(struct ipu_soc *ipu, struct device *dev, unsigned long base);
 void ipu_smfc_exit(struct ipu_soc *ipu);
+int ipu_smfc_set_csi(struct ipu_soc *ipu, int chno, int csi_id);
 
 #endif				/* __IPU_PRV_H__ */
