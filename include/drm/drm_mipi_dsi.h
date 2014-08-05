@@ -166,6 +166,8 @@ static inline struct mipi_dsi_device *to_mipi_dsi_device(struct device *dev)
 struct mipi_dsi_device *of_find_mipi_dsi_device_by_node(struct device_node *np);
 int mipi_dsi_attach(struct mipi_dsi_device *dsi);
 int mipi_dsi_detach(struct mipi_dsi_device *dsi);
+int mipi_dsi_set_maximum_return_packet_size(struct mipi_dsi_device *dsi,
+					    u16 value);
 ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				  const void *data, size_t len);
 ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
