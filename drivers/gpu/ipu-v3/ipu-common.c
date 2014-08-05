@@ -44,6 +44,20 @@ static inline void ipu_cm_write(struct ipu_soc *ipu, u32 value, unsigned offset)
 	writel(value, ipu->cm_reg + offset);
 }
 
+static void ipu_cm_update_bits(struct ipu_soc *ipu, unsigned int reg,
+			       unsigned int mask, unsigned int val)
+{
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&ipu->lock, flags);
+	tmp = ipu_cm_read(ipu, reg);
+	tmp &= ~mask;
+	tmp |= (val & mask);
+	ipu_cm_write(ipu, val, reg);
+	spin_unlock_irqrestore(&ipu->lock, flags);
+}
+
 void ipu_srm_dp_sync_update(struct ipu_soc *ipu)
 {
 	u32 val;
