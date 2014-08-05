@@ -174,28 +174,31 @@ ssize_t mipi_dsi_generic_write(struct mipi_dsi_device *dsi, const void *payload,
 ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
 			      size_t num_params, void *data, size_t size);
 
+/**
+ * enum mipi_dsi_dcs_tear_mode - Tearing Effect Output Line mode
+ * @MIPI_DSI_DCS_TEAR_MODE_VBLANK: the TE output line consists of V-Blanking
+ *    information only
+ * @MIPI_DSI_DCS_TEAR_MODE_VHBLANK : the TE output line consists of both
+ *    V-Blanking and H-Blanking information
+ */
+enum mipi_dsi_dcs_tear_mode {
+	MIPI_DSI_DCS_TEAR_MODE_VBLANK,
+	MIPI_DSI_DCS_TEAR_MODE_VHBLANK,
+};
+
 ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 				  const void *data, size_t len);
 ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
 			   const void *data, size_t len);
 ssize_t mipi_dsi_dcs_read(struct mipi_dsi_device *dsi, u8 cmd, void *data,
 			  size_t len);
-int mipi_dsi_dcs_nop(struct mipi_dsi_device *dsi);
-int mipi_dsi_dcs_soft_reset(struct mipi_dsi_device *dsi);
-int mipi_dsi_dcs_get_power_mode(struct mipi_dsi_device *dsi, u8 *mode);
-int mipi_dsi_dcs_get_pixel_format(struct mipi_dsi_device *dsi, u8 *format);
 int mipi_dsi_dcs_enter_sleep_mode(struct mipi_dsi_device *dsi);
 int mipi_dsi_dcs_exit_sleep_mode(struct mipi_dsi_device *dsi);
 int mipi_dsi_dcs_set_display_off(struct mipi_dsi_device *dsi);
 int mipi_dsi_dcs_set_display_on(struct mipi_dsi_device *dsi);
-int mipi_dsi_dcs_set_column_address(struct mipi_dsi_device *dsi, u16 start,
-				    u16 end);
-int mipi_dsi_dcs_set_page_address(struct mipi_dsi_device *dsi, u16 start,
-				  u16 end);
 int mipi_dsi_dcs_set_tear_off(struct mipi_dsi_device *dsi);
 int mipi_dsi_dcs_set_tear_on(struct mipi_dsi_device *dsi,
 			     enum mipi_dsi_dcs_tear_mode mode);
-int mipi_dsi_dcs_set_pixel_format(struct mipi_dsi_device *dsi, u8 format);
 
 /**
  * struct mipi_dsi_driver - DSI driver
