@@ -77,10 +77,6 @@ struct tegra_dsi {
 
 	unsigned int video_fifo_depth;
 	unsigned int host_fifo_depth;
-
-	/* for ganged-mode support */
-	struct tegra_dsi *master;
-	struct tegra_dsi *slave;
 };
 
 static inline struct tegra_dsi *
@@ -1467,10 +1463,6 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	dsi->output.dev = dsi->dev = &pdev->dev;
 	dsi->video_fifo_depth = 1920;
 	dsi->host_fifo_depth = 64;
-
-	err = tegra_dsi_ganged_probe(dsi);
-	if (err < 0)
-		return err;
 
 	err = tegra_output_probe(&dsi->output);
 	if (err < 0)
