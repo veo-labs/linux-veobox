@@ -817,7 +817,7 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 			if (page_size > nor->page_size)
 				page_size = nor->page_size;
 
-			ret = spi_nor_wait_till_ready(nor);
+			ret = wait_till_ready(nor);
 			if (ret)
 				goto write_err;
 
