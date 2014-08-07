@@ -129,15 +129,9 @@ static int m25p80_read(struct spi_nor *nor, loff_t from, size_t len,
 	struct spi_transfer t[2];
 	struct spi_message m;
 	unsigned int dummy = nor->read_dummy;
-	int ret;
 
 	/* convert the dummy cycles to the number of bytes */
 	dummy /= 8;
-
-	/* Wait till previous write/erase is done. */
-	ret = nor->wait_till_ready(nor);
-	if (ret)
-		return ret;
 
 	spi_message_init(&m);
 	memset(t, 0, (sizeof t));
@@ -166,6 +160,11 @@ static int m25p80_erase(struct spi_nor *nor, loff_t offset)
 
 	dev_dbg(nor->dev, "%dKiB at 0x%08x\n",
 		flash->mtd.erasesize / 1024, (u32)offset);
+
+	/* Send write enable, then erase commands. */
+	ret = nor->write_reg(nor, SPINOR_OP_WREN, NULL, 0, 0);
+	if (ret)
+		return ret;
 
 	/* Set up command buffer. */
 	flash->command[0] = nor->erase_opcode;
