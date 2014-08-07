@@ -227,6 +227,10 @@ static int spi_nor_ready(struct spi_nor *nor)
 	return sr && fsr;
 }
 
+/*
+ * Service routine to read status register until ready, or timeout occurs.
+ * Returns non-zero if error.
+ */
 static int spi_nor_wait_till_ready(struct spi_nor *nor)
 {
 	unsigned long deadline;
@@ -820,7 +824,7 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 			if (page_size > nor->page_size)
 				page_size = nor->page_size;
 
-			ret = wait_till_ready(nor);
+			ret = spi_nor_wait_till_ready(nor);
 			if (ret)
 				goto write_err;
 
@@ -971,9 +975,6 @@ static int spi_nor_check(struct spi_nor *nor)
 		pr_err("spi-nor: please fill all the necessary fields!\n");
 		return -EINVAL;
 	}
-
-	if (!nor->wait_till_ready)
-		nor->wait_till_ready = spi_nor_wait_till_ready;
 
 	return 0;
 }
