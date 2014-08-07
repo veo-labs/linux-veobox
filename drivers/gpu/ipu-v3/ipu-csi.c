@@ -364,11 +364,14 @@ int ipu_csi_init_interface(struct ipu_csi *csi,
 {
 	struct ipu_csi_bus_config cfg;
 	unsigned long flags;
-	u32 data = 0;
+	u32 data;
 
 	fill_csi_bus_cfg(&cfg, mbus_cfg, mbus_fmt);
 
+	data = ipu_csi_read(csi, CSI_SENS_CONF);
+
 	/* Set the CSI_SENS_CONF register remaining fields */
+	data &= ~(0xff7f | BIT(CSI_SENS_CONF_DATA_EN_POL_SHIFT));
 	data |= cfg.data_width << CSI_SENS_CONF_DATA_WIDTH_SHIFT |
 		cfg.data_fmt << CSI_SENS_CONF_DATA_FMT_SHIFT |
 		cfg.data_pol << CSI_SENS_CONF_DATA_POL_SHIFT |
