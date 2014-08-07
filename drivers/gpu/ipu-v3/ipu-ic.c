@@ -327,6 +327,25 @@ static int calc_resize_coeffs(struct ipu_ic *ic,
 	return 0;
 }
 
+void ipu_ic_csi_mem_wr_en(struct ipu_ic_priv *priv, bool mem_wr_en)
+{
+	unsigned long flags;
+	u32 ic_conf;
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	ic_conf = readl(priv->base + IC_CONF);
+
+	if (mem_wr_en)
+		ic_conf |= IC_CONF_CSI_MEM_WR_EN;
+	else
+		ic_conf &= ~IC_CONF_CSI_MEM_WR_EN;
+
+	writel(ic_conf, priv->base + IC_CONF);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+}
+
 void ipu_ic_task_enable(struct ipu_ic *ic)
 {
 	struct ipu_ic_priv *priv = ic->priv;

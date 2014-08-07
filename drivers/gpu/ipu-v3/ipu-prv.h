@@ -407,6 +407,7 @@ void ipu_csi_exit(struct ipu_soc *ipu, int id);
 int ipu_ic_init(struct ipu_soc *ipu, struct device *dev,
 		unsigned long base, unsigned long tpmem_base);
 void ipu_ic_exit(struct ipu_soc *ipu);
+void ipu_ic_csi_mem_wr_en(struct ipu_ic_priv *priv, bool mem_wr_en);
 
 int ipu_di_init(struct ipu_soc *ipu, struct device *dev, int id,
 		unsigned long base, u32 module, struct clk *ipu_clk);
