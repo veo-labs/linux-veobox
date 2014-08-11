@@ -350,6 +350,7 @@ struct ipu_ic_priv;
 struct ipu_smfc_priv;
 
 struct ipu_devtype;
+struct v4l2_subdev;
 
 struct ipu_soc {
 	struct device		*dev;
@@ -380,7 +381,12 @@ struct ipu_soc {
 	struct ipu_csi		*csi_priv[2];
 	struct ipu_ic_priv	*ic_priv;
 	struct ipu_smfc_priv	*smfc_priv;
+
+	struct v4l2_subdev	*subdevs[IPU_NUM_ENTITIES];
 };
+
+void ipu_cm_update_bits(struct ipu_soc *ipu, unsigned int reg,
+			unsigned int mask, unsigned int val);
 
 static inline u32 ipu_idmac_read(struct ipu_soc *ipu, unsigned offset)
 {
@@ -404,6 +410,7 @@ int ipu_wait_interrupt(struct ipu_soc *ipu, int irq, int ms);
 int ipu_csi_init(struct ipu_soc *ipu, struct device *dev, int id,
 		 unsigned long base, u32 module, struct clk *clk_ipu);
 void ipu_csi_exit(struct ipu_soc *ipu, int id);
+int ipu_csi_set_dest(struct ipu_csi *csi, enum ipu_csi_dest csi_dest);
 
 int ipu_ic_init(struct ipu_soc *ipu, struct device *dev,
 		unsigned long base, unsigned long tpmem_base);
@@ -431,5 +438,8 @@ void ipu_cpmem_exit(struct ipu_soc *ipu);
 int ipu_smfc_init(struct ipu_soc *ipu, struct device *dev, unsigned long base);
 void ipu_smfc_exit(struct ipu_soc *ipu);
 int ipu_smfc_set_csi(struct ipu_soc *ipu, int chno, int csi_id);
+
+int ipu_media_init(struct ipu_soc *ipu);
+void ipu_media_exit(struct ipu_soc *ipu);
 
 #endif				/* __IPU_PRV_H__ */

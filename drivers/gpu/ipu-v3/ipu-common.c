@@ -44,8 +44,8 @@ static inline void ipu_cm_write(struct ipu_soc *ipu, u32 value, unsigned offset)
 	writel(value, ipu->cm_reg + offset);
 }
 
-static void ipu_cm_update_bits(struct ipu_soc *ipu, unsigned int reg,
-			       unsigned int mask, unsigned int val)
+void ipu_cm_update_bits(struct ipu_soc *ipu, unsigned int reg,
+			unsigned int mask, unsigned int val)
 {
 	unsigned long flags;
 	u32 tmp;
@@ -1326,10 +1326,16 @@ static int ipu_probe(struct platform_device *pdev)
 		goto failed_add_clients;
 	}
 
+	ret = ipu_media_init(ipu);
+	if (ret)
+		goto failed_media_init;
+
 	dev_info(&pdev->dev, "%s probed\n", devtype->name);
 
 	return 0;
 
+failed_media_init:
+	platform_device_unregister_children(pdev);
 failed_add_clients:
 failed_media_device:
 	ipu_submodules_exit(ipu);
@@ -1346,6 +1352,7 @@ static int ipu_remove(struct platform_device *pdev)
 	struct ipu_soc *ipu = platform_get_drvdata(pdev);
 
 	platform_device_unregister_children(pdev);
+	ipu_media_exit(ipu);
 	ipu_submodules_exit(ipu);
 	ipu_irq_exit(ipu);
 

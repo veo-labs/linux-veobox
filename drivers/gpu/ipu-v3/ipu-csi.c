@@ -632,7 +632,6 @@ int ipu_csi_set_dest(struct ipu_csi *csi, enum ipu_csi_dest csi_dest)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ipu_csi_set_dest);
 
 int ipu_csi_enable(struct ipu_csi *csi)
 {
