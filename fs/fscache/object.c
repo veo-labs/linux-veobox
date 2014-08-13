@@ -982,7 +982,7 @@ nomem:
 submit_op_failed:
 	clear_bit(FSCACHE_OBJECT_IS_LIVE, &object->flags);
 	spin_unlock(&cookie->lock);
-	fscache_unuse_cookie(object);
+	fscache_unuse_cookie(cookie);
 	kfree(op);
 	_leave(" [EIO]");
 	return transit_to(KILL_OBJECT);
