@@ -235,8 +235,8 @@ g94_aux_port_ctor(struct nvkm_object *parent, struct nvkm_object *engine,
 	if (ret)
 		return ret;
 
-	port->base.aux = info->drive;
-	port->addr = info->drive;
+	port->base.aux = info->auxch;
+	port->addr = info->auxch;
 	return 0;
 }
 
