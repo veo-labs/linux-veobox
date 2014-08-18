@@ -547,6 +547,18 @@ nvkm_i2c_create_(struct nvkm_object *parent, struct nvkm_object *engine,
 			nouveau_i2c_create_port(i2c, NV_I2C_AUX(index),
 						info.type, &info);
 			break;
+		case DCB_I2C_PMGR:
+			if (info.drive != DCB_I2C_UNUSED) {
+				nouveau_i2c_create_port(i2c, NV_I2C_PORT(index),
+							DCB_I2C_NVIO_BIT,
+							&info);
+			}
+			if (info.auxch != DCB_I2C_UNUSED) {
+				nouveau_i2c_create_port(i2c, NV_I2C_AUX(index),
+							DCB_I2C_NVIO_AUX,
+							&info);
+			}
+			break;
 		case DCB_I2C_UNUSED:
 		default:
 			continue;
