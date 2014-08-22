@@ -115,6 +115,7 @@ nvidia	NVIDIA
 nxp	NXP Semiconductors
 onnn	ON Semiconductor Corp.
 opencores	OpenCores.org
+ovti	OmniVision Technologies, Inc
 panasonic	Panasonic Corporation
 pericom	Pericom Technology Inc.
 phytec	PHYTEC Messtechnik GmbH
