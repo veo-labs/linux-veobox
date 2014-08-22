@@ -91,26 +91,6 @@ static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list
 	}
 }
 
-static void maybe_write_file(char *filename, char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vmaybe_write_file(true, filename, fmt, ap);
-	va_end(ap);
-
-}
-
-static void write_file(char *filename, char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vmaybe_write_file(false, filename, fmt, ap);
-	va_end(ap);
-
-}
-
 static int read_mnt_flags(const char *path)
 {
 	int ret;
