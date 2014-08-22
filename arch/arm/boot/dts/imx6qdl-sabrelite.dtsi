@@ -9,8 +9,19 @@
  * http://www.opensource.org/licenses/gpl-license.html
  * http://www.gnu.org/copyleft/gpl.html
  */
+
+#include <dt-bindings/clock/imx6qdl-clock.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
+
+/*
+ * Uncomment the following macro to enable OV5642 video capture
+ * support. There is a pin conflict for GPIO6 between ENET wake-up
+ * interrupt function and power-down pin function for the OV5642.
+ * ENET will still work when enabling OV5642 capture, just not
+ * quite as well.
+ */
+/* #define __OV5642_CAPTURE__ */
 
 / {
 	chosen {
@@ -129,6 +140,35 @@
 		power-supply = <&reg_3p3v>;
 		status = "okay";
 	};
+
+#ifdef __OV5642_CAPTURE__
+	v4l2cap0: v4l2cap@ipu1 {
+		compatible = "fsl,imx6-v4l2-capture";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		ipu = <&ipu1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ipu1_csi0>;
+		status = "okay";
+
+		/* CSI0 */
+		port@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0>;
+
+			/* Parallel bus */
+			csi0: endpoint@0 {
+				reg = <0>;
+				remote-endpoint = <&ov5642_1>;
+				bus-width = <8>;
+				data-shift = <12>; /* Lines 19:12 used */
+				hsync-active = <1>;
+				vync-active = <1>;
+			};
+		};
+	};
+#endif
 };
 
 &audmux {
@@ -168,8 +208,11 @@
 	txd1-skew-ps = <0>;
 	txd2-skew-ps = <0>;
 	txd3-skew-ps = <0>;
+#ifndef __OV5642_CAPTURE__
 	interrupts-extended = <&gpio1 6 IRQ_TYPE_LEVEL_HIGH>,
 			      <&intc 0 119 IRQ_TYPE_LEVEL_HIGH>;
+
+#endif
 	status = "okay";
 };
 
@@ -194,17 +237,34 @@
 };
 
 &i2c2 {
+	status = "okay";
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c2>;
-	status = "okay";
-};
 
-&i2c3 {
-	clock-frequency = <100000>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c3>;
-	status = "okay";
+#ifdef __OV5642_CAPTURE__
+	camera: ov5642@3c {
+		compatible = "ovti,ov5642";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_ov5642>;
+		clocks = <&clks IMX6QDL_CLK_CKO2>;
+		clock-names = "xclk";
+		reg = <0x3c>;
+		xclk = <24000000>;
+		reset-gpios = <&gpio1 8 0>;
+		pwdn-gpios = <&gpio1 6 0>;
+		gp-gpios = <&gpio1 16 0>;
+
+		port {
+			ov5642_1: endpoint {
+				remote-endpoint = <&csi0>;
+				bus-width = <8>;
+				hsync-active = <1>;
+				vsync-active = <1>;
+			};
+		};
+	};
+#endif
 };
 
 &iomuxc {
@@ -256,7 +316,9 @@
 				MX6QDL_PAD_RGMII_RX_CTL__RGMII_RX_CTL	0x1b0b0
 				/* Phy reset */
 				MX6QDL_PAD_EIM_D23__GPIO3_IO23		0x000b0
+#ifndef __OV5642_CAPTURE__
 				MX6QDL_PAD_GPIO_6__ENET_IRQ		0x000b1
+#endif
 			>;
 		};
 
@@ -286,15 +348,34 @@
 
 		pinctrl_i2c2: i2c2grp {
 			fsl,pins = <
-				MX6QDL_PAD_KEY_COL3__I2C2_SCL		0x4001b8b1
-				MX6QDL_PAD_KEY_ROW3__I2C2_SDA		0x4001b8b1
+				MX6QDL_PAD_KEY_COL3__I2C2_SCL 0x4001b8b1
+				MX6QDL_PAD_KEY_ROW3__I2C2_SDA 0x4001b8b1
 			>;
 		};
 
-		pinctrl_i2c3: i2c3grp {
+		pinctrl_ipu1_csi0: ipu1grp-csi0 {
 			fsl,pins = <
-				MX6QDL_PAD_GPIO_5__I2C3_SCL		0x4001b8b1
-				MX6QDL_PAD_GPIO_16__I2C3_SDA		0x4001b8b1
+				MX6QDL_PAD_CSI0_DAT12__IPU1_CSI0_DATA12    0x80000000
+				MX6QDL_PAD_CSI0_DAT13__IPU1_CSI0_DATA13    0x80000000
+				MX6QDL_PAD_CSI0_DAT14__IPU1_CSI0_DATA14    0x80000000
+				MX6QDL_PAD_CSI0_DAT15__IPU1_CSI0_DATA15    0x80000000
+				MX6QDL_PAD_CSI0_DAT16__IPU1_CSI0_DATA16    0x80000000
+				MX6QDL_PAD_CSI0_DAT17__IPU1_CSI0_DATA17    0x80000000
+				MX6QDL_PAD_CSI0_DAT18__IPU1_CSI0_DATA18    0x80000000
+				MX6QDL_PAD_CSI0_DAT19__IPU1_CSI0_DATA19    0x80000000
+				MX6QDL_PAD_CSI0_PIXCLK__IPU1_CSI0_PIXCLK   0x80000000
+				MX6QDL_PAD_CSI0_MCLK__IPU1_CSI0_HSYNC      0x80000000
+				MX6QDL_PAD_CSI0_VSYNC__IPU1_CSI0_VSYNC     0x80000000
+				MX6QDL_PAD_CSI0_DATA_EN__IPU1_CSI0_DATA_EN 0x80000000
+			>;
+		};
+
+		pinctrl_ov5642: ov5642grp {
+			fsl,pins = <
+				MX6QDL_PAD_SD1_DAT0__GPIO1_IO16 0x80000000
+				MX6QDL_PAD_GPIO_6__GPIO1_IO06   0x80000000
+				MX6QDL_PAD_GPIO_8__GPIO1_IO08   0x80000000
+				MX6QDL_PAD_GPIO_3__CCM_CLKO2    0x80000000
 			>;
 		};
 
