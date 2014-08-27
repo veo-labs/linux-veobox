@@ -127,6 +127,7 @@ enum ipu_channel_irq {
 #define IPUV3_CHANNEL_ROT_VF_MEM		49
 #define IPUV3_CHANNEL_ROT_PP_MEM		50
 #define IPUV3_CHANNEL_MEM_BG_SYNC_ALPHA		51
+#define IPUV3_NUM_CHANNELS			64
 
 int ipu_map_irq(struct ipu_soc *ipu, int irq);
 int ipu_idmac_channel_irq(struct ipu_soc *ipu, struct ipuv3_channel *channel,
@@ -170,6 +171,8 @@ int ipu_idmac_get_current_buffer(struct ipuv3_channel *channel);
 bool ipu_idmac_buffer_is_ready(struct ipuv3_channel *channel, u32 buf_num);
 void ipu_idmac_select_buffer(struct ipuv3_channel *channel, u32 buf_num);
 void ipu_idmac_clear_buffer(struct ipuv3_channel *channel, u32 buf_num);
+int ipu_idmac_link(struct ipuv3_channel *src, struct ipuv3_channel *sink);
+int ipu_idmac_unlink(struct ipuv3_channel *src, struct ipuv3_channel *sink);
 
 /*
  * IPU Channel Parameter Memory (cpmem) functions
