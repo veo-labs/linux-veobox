@@ -167,6 +167,7 @@ static void of_dma_configure(struct device *dev)
 	int ret;
 	bool coherent;
 	unsigned long offset;
+	struct iommu_ops *iommu;
 
 	/*
 	 * Set default dma-mask to 32 bit. Drivers are expected to setup
@@ -195,7 +196,16 @@ static void of_dma_configure(struct device *dev)
 	dev_dbg(dev, "device is%sdma coherent\n",
 		coherent ? " " : " not ");
 
-	arch_setup_dma_ops(dev, coherent);
+	iommu = of_iommu_configure(dev);
+	dev_dbg(dev, "device is%sbehind an iommu\n",
+		iommu ? " " : " not ");
+
+	arch_setup_dma_ops(dev, dma_addr, size, iommu, coherent);
+}
+
+static void of_dma_deconfigure(struct device *dev)
+{
+	arch_teardown_dma_ops(dev);
 }
 
 /**
