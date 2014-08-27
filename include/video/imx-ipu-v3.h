@@ -79,6 +79,16 @@ enum ipu_color_space {
 	IPUV3_COLORSPACE_UNKNOWN,
 };
 
+/*
+ * Enumeration of VDI MOTION select
+ */
+enum ipu_motion_sel {
+	MOTION_NONE = 0,
+	LOW_MOTION,
+	MED_MOTION,
+	HIGH_MOTION,
+};
+
 struct ipuv3_channel;
 
 enum ipu_channel_irq {
@@ -316,6 +326,23 @@ int ipu_ic_disable(struct ipu_ic *ic);
 struct ipu_ic *ipu_ic_get(struct ipu_soc *ipu, enum ipu_ic_task task);
 void ipu_ic_put(struct ipu_ic *ic);
 void ipu_ic_dump(struct ipu_ic *ic);
+
+/*
+ * IPU Video De-Interlacer (vdi) functions
+ */
+struct ipu_vdi;
+void ipu_vdi_set_top_field_man(struct ipu_vdi *vdi, bool top_field_0);
+void ipu_vdi_set_motion(struct ipu_vdi *vdi, enum ipu_motion_sel motion_sel);
+void ipu_vdi_setup(struct ipu_vdi *vdi,
+		   u32 code, int xres, int yres, u32 field,
+		   enum ipu_motion_sel motion_sel);
+void ipu_vdi_unsetup(struct ipu_vdi *vdi);
+void ipu_vdi_toggle_top_field_man(struct ipu_vdi *vdi);
+int ipu_vdi_set_src(struct ipu_vdi *vdi, bool csi);
+int ipu_vdi_enable(struct ipu_vdi *vdi);
+int ipu_vdi_disable(struct ipu_vdi *vdi);
+struct ipu_vdi *ipu_vdi_get(struct ipu_soc *ipu);
+void ipu_vdi_put(struct ipu_vdi *vdi);
 
 /*
  * IPU Sensor Multiple FIFO Controller (SMFC) functions
