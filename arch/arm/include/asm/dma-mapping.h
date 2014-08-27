@@ -121,13 +121,12 @@ static inline unsigned long dma_max_pfn(struct device *dev)
 }
 #define dma_max_pfn(dev) dma_max_pfn(dev)
 
-static inline int set_arch_dma_coherent_ops(struct device *dev)
+static inline void arch_setup_dma_ops(struct device *dev, bool coherent)
 {
-	dev->archdata.dma_coherent = true;
-	set_dma_ops(dev, &arm_coherent_dma_ops);
-	return 0;
+	if (coherent)
+		set_dma_ops(dev, &arm_coherent_dma_ops);
 }
-#define set_arch_dma_coherent_ops(dev)	set_arch_dma_coherent_ops(dev)
+#define arch_setup_dma_ops arch_setup_dma_ops
 
 /* do not use this function in a driver */
 static inline bool is_device_dma_coherent(struct device *dev)
