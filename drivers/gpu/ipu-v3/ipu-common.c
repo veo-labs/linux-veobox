@@ -724,6 +724,118 @@ void ipu_set_ic_src_mux(struct ipu_soc *ipu, int csi_id, bool vdi)
 }
 EXPORT_SYMBOL_GPL(ipu_set_ic_src_mux);
 
+
+/* IDMAC Channel Linking */
+
+struct idmac_link_reg_info {
+	int chno;
+	u32 reg;
+	int shift;
+	int bits;
+	u32 sel;
+};
+
+struct idmac_link_info {
+	struct idmac_link_reg_info src;
+	struct idmac_link_reg_info sink;
+};
+
+static const struct idmac_link_info idmac_link_info[] = {
+	{
+		.src  = { 20, IPU_FS_PROC_FLOW1,  0, 4, 7 },
+		.sink = { 45, IPU_FS_PROC_FLOW2,  0, 4, 1 },
+	}, {
+		.src =  { 21, IPU_FS_PROC_FLOW1,  8, 4, 8 },
+		.sink = { 46, IPU_FS_PROC_FLOW2,  4, 4, 1 },
+	}, {
+		.src =  { 22, IPU_FS_PROC_FLOW1, 16, 4, 5 },
+		.sink = { 47, IPU_FS_PROC_FLOW2, 12, 4, 3 },
+	},
+};
+
+static const struct idmac_link_info *find_idmac_link_info(
+	struct ipuv3_channel *src, struct ipuv3_channel *sink)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(idmac_link_info); i++) {
+		if (src->num == idmac_link_info[i].src.chno &&
+		    sink->num == idmac_link_info[i].sink.chno)
+			return &idmac_link_info[i];
+	}
+
+	return NULL;
+}
+
+/*
+ * Links an IDMAC source channel to a sink channel.
+ */
+int ipu_idmac_link(struct ipuv3_channel *src, struct ipuv3_channel *sink)
+{
+	struct ipu_soc *ipu = src->ipu;
+	const struct idmac_link_info *link;
+	u32 src_reg, sink_reg, src_mask, sink_mask;
+	unsigned long flags;
+
+	link = find_idmac_link_info(src, sink);
+	if (!link)
+		return -EINVAL;
+
+	src_mask = ((1 << link->src.bits) - 1) << link->src.shift;
+	sink_mask = ((1 << link->sink.bits) - 1) << link->sink.shift;
+
+	spin_lock_irqsave(&ipu->lock, flags);
+
+	src_reg = ipu_cm_read(ipu, link->src.reg);
+	sink_reg = ipu_cm_read(ipu, link->sink.reg);
+
+	src_reg &= ~src_mask;
+	src_reg |= (link->src.sel << link->src.shift);
+
+	sink_reg &= ~sink_mask;
+	sink_reg |= (link->sink.sel << link->sink.shift);
+
+	ipu_cm_write(ipu, src_reg, link->src.reg);
+	ipu_cm_write(ipu, sink_reg, link->sink.reg);
+
+	spin_unlock_irqrestore(&ipu->lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ipu_idmac_link);
+
+/*
+ * Unlinks IDMAC source and sink channels.
+ */
+int ipu_idmac_unlink(struct ipuv3_channel *src, struct ipuv3_channel *sink)
+{
+	struct ipu_soc *ipu = src->ipu;
+	const struct idmac_link_info *link;
+	u32 src_reg, sink_reg, src_mask, sink_mask;
+	unsigned long flags;
+
+	link = find_idmac_link_info(src, sink);
+	if (!link)
+		return -EINVAL;
+
+	src_mask = ((1 << link->src.bits) - 1) << link->src.shift;
+	sink_mask = ((1 << link->sink.bits) - 1) << link->sink.shift;
+
+	spin_lock_irqsave(&ipu->lock, flags);
+
+	src_reg = ipu_cm_read(ipu, link->src.reg);
+	sink_reg = ipu_cm_read(ipu, link->sink.reg);
+
+	src_reg &= ~src_mask;
+	sink_reg &= ~sink_mask;
+
+	ipu_cm_write(ipu, src_reg, link->src.reg);
+	ipu_cm_write(ipu, sink_reg, link->sink.reg);
+
+	spin_unlock_irqrestore(&ipu->lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ipu_idmac_unlink);
+
 struct ipu_devtype {
 	const char *name;
 	unsigned long cm_ofs;
