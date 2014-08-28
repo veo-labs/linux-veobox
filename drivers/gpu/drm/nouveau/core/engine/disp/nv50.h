@@ -246,6 +246,7 @@ extern struct nvkm_output_dp_impl nvd0_sor_dp_impl;
 int nvd0_sor_dp_lnk_ctl(struct nvkm_output_dp *, int, int, bool);
 extern struct nouveau_oclass *nvd0_disp_outp_sclass[];
 
+void gm204_sor_magic(struct nvkm_output *outp);
 extern struct nvkm_output_dp_impl gm204_sor_dp_impl;
 
 #endif
