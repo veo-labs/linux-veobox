@@ -434,4 +434,11 @@
 #define IMX6SX_GPR5_DISP_MUX_DCIC1_LVDS			(0x1 << 1)
 #define IMX6SX_GPR5_DISP_MUX_DCIC1_MASK			(0x1 << 1)
 
+/* iomux gpr register field defines for imx6dl  */
+#define IMX6DL_GPR13_MIPI_IPU_CSI1_MUX_SHIFT   3
+#define IMX6DL_GPR13_MIPI_IPU_CSI1_MUX_MASK    (0x7 << 3)
+#define IMX6DL_GPR13_MIPI_IPU_CSI0_MUX_SHIFT   0
+#define IMX6DL_GPR13_MIPI_IPU_CSI0_MUX_MASK    (0x7 << 0)
+
+
 #endif /* __LINUX_IMX6Q_IOMUXC_GPR_H */
