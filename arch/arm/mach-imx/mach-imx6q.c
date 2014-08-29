@@ -31,6 +31,7 @@
 #include <linux/micrel_phy.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mfd/syscon/imx6q-iomuxc-gpr.h>
+#include <linux/platform_data/camera-mx6.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/system_misc.h>
@@ -262,6 +263,57 @@ static void __init imx6q_axi_init(void)
 	}
 }
 
+/*
+ * Set the muxes that choose between mipi-csi2 and parallel inputs
+ * to the IPU CSI's.
+ */
+static void imx6q_set_video_mux(int ipu, int csi, bool csi2, u32 vc)
+{
+	struct regmap *gpr;
+	u32 val, shift, mask;
+
+	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6q-iomuxc-gpr");
+	if (IS_ERR(gpr)) {
+		pr_err("failed to find fsl,imx6q-iomux-gpr regmap\n");
+		return;
+	}
+
+	if (cpu_is_imx6dl()) {
+		/*
+		 * On D/L, the mux is in GPR13. The TRM is unclear,
+		 * but it appears the mux allows selecting the MIPI
+		 * CSI-2 virtual channel number to route to the CSIs.
+		 */
+		mask = csi == 0 ? IMX6DL_GPR13_MIPI_IPU_CSI0_MUX_MASK :
+			IMX6DL_GPR13_MIPI_IPU_CSI1_MUX_MASK;
+		shift = csi == 0 ? IMX6DL_GPR13_MIPI_IPU_CSI0_MUX_SHIFT :
+			IMX6DL_GPR13_MIPI_IPU_CSI1_MUX_SHIFT;
+		val = csi2 ? vc << shift : 4 << shift;
+		regmap_update_bits(gpr, IOMUXC_GPR13, mask, val);
+	} else {
+		/*
+		 * For Q/D, the mux only exists on IPU0-CSI0 and IPU1-CSI1,
+		 * and the routed virtual channel numbers are fixed at 0 and
+		 * 3 respectively.
+		 */
+		if (!((ipu == 0 && csi == 0) || (ipu == 1 && csi == 1)))
+			return;
+
+		mask = ipu == 0 ? IMX6Q_GPR1_MIPI_IPU1_MUX_MASK :
+			IMX6Q_GPR1_MIPI_IPU2_MUX_IOMUX;
+		val = csi2 ? 0 : mask;
+		regmap_update_bits(gpr, IOMUXC_GPR1, mask, val);
+	}
+}
+
+static struct mx6_camera_pdata imx6_v4l2cap_pdata = {
+	.set_video_mux = imx6q_set_video_mux,
+};
+
+static struct of_dev_auxdata imx6q_auxdata_lookup[] __initdata = {
+	OF_DEV_AUXDATA("fsl,imx6-v4l2-capture", 0, NULL, &imx6_v4l2cap_pdata),
+};
+
 static void __init imx6q_init_machine(void)
 {
 	struct device *parent;
@@ -275,7 +327,8 @@ static void __init imx6q_init_machine(void)
 
 	imx6q_enet_phy_init();
 
-	of_platform_populate(NULL, of_default_bus_match_table, NULL, parent);
+	of_platform_populate(NULL, of_default_bus_match_table,
+			     imx6q_auxdata_lookup, parent);
 
 	imx_anatop_init();
 	cpu_is_imx6q() ?  imx6q_pm_init() : imx6dl_pm_init();
