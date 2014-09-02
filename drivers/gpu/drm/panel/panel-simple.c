@@ -687,29 +687,6 @@ static const struct panel_desc innolux_g121i1_l01 = {
 };
 
 static const struct drm_display_mode innolux_n116bge_mode = {
-	.clock = 71000,
-	.hdisplay = 1280,
-	.hsync_start = 1280 + 64,
-	.hsync_end = 1280 + 64 + 32,
-	.htotal = 1280 + 64 + 32 + 64,
-	.vdisplay = 800,
-	.vsync_start = 800 + 9,
-	.vsync_end = 800 + 9 + 6,
-	.vtotal = 800 + 9 + 6 + 9,
-	.vrefresh = 60,
-};
-
-static const struct panel_desc innolux_g121i1_l01 = {
-	.modes = &innolux_g121i1_l01_mode,
-	.num_modes = 1,
-	.bpc = 6,
-	.size = {
-		.width = 261,
-		.height = 163,
-	},
-};
-
-static const struct drm_display_mode innolux_n116bge_mode = {
 	.clock = 76420,
 	.hdisplay = 1366,
 	.hsync_start = 1366 + 136,
