@@ -12142,79 +12142,56 @@ static int
 intel_check_cursor_plane(struct drm_plane *plane,
 			 struct intel_plane_state *state)
 {
-	struct drm_crtc *crtc = state->base.crtc;
-	struct drm_device *dev = plane->dev;
-	struct drm_framebuffer *fb = state->base.fb;
+	struct drm_crtc *crtc = state->crtc;
+	struct drm_framebuffer *fb = state->fb;
 	struct drm_rect *dest = &state->dst;
 	struct drm_rect *src = &state->src;
 	const struct drm_rect *clip = &state->clip;
-	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
-	struct intel_crtc *intel_crtc;
-	unsigned stride;
-	int ret;
 
-	crtc = crtc ? crtc : plane->crtc;
-	intel_crtc = to_intel_crtc(crtc);
-
-	ret = drm_plane_helper_check_update(plane, crtc, fb,
+	return drm_plane_helper_check_update(plane, crtc, fb,
 					    src, dest, clip,
 					    DRM_PLANE_HELPER_NO_SCALING,
 					    DRM_PLANE_HELPER_NO_SCALING,
 					    true, true, &state->visible);
-	if (ret)
-		return ret;
-
-
-	/* if we want to turn off the cursor ignore width and height */
-	if (!obj)
-		goto finish;
-
-	/* Check for which cursor types we support */
-	if (!cursor_size_ok(dev, state->base.crtc_w, state->base.crtc_h)) {
-		DRM_DEBUG("Cursor dimension %dx%d not supported\n",
-			  state->base.crtc_w, state->base.crtc_h);
-		return -EINVAL;
-	}
-
-	stride = roundup_pow_of_two(state->base.crtc_w) * 4;
-	if (obj->base.size < stride * state->base.crtc_h) {
-		DRM_DEBUG_KMS("buffer is too small\n");
-		return -ENOMEM;
-	}
-
-	if (fb == crtc->cursor->fb)
-		return 0;
-
-	/* we only need to pin inside GTT if cursor is non-phy */
-	mutex_lock(&dev->struct_mutex);
-	if (!INTEL_INFO(dev)->cursor_needs_physical && obj->tiling_mode) {
-		DRM_DEBUG_KMS("cursor cannot be tiled\n");
-		ret = -EINVAL;
-	}
-	mutex_unlock(&dev->struct_mutex);
-
-finish:
-	if (intel_crtc->active) {
-		if (intel_crtc->cursor_width != state->base.crtc_w)
-			intel_crtc->atomic.update_wm = true;
-
-		intel_crtc->atomic.fb_bits |=
-			INTEL_FRONTBUFFER_CURSOR(intel_crtc->pipe);
-	}
-
-	return ret;
 }
 
 static void
 intel_commit_cursor_plane(struct drm_plane *plane,
 			  struct intel_plane_state *state)
 {
-	struct drm_crtc *crtc = state->base.crtc;
-	struct drm_device *dev = plane->dev;
-	struct intel_crtc *intel_crtc;
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	struct drm_i915_gem_object *obj = intel_fb_obj(state->base.fb);
-	uint32_t addr;
+	struct drm_crtc *crtc = state->crtc;
+	struct drm_framebuffer *fb = state->fb;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_framebuffer *intel_fb = to_intel_framebuffer(fb);
+	struct drm_i915_gem_object *obj = intel_fb->obj;
+	int crtc_w, crtc_h;
+
+	crtc->cursor_x = state->orig_dst.x1;
+	crtc->cursor_y = state->orig_dst.y1;
+	if (fb != crtc->cursor->fb) {
+		crtc_w = drm_rect_width(&state->orig_dst);
+		crtc_h = drm_rect_height(&state->orig_dst);
+		return intel_crtc_cursor_set_obj(crtc, obj, crtc_w, crtc_h);
+	} else {
+		intel_crtc_update_cursor(crtc, state->visible);
+
+		intel_frontbuffer_flip(crtc->dev,
+				       INTEL_FRONTBUFFER_CURSOR(intel_crtc->pipe));
+
+		return 0;
+	}
+}
+
+static int
+intel_cursor_plane_update(struct drm_plane *plane, struct drm_crtc *crtc,
+			  struct drm_framebuffer *fb, int crtc_x, int crtc_y,
+			  unsigned int crtc_w, unsigned int crtc_h,
+			  uint32_t src_x, uint32_t src_y,
+			  uint32_t src_w, uint32_t src_h)
+{
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct intel_plane_state state;
+	int ret;
 
 	crtc = crtc ? crtc : plane->crtc;
 	intel_crtc = to_intel_crtc(crtc);
