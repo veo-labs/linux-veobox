@@ -1056,6 +1056,41 @@ struct i2c_client *i2c_new_dummy(struct i2c_adapter *adapter, u16 address)
 }
 EXPORT_SYMBOL_GPL(i2c_new_dummy);
 
+/**
+ * i2c_new_secondary_device - Helper to get the instantiated secondary address
+ * and create the associated device
+ * @client: Handle to the primary client
+ * @name: Handle to specify which secondary address to get
+ * @default_addr: Used as a fallback if no secondary address was specified
+ * Context: can sleep
+ *
+ * This returns an I2C client bound to the "dummy" driver based on DT parsing.
+ * It retrieves the address based on the name.
+ * It uses default_addr if no information is provided by firmware.
+ *
+ * This returns the new i2c client, which should be saved for later use with
+ * i2c_unregister_device(); or NULL to indicate an error.
+ */
+struct i2c_client *i2c_new_secondary_device(struct i2c_client *client,
+						const char *name,
+						u16 default_addr)
+{
+	struct device_node *np = client->dev.of_node;
+	u32 addr = default_addr;
+	int i;
+
+	if (np) {
+		i = of_property_match_string(np, "reg-names", name);
+		if (i >= 0)
+			of_property_read_u32_index(np, "reg", i, &addr);
+	}
+
+	dev_dbg(&client->adapter->dev, "Address for %s : 0x%x\n", name, addr);
+	return i2c_new_dummy(client->adapter, addr);
+}
+EXPORT_SYMBOL_GPL(i2c_new_secondary_device);
+
+
 /* ------------------------------------------------------------------------- */
 
 /* I2C bus adapters -- one roots each I2C or SMBUS segment */
