@@ -50,6 +50,59 @@
 #include <linux/pm_runtime.h>
 #include <linux/oom.h>
 
+static int i915_dma_init(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_flush_ioctl(struct drm_device *dev, void *data,
+			    struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_batchbuffer(struct drm_device *dev, void *data,
+			    struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_cmdbuffer(struct drm_device *dev, void *data,
+			  struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_irq_emit(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_irq_wait(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_vblank_pipe_get(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_vblank_swap(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
+
+static int i915_flip_bufs(struct drm_device *dev, void *data,
+			  struct drm_file *file_priv)
+{
+	return -ENODEV;
+}
 
 static int i915_getparam(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
@@ -60,9 +113,10 @@ static int i915_getparam(struct drm_device *dev, void *data,
 
 	switch (param->param) {
 	case I915_PARAM_IRQ_ACTIVE:
+		return -ENODEV;
 	case I915_PARAM_ALLOW_BATCHBUFFER:
+		return -ENODEV;
 	case I915_PARAM_LAST_DISPATCH:
-		/* Reject all old ums/dri params. */
 		return -ENODEV;
 	case I915_PARAM_CHIPSET_ID:
 		value = dev->pdev->device;
@@ -172,7 +226,6 @@ static int i915_setparam(struct drm_device *dev, void *data,
 	case I915_SETPARAM_USE_MI_BATCHBUFFER_START:
 	case I915_SETPARAM_TEX_LRU_LOG_GRANULARITY:
 	case I915_SETPARAM_ALLOW_BATCHBUFFER:
-		/* Reject all old ums/dri params. */
 		return -ENODEV;
 
 	case I915_SETPARAM_NUM_USED_FENCES:
@@ -189,6 +242,12 @@ static int i915_setparam(struct drm_device *dev, void *data,
 	}
 
 	return 0;
+}
+
+static int i915_set_status_page(struct drm_device *dev, void *data,
+				struct drm_file *file_priv)
+{
+	return -ENODEV;
 }
 
 static int i915_get_bridge_dev(struct drm_device *dev)
@@ -1012,8 +1071,21 @@ int i915_driver_open(struct drm_device *dev, struct drm_file *file)
  */
 void i915_driver_lastclose(struct drm_device *dev)
 {
-	intel_fbdev_restore_mode(dev);
-	vga_switcheroo_process_delayed_switch();
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	/* On gen6+ we refuse to init without kms enabled, but then the drm core
+	 * goes right around and calls lastclose. Check for this and don't clean
+	 * up anything. */
+	if (!dev_priv)
+		return;
+
+	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
+		intel_fbdev_restore_mode(dev);
+		vga_switcheroo_process_delayed_switch();
+		return;
+	}
+
+	i915_gem_lastclose(dev);
 }
 
 void i915_driver_preclose(struct drm_device *dev, struct drm_file *file)
