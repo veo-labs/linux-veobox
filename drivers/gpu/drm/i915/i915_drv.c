@@ -691,7 +691,7 @@ static int i915_drm_resume(struct drm_device *dev)
 		mutex_unlock(&dev->struct_mutex);
 
 		/* We need working interrupts for modeset enabling ... */
-		intel_runtime_pm_enable_interrupts(dev_priv);
+		intel_runtime_pm_restore_interrupts(dev);
 
 		intel_modeset_init_hw(dev);
 
