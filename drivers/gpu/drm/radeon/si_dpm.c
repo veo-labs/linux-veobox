@@ -5878,19 +5878,19 @@ static int si_thermal_enable_alert(struct radeon_device *rdev,
 	if (enable) {
 		PPSMC_Result result;
 
-		thermal_int &= ~(THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW);
-		WREG32(CG_THERMAL_INT, thermal_int);
-		rdev->irq.dpm_thermal = false;
+		thermal_int |= THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW;
+		rdev->irq.dpm_thermal = true;
 		result = si_send_msg_to_smc(rdev, PPSMC_MSG_EnableThermalInterrupt);
 		if (result != PPSMC_Result_OK) {
 			DRM_DEBUG_KMS("Could not enable thermal interrupts.\n");
 			return -EINVAL;
 		}
 	} else {
-		thermal_int |= THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW;
-		WREG32(CG_THERMAL_INT, thermal_int);
-		rdev->irq.dpm_thermal = true;
+		thermal_int &= ~(THERM_INT_MASK_HIGH | THERM_INT_MASK_LOW);
+		rdev->irq.dpm_thermal = false;
 	}
+
+	WREG32(CG_THERMAL_INT, thermal_int);
 
 	return 0;
 }
