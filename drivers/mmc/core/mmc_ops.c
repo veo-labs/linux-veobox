@@ -512,6 +512,15 @@ int __mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 	if (!use_busy_signal)
 		return 0;
 
+	/* WORKAROUND: for Sandisk eMMC cards, it might need certain delay
+	 * before sending CMD13 after CMD6
+	 * On SDIN5D1-2G MANFID is 0x45 and not 0x2 as specified in datasheet
+	 */
+	if (card->cid.manfid == CID_MANFID_SANDISK ||
+		card->cid.manfid == 0x45) {
+		msleep(1);
+	}
+
 	/*
 	 * CRC errors shall only be ignored in cases were CMD13 is used to poll
 	 * to detect busy completion.
