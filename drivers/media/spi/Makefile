@@ -1,0 +1,1 @@
+obj-$(CONFIG_VIDEO_LMH0395)	+= lmh0395.o

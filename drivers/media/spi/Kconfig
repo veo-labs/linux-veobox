@@ -1,0 +1,14 @@
+if VIDEO_V4L2
+
+config VIDEO_LMH0395
+	tristate "LMH0395 equalizer"
+	depends on VIDEO_V4L2 && SPI && MEDIA_CONTROLLER && OF
+	---help---
+	  Support for TI LMH0395 3G HD/SD SDI Dual Output Low Power
+	  Extended Reach Adaptive Cable Equalizer.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called lmh0395.
+
+
+endif
