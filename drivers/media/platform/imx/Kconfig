@@ -4,3 +4,6 @@ config MEDIA_IMX
 	---help---
 	  This driver provides a SoC wide media controller device that all
 	  multimedia components in i.MX5 and i.MX6 SoCs can register with.
+
+config VIDEO_IMX_IPU_COMMON
+	tristate
