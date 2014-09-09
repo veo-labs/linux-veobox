@@ -11893,32 +11893,7 @@ intel_commit_primary_plane(struct drm_plane *plane,
 	struct drm_rect *src = &state->src;
 	int ret;
 
-	/*
-	 * If the CRTC isn't enabled, we're just pinning the framebuffer,
-	 * updating the fb pointer, and returning without touching the
-	 * hardware.  This allows us to later do a drmModeSetCrtc with fb=-1 to
-	 * turn on the display with all planes setup as desired.
-	 */
-	if (!crtc->enabled) {
-		mutex_lock(&dev->struct_mutex);
-		ret = intel_pin_and_fence_fb_obj(plane, fb, NULL);
-		if (ret == 0)
-			i915_gem_track_fb(old_obj, obj,
-					  INTEL_FRONTBUFFER_PRIMARY(pipe));
-		mutex_unlock(&dev->struct_mutex);
-		if (ret != 0) {
-			DRM_DEBUG_KMS("pin & fence failed\n");
-			return ret;
-		}
-
-		intel_crtc->atomic.fb_bits |=
-			INTEL_FRONTBUFFER_PRIMARY(intel_crtc->pipe);
-
-		intel_crtc->atomic.update_fbc = true;
-	}
-
-	return 0;
-}
+	intel_crtc_wait_for_pending_flips(crtc);
 
 	/*
 	 * If clipping results in a non-visible primary plane, we'll disable
