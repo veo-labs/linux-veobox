@@ -80,7 +80,13 @@
 
 &ipu1_csi0 {
 	csi0_from_hdmi: endpoint {
-		remote-endpoint = <&hdmi0_out>;
+		remote-endpoint = <&csi0_fpga_out>;
+	};
+};
+
+&ipu2_csi1 {
+	csi1_from_hdmi: endpoint {
+		remote-endpoint = <&csi1_fpga_out>;
 	};
 };
 
@@ -200,8 +206,7 @@
 			port@1 {
 				reg = <1>;
 				hdmi0_out: endpoint@1 {
-					//remote-endpoint = <&hdmi0_fpga_in>;
-					remote-endpoint = <&csi0_from_hdmi>;
+					remote-endpoint = <&hdmi0_fpga_in>;
 					bus-width = <16>;
 				};
 			};
@@ -239,7 +244,6 @@
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
 					remote-endpoint = <&hdmi1_fpga_in>;
-					//remote-endpoint = <&csi1>;
 					bus-width = <16>;
 				};
 			};
@@ -259,10 +263,10 @@
 				};
 			};
 			port@1 {
-				/*reg = <1>;
+				reg = <1>;
 				hdmi0_fpga_in: endpoint {
 					remote-endpoint = <&hdmi0_out>;
-				};*/
+				};
 			};
 			port@2 {
 				reg = <2>;
@@ -277,18 +281,18 @@
 				};
 			};
 			port@4 {
-				/*reg = <4>;
+				reg = <4>;
 				csi0_fpga_out: endpoint {
+					remote-endpoint = <&csi0_from_hdmi>;
 					bus-width = <16>;
-					remote-endpoint = <&csi0_from_fpga>;
-				};*/
+				};
 			};
 			port@5 {
-				/*reg = <5>;
+				reg = <5>;
 				csi1_fpga_out: endpoint {
+					remote-endpoint = <&csi1_from_hdmi>;
 					bus-width = <16>;
-					remote-endpoint = <&csi1>;
-				};*/
+				};
 			};
 		};
 	};
@@ -607,11 +611,6 @@
 	pinctrl-0 = <&pinctrl_fec>;
 	phy-mode = "rmii";
 	phy-reset-gpios = <&gpio1 30 0>;
-	status = "okay";
-};
-
-&hdmi {
-	ddc-i2c-bus = <&i2c2>;
 	status = "okay";
 };
 
