@@ -20,15 +20,11 @@
 #include <linux/of.h>
 #include <linux/types.h>
 #include <linux/slab.h>
-#include <linux/uaccess.h>
 #include <linux/spi/spi.h>
+#include <linux/uaccess.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-of.h>
-
-static int debug;
-module_param(debug, int, 0644);
-MODULE_PARM_DESC(debug, "debug level (0-1)");
 
 #define	LMH0395_SPI_CMD_WRITE	0x00
 #define	LMH0395_SPI_CMD_READ	0x80
@@ -49,6 +45,10 @@ MODULE_PARM_DESC(debug, "debug level (0-1)");
 #define LMH0395_SDI_OUT1	2
 
 #define LMH0395_PADS_NUM	3
+
+#define ID_LMH0384		0x03
+#define ID_LMH0394		0x13
+#define ID_LMH0395		0x23
 
 /* Register LMH0395_MUTE_REF bits [7:6] */
 enum lmh0395_output_type {
@@ -78,14 +78,14 @@ static int lmh0395_spi_write(struct spi_device *spi, u8 reg, u8 data)
 
 	err = spi_write(spi, cmd, 2);
 	if (err < 0) {
-		dev_err(&spi->dev, "SPI failed to select reg\n");
+		dev_err(&spi->dev, "SPI write failed : %d\n", err);
 		return err;
 	}
 
 	return err;
 }
 
-static int lmh0395_spi_read(struct spi_device *spi, u8 reg, u8 *data)
+static int lmh0395_spi_read(struct spi_device *spi, u8 reg, unsigned long *data)
 {
 	int err;
 	u8 cmd[2];
@@ -96,16 +96,16 @@ static int lmh0395_spi_read(struct spi_device *spi, u8 reg, u8 *data)
 
 	err = spi_write(spi, cmd, 2);
 	if (err < 0) {
-		dev_err(&spi->dev, "SPI failed to select reg\n");
+		dev_err(&spi->dev, "SPI failed to select reg : %d\n", err);
 		return err;
 	}
 
 	err = spi_read(spi, read_data, 2);
 	if (err < 0) {
-		dev_err(&spi->dev, "SPI failed to read reg\n");
+		dev_err(&spi->dev, "SPI failed to read reg : %d\n", err);
 		return err;
 	}
-	/* The first 8 bits is the adress used, drop it */
+	/* The first 8 bits is the address used, drop it */
 	*data = read_data[1];
 
 	return err;
@@ -122,38 +122,37 @@ static inline struct lmh0395_state *to_state(struct v4l2_subdev *sd)
 	return container_of(sd, struct lmh0395_state, sd);
 }
 
-static int lmh0395_set_output_type(struct v4l2_subdev *sd, u32 output)
+static int lmh0395_set_output_type(struct v4l2_subdev *sd, unsigned long output)
 {
 	struct lmh0395_state *state = to_state(sd);
 	struct spi_device *spi = v4l2_get_subdevdata(sd);
-	u8 muteref_reg;
+	unsigned long muteref_reg;
 
+	/* Get the current register status */
+	lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
 	switch (output) {
 	case LMH0395_OUTPUT_TYPE_SDO0:
-		lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
-		muteref_reg &= ~(1 << 6);
+		clear_bit(6, &muteref_reg);
 		break;
 	case LMH0395_OUTPUT_TYPE_SDO1:
-		lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
-		muteref_reg &= (1 << 7);
+		clear_bit(7, &muteref_reg);
 		break;
 	case LMH0395_OUTPUT_TYPE_BOTH:
-		lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
-		muteref_reg |= 0x00 << 6;
+		clear_bit(6, &muteref_reg);
+		clear_bit(7, &muteref_reg);
 		break;
 	case LMH0395_OUTPUT_TYPE_NONE:
-		lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
-		muteref_reg |= 0x11 << 6;
+		set_bit(6, &muteref_reg);
+		set_bit(7, &muteref_reg);
 		break;
 	default:
 		return -EINVAL;
 	}
-	v4l2_dbg(1, debug, sd, "Selecting %s output type\n",
+	dev_dbg(&spi->dev, "Selecting %s output type\n",
 					output_strs[output]);
 
 	/* The following settings will have to be dynamic */
-	muteref_reg &= ~(0x1f); /* Muteref enable */
-	muteref_reg |= 1 << 5; /* Digital Muteref */
+	set_bit(5, &muteref_reg); /* Digital Muteref */
 
 	lmh0395_spi_write(spi, LMH0395_MUTE_REF, muteref_reg);
 
@@ -166,14 +165,14 @@ static int lmh0395_get_rate(struct v4l2_subdev *sd, u8 *rate)
 {
 	struct spi_device *spi = v4l2_get_subdevdata(sd);
 	int err;
-	u8 ctrl;
+	unsigned long ctrl;
 
 	err = lmh0395_spi_read(spi, LMH0395_RATE_INDICATOR, &ctrl);
 	if (err < 0)
 		return err;
 
 	*rate = ctrl & 0x20;
-	v4l2_dbg(1, debug, sd, "Rate : %s\n", (ctrl & 0x20)?"3G/HD":"SD");
+	v4l2_info(sd, "Rate : %s\n", (ctrl & 0x20) ? "3G/HD" : "SD");
 	return 0;
 }
 
@@ -181,7 +180,7 @@ static int lmh0395_get_cable_length(struct v4l2_subdev *sd, u8 rate)
 {
 	struct spi_device *spi = v4l2_get_subdevdata(sd);
 	u8 length;
-	u8 cli;
+	unsigned long cli;
 	int err;
 
 	err = lmh0395_spi_read(spi, LMH0395_CABLE_LENGTH_INDICATOR, &cli);
@@ -207,7 +206,7 @@ static int lmh0395_get_cable_length(struct v4l2_subdev *sd, u8 rate)
 			length = ((191*5/4)-20) + ((cli-191)*7/2);
 
 	}
-	v4l2_dbg(1, debug, sd, "Length estimated (BELDEN 1694A cables) : %dm\n",
+	v4l2_info(sd, "Length estimated (BELDEN 1694A cables) : %dm\n",
 			length);
 	return 0;
 }
@@ -216,39 +215,87 @@ static int lmh0395_get_control(struct v4l2_subdev *sd)
 {
 	int err;
 	struct spi_device *spi = v4l2_get_subdevdata(sd);
-	u8 ctrl;
-	u8 rate;
+	unsigned long ctrl;
+	u8 rate = 0;
 
 	err = lmh0395_spi_read(spi, LMH0395_GENERAL_CTRL, &ctrl);
 	if (err < 0)
 		return err;
 
 	if (ctrl & 0x80) {
-		v4l2_dbg(1, debug, sd, "Carrier detected\n");
+		v4l2_info(sd, "Carrier detected\n");
 		lmh0395_get_rate(sd, &rate);
 		lmh0395_get_cable_length(sd, rate);
 	}
 	return 0;
 }
 
+static int lmh0395_get_output_status(struct v4l2_subdev *sd)
+{
+	struct spi_device *spi = v4l2_get_subdevdata(sd);
+	unsigned long muteref_reg;
+
+	/* Get the current register status */
+	lmh0395_spi_read(spi, LMH0395_MUTE_REF, &muteref_reg);
+	v4l2_info(sd, "Output 0 is %s\n",
+			test_bit(6, &muteref_reg) ? "enabled" : "disabled");
+	v4l2_info(sd, "Output 1 is %s\n",
+			test_bit(7, &muteref_reg) ? "enabled" : "disabled");
+	return 0;
+}
+
+static int lmh0395_log_status(struct v4l2_subdev *sd)
+{
+	v4l2_info(sd, "-----Chip status-----\n");
+	lmh0395_get_output_status(sd);
+	lmh0395_get_control(sd);
+
+return 0;
+}
+
 static int lmh0395_s_routing(struct v4l2_subdev *sd, u32 input, u32 output,
 				u32 config)
 {
 	struct lmh0395_state *state = to_state(sd);
-	int err = 0;
 
-	if (state->output_type != output)
-		err = lmh0395_set_output_type(sd, output);
+	if (state->output_type == output)
+		return 0;
 
-	return err;
+	return lmh0395_set_output_type(sd, output);
 }
 
 static const struct v4l2_subdev_video_ops lmh0395_video_ops = {
 	.s_routing = lmh0395_s_routing,
 };
 
+static const struct v4l2_subdev_core_ops lmh0395_core_ops = {
+	.log_status = lmh0395_log_status,
+};
+
 static const struct v4l2_subdev_ops lmh0395_ops = {
+	.core = &lmh0395_core_ops,
 	.video = &lmh0395_video_ops,
+};
+
+struct lmh0395_dev {
+	unsigned long dev_id;
+	char *name;
+};
+
+static const struct lmh0395_dev lmh0395_dev[] = {
+	{
+		.dev_id = ID_LMH0384,
+		.name = "LMH0384",
+	},
+	{
+		.dev_id = ID_LMH0394,
+		.name = "LMH0394",
+	},
+	{
+		.dev_id = ID_LMH0395,
+		.name = "LMH0395",
+	},
+	{ /* sentinel */ },
 };
 
 static const struct spi_device_id lmh0395_id[] = {
@@ -265,16 +312,25 @@ MODULE_DEVICE_TABLE(of, lmh0395_of_match);
 
 static int lmh0395_probe(struct spi_device *spi)
 {
-	u8 device_id;
+	unsigned long device_id;
 	struct lmh0395_state *state;
 	struct v4l2_subdev *sd;
-	int err;
+	int err, i;
 
 	err = lmh0395_spi_read(spi, LMH0395_DEVICE_ID, &device_id);
 	if (err < 0)
 		return err;
 
-	dev_dbg(&spi->dev, "device_id 0x%x\n", device_id);
+	for (i = 0 ; i < ARRAY_SIZE(lmh0395_dev) ; i++) {
+		if (device_id == lmh0395_dev[i].dev_id)
+			break;
+	}
+	if (i == ARRAY_SIZE(lmh0395_dev)) {
+		dev_err(&spi->dev, "Device not supported (id = %08lx)\n",
+					device_id);
+		return -ENODEV;
+	}
+	dev_dbg(&spi->dev, "%s detected\n", lmh0395_dev[i].name);
 
 	/* Now that the device is here, let's init V4L2 */
 	state = devm_kzalloc(&spi->dev, sizeof(*state), GFP_KERNEL);
@@ -288,8 +344,6 @@ static int lmh0395_probe(struct spi_device *spi)
 		spi->chip_select,
 		spi->master->bus_num);
 
-	v4l2_dbg(1, debug, sd, "Configuring equalizer\n");
-	lmh0395_get_control(sd);
 	/* Default is no output */
 	lmh0395_set_output_type(sd, LMH0395_OUTPUT_TYPE_NONE);
 
@@ -299,7 +353,11 @@ static int lmh0395_probe(struct spi_device *spi)
 
 		while ((n = of_graph_get_next_endpoint(spi->dev.of_node, n))
 								!= NULL) {
-			of_graph_parse_endpoint(n, &ep);
+			err = of_graph_parse_endpoint(n, &ep);
+			if (err < 0) {
+				of_node_put(n);
+				return err;
+			}
 			dev_dbg(&spi->dev, "endpoint %d on port %d\n",
 						ep.id, ep.port);
 			/* port 1 => SDO0 */
@@ -338,7 +396,6 @@ static int lmh0395_remove(struct spi_device *spi)
 	media_entity_cleanup(&sd->entity);
 	return 0;
 }
-
 
 static struct spi_driver lmh0395_driver = {
 	.driver = {
