@@ -9809,6 +9809,12 @@ S:	Maintained
 F:	sound/soc/codecs/lm49453*
 F:	sound/soc/codecs/isabelle*
 
+TI LMH0395 DRIVER
+M:	Jean-Michel Hautbois <jean-michel.hautbois@vodalys.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	drivers/media/spi/lmh0395*
+
 TI LP855x BACKLIGHT DRIVER
 M:	Milo Kim <milo.kim@ti.com>
 S:	Maintained
