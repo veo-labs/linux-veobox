@@ -227,14 +227,10 @@ static int spi_nor_ready(struct spi_nor *nor)
 	return sr && fsr;
 }
 
-/*
- * Service routine to read status register until ready, or timeout occurs.
- * Returns non-zero if error.
- */
 static int spi_nor_wait_till_ready(struct spi_nor *nor)
 {
 	unsigned long deadline;
-	int timeout = 0, ret;
+	int ret;
 
 	deadline = jiffies + MAX_READY_WAIT_JIFFIES;
 
@@ -251,7 +247,12 @@ static int spi_nor_wait_till_ready(struct spi_nor *nor)
 		cond_resched();
 	}
 
-	dev_err(nor->dev, "flash operation timed out\n");
+		ret = spi_nor_ready(nor);
+		if (ret < 0)
+			return ret;
+		if (ret)
+			return 0;
+	} while (!time_after_eq(jiffies, deadline));
 
 	return -ETIMEDOUT;
 }
