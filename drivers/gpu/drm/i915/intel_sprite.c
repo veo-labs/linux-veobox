@@ -1276,35 +1276,24 @@ intel_commit_sprite_plane(struct drm_plane *plane,
 	primary_enabled = !drm_rect_equals(dst, clip) || colorkey_enabled(intel_plane);
 	WARN_ON(!primary_enabled && !state->visible && intel_crtc->active);
 
-	return 0;
-}
-
-static int
-intel_prepare_sprite_plane(struct drm_plane *plane,
-			   struct intel_plane_state *state)
-{
-	struct drm_device *dev = plane->dev;
-	struct drm_crtc *crtc = state->crtc;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	enum pipe pipe = intel_crtc->pipe;
-	struct drm_framebuffer *fb = state->fb;
-	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
-	struct drm_i915_gem_object *old_obj = intel_plane->obj;
-	int ret;
 
 		if (intel_crtc->primary_enabled && state->hides_primary)
 			intel_crtc->atomic.pre_disable_primary = true;
 
-		intel_crtc->atomic.fb_bits |=
-			INTEL_FRONTBUFFER_SPRITE(intel_crtc->pipe);
-
-		if (!intel_crtc->primary_enabled && !state->hides_primary)
-			intel_crtc->atomic.post_enable_primary = true;
+		/* Note that this will apply the VT-d workaround for scanouts,
+		 * which is more restrictive than required for sprites. (The
+		 * primary plane requires 256KiB alignment with 64 PTE padding,
+		 * the sprite planes only require 128KiB alignment and 32 PTE
+		 * padding.
+		 */
+		ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
+		if (ret == 0)
+			i915_gem_track_fb(old_obj, obj,
+					  INTEL_FRONTBUFFER_SPRITE(pipe));
+		mutex_unlock(&dev->struct_mutex);
+		if (ret)
+			return ret;
 	}
-
-	return 0;
-}
 
 	intel_plane->crtc_x = state->orig_dst.x1;
 	intel_plane->crtc_y = state->orig_dst.y1;
