@@ -2975,15 +2975,82 @@ static void intel_update_pipe_size(struct intel_crtc *crtc)
 	I915_WRITE(PIPESRC(crtc->pipe),
 		   ((adjusted_mode->crtc_hdisplay - 1) << 16) |
 		   (adjusted_mode->crtc_vdisplay - 1));
-	if (!crtc->config->pch_pfit.enabled &&
-	    (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS) ||
-	     intel_pipe_has_type(crtc, INTEL_OUTPUT_EDP))) {
+	if (!crtc->config.pch_pfit.enabled &&
+	    (intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_LVDS) ||
+	     intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_EDP))) {
 		I915_WRITE(PF_CTL(crtc->pipe), 0);
 		I915_WRITE(PF_WIN_POS(crtc->pipe), 0);
 		I915_WRITE(PF_WIN_SZ(crtc->pipe), 0);
 	}
-	crtc->config->pipe_src_w = adjusted_mode->crtc_hdisplay;
-	crtc->config->pipe_src_h = adjusted_mode->crtc_vdisplay;
+	crtc->config.pipe_src_w = adjusted_mode->crtc_hdisplay;
+	crtc->config.pipe_src_h = adjusted_mode->crtc_vdisplay;
+}
+
+static int
+intel_pipe_set_base(struct drm_crtc *crtc, int x, int y,
+		    struct drm_framebuffer *fb)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	enum pipe pipe = intel_crtc->pipe;
+	struct drm_framebuffer *old_fb = crtc->primary->fb;
+	struct drm_i915_gem_object *old_obj = intel_fb_obj(old_fb);
+	int ret;
+
+	if (intel_crtc_has_pending_flip(crtc)) {
+		DRM_ERROR("pipe is still busy with an old pageflip\n");
+		return -EBUSY;
+	}
+
+	/* no fb bound */
+	if (!fb) {
+		DRM_ERROR("No FB bound\n");
+		return 0;
+	}
+
+	if (intel_crtc->plane > INTEL_INFO(dev)->num_pipes) {
+		DRM_ERROR("no plane for crtc: plane %c, num_pipes %d\n",
+			  plane_name(intel_crtc->plane),
+			  INTEL_INFO(dev)->num_pipes);
+		return -EINVAL;
+	}
+
+	mutex_lock(&dev->struct_mutex);
+	ret = intel_pin_and_fence_fb_obj(crtc->primary, fb, NULL);
+	if (ret == 0)
+		i915_gem_track_fb(old_obj, intel_fb_obj(fb),
+				  INTEL_FRONTBUFFER_PRIMARY(pipe));
+	mutex_unlock(&dev->struct_mutex);
+	if (ret != 0) {
+		DRM_ERROR("pin & fence failed\n");
+		return ret;
+	}
+
+	intel_update_pipe_size(intel_crtc);
+
+	dev_priv->display.update_primary_plane(crtc, fb, x, y);
+
+	if (intel_crtc->active)
+		intel_frontbuffer_flip(dev, INTEL_FRONTBUFFER_PRIMARY(pipe));
+
+	crtc->primary->fb = fb;
+	crtc->x = x;
+	crtc->y = y;
+
+	if (old_fb) {
+		if (intel_crtc->active && old_fb != fb)
+			intel_wait_for_vblank(dev, intel_crtc->pipe);
+		mutex_lock(&dev->struct_mutex);
+		intel_unpin_fb_obj(old_obj);
+		mutex_unlock(&dev->struct_mutex);
+	}
+
+	mutex_lock(&dev->struct_mutex);
+	intel_update_fbc(dev);
+	mutex_unlock(&dev->struct_mutex);
+
+	return 0;
 }
 
 static void intel_fdi_normal_train(struct drm_crtc *crtc)
