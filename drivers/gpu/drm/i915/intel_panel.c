@@ -539,8 +539,7 @@ static u32 intel_panel_get_backlight(struct intel_connector *connector)
 {
 	struct drm_device *dev = connector->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_panel *panel = &connector->panel;
-	u32 val = 0;
+	u32 val;
 
 	mutex_lock(&dev_priv->backlight_lock);
 
@@ -745,6 +744,7 @@ void intel_panel_disable_backlight(struct intel_connector *connector)
 	struct drm_device *dev = connector->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_panel *panel = &connector->panel;
+	enum pipe pipe = intel_get_pipe_from_connector(connector);
 
 	if (!panel->backlight.present)
 		return;
@@ -1317,7 +1317,7 @@ int intel_panel_setup_backlight(struct drm_connector *connector, enum pipe pipe)
 
 	/* set level and max in panel struct */
 	mutex_lock(&dev_priv->backlight_lock);
-	ret = dev_priv->display.setup_backlight(intel_connector, pipe);
+	ret = dev_priv->display.setup_backlight(intel_connector);
 	mutex_unlock(&dev_priv->backlight_lock);
 
 	if (ret) {
