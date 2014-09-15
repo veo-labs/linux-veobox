@@ -59,11 +59,6 @@
 #define FDO_MODE_HARDWARE 0
 #define FDO_MODE_PIECE_WISE_LINEAR 1
 
-enum FAN_CONTROL {
-	FAN_CONTROL_FUZZY,
-	FAN_CONTROL_TABLE
-};
-
 #define PPSMC_Result_OK             ((uint8_t)0x01)
 #define PPSMC_Result_Failed         ((uint8_t)0xFF)
 
