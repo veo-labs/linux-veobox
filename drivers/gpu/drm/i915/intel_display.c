@@ -9654,7 +9654,6 @@ static int intel_gen9_queue_flip(struct drm_device *dev,
 				 uint32_t flags)
 {
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	uint32_t plane = 0, stride;
 	int ret;
 
 	switch(intel_crtc->pipe) {
@@ -9684,27 +9683,10 @@ static int intel_gen9_queue_flip(struct drm_device *dev,
 		return -ENODEV;
 	}
 
-	ret = intel_ring_begin(ring, 10);
-	if (ret)
-		return ret;
-
-	intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(1));
-	intel_ring_emit(ring, DERRMR);
-	intel_ring_emit(ring, ~(DERRMR_PIPEA_PRI_FLIP_DONE |
-				DERRMR_PIPEB_PRI_FLIP_DONE |
-				DERRMR_PIPEC_PRI_FLIP_DONE));
-	intel_ring_emit(ring, MI_STORE_REGISTER_MEM_GEN8(1) |
-			      MI_SRM_LRM_GLOBAL_GTT);
-	intel_ring_emit(ring, DERRMR);
-	intel_ring_emit(ring, ring->scratch.gtt_offset + 256);
-	intel_ring_emit(ring, 0);
-
-	intel_ring_emit(ring, MI_DISPLAY_FLIP_I915 | plane);
-	intel_ring_emit(ring, stride << 6 | obj->tiling_mode);
-	intel_ring_emit(ring, intel_crtc->unpin_work->gtt_offset);
-
-	intel_mark_page_flip_active(intel_crtc);
-	__intel_ring_advance(ring);
+	spin_lock_irq(&dev_priv->mmio_flip_lock);
+	intel_crtc->mmio_flip.seqno = obj->last_write_seqno;
+	intel_crtc->mmio_flip.ring_id = obj->ring->id;
+	spin_unlock_irq(&dev_priv->mmio_flip_lock);
 
 	return 0;
 }
