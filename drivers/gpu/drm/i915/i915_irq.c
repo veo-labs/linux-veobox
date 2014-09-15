@@ -3484,6 +3484,8 @@ void valleyview_disable_display_irqs(struct drm_i915_private *dev_priv)
 
 static void vlv_display_irq_postinstall(struct drm_i915_private *dev_priv)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
 	dev_priv->irq_mask = ~0;
 
 	I915_WRITE(PORT_HOTPLUG_EN, 0);
@@ -3501,7 +3503,6 @@ static void vlv_display_irq_postinstall(struct drm_i915_private *dev_priv)
 	if (dev_priv->display_irqs_enabled)
 		valleyview_display_irqs_install(dev_priv);
 	spin_unlock_irq(&dev_priv->irq_lock);
-}
 
 static int valleyview_irq_postinstall(struct drm_device *dev)
 {
@@ -3604,8 +3605,32 @@ static int gen8_irq_postinstall(struct drm_device *dev)
 static int cherryview_irq_postinstall(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	u32 enable_mask = I915_DISPLAY_PORT_INTERRUPT |
+		I915_DISPLAY_PIPE_A_EVENT_INTERRUPT |
+		I915_DISPLAY_PIPE_B_EVENT_INTERRUPT |
+		I915_DISPLAY_PIPE_C_EVENT_INTERRUPT;
+	u32 pipestat_enable = PLANE_FLIP_DONE_INT_STATUS_VLV |
+		PIPE_CRC_DONE_INTERRUPT_STATUS;
+	int pipe;
 
-	vlv_display_irq_postinstall(dev_priv);
+	/*
+	 * Leave vblank interrupts masked initially.  enable/disable will
+	 * toggle them based on usage.
+	 */
+	dev_priv->irq_mask = ~enable_mask;
+
+	for_each_pipe(dev_priv, pipe)
+		I915_WRITE(PIPESTAT(pipe), 0xffff);
+
+	spin_lock_irq(&dev_priv->irq_lock);
+	i915_enable_pipestat(dev_priv, PIPE_A, PIPE_GMBUS_INTERRUPT_STATUS);
+	for_each_pipe(dev_priv, pipe)
+		i915_enable_pipestat(dev_priv, pipe, pipestat_enable);
+	spin_unlock_irq(&dev_priv->irq_lock);
+
+	I915_WRITE(VLV_IIR, 0xffffffff);
+	I915_WRITE(VLV_IMR, dev_priv->irq_mask);
+	I915_WRITE(VLV_IER, enable_mask);
 
 	gen8_gt_irq_postinstall(dev_priv);
 
@@ -3642,6 +3667,7 @@ static void vlv_display_irq_uninstall(struct drm_i915_private *dev_priv)
 static void valleyview_irq_uninstall(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	int pipe;
 
 	if (!dev_priv)
 		return;
@@ -3651,6 +3677,17 @@ static void valleyview_irq_uninstall(struct drm_device *dev)
 	gen5_gt_irq_reset(dev);
 
 	I915_WRITE(HWSTAM, 0xffffffff);
+	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
+
+	/* Interrupt setup is already guaranteed to be single-threaded, this is
+	 * just to make the assert_spin_locked check happy. */
+	spin_lock_irq(&dev_priv->irq_lock);
+	if (dev_priv->display_irqs_enabled)
+		valleyview_display_irqs_uninstall(dev_priv);
+	spin_unlock_irq(&dev_priv->irq_lock);
+
+	dev_priv->irq_mask = 0;
 
 	vlv_display_irq_uninstall(dev_priv);
 }
