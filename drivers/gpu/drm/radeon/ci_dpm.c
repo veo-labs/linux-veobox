@@ -5201,6 +5201,12 @@ int ci_dpm_enable(struct radeon_device *rdev)
 
 	ci_enable_auto_throttle_source(rdev, RADEON_DPM_AUTO_THROTTLE_SRC_THERMAL, true);
 
+	ret = ci_enable_thermal_based_sclk_dpm(rdev, true);
+	if (ret) {
+		DRM_ERROR("ci_enable_thermal_based_sclk_dpm failed\n");
+		return ret;
+	}
+
 	ci_thermal_start_thermal_controller(rdev);
 
 	ci_update_current_ps(rdev, boot_ps);
