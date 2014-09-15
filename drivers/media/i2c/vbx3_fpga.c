@@ -62,6 +62,7 @@ enum vbx3_fpga_output_pads {
 struct vbx3_fpga_state {
 	struct v4l2_subdev sd;
 	struct media_pad pads[VBX3_FPGA_PADS_NUM];
+	struct i2c_client *i2c_client;
 };
 
 static inline struct vbx3_fpga_state *to_state(struct v4l2_subdev *sd)
@@ -76,14 +77,70 @@ static int vbx3_fpga_s_routing (struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
+{
+	struct vbx3_fpga_state *state = to_state(sd);
+	struct i2c_client *client = state->i2c_client;
+	u8 value;
+
+	static const char * const sdi_format[] = {
+		"SD",
+		"HD-SDI",
+		"3G-SDI",
+	};
+	static const char * const sdi_video[] = {
+		"720x576",
+		"1280x720",
+		"1920x1035",
+		"1920x1080",
+	};
+	static const char * const sdi_fps[] = {
+		"undefined",
+		"24p",
+		"25p",
+		"30p",
+		"50i",
+		"60i",
+		"50p",
+		"60p",
+	};
+
+	v4l2_info(sd, "-----Chip status-----\n");
+
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_VERSION);
+	v4l2_info(sd, "FPGA version: 0x%2x\n", value);
+
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_GLOBAL_STATUS);
+	v4l2_info(sd, "HDMI 0 connected : %s\n", (value & 0x80) ? "Yes" : "No");
+	v4l2_info(sd, "HDMI 1 connected : %s\n", (value & 0x40) ? "Yes" : "No");
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_STATUS_SDI0);
+	v4l2_info(sd, "SDI 0 locked : %s\n", (value & 0x80) ? "Yes" : "No");
+	if (value & 0x80)
+		v4l2_info(sd, "SDI 0 format %s: %s@%s\n", sdi_format[(value & 0x60) >> 5],
+						sdi_video[(value & 0x18) >> 3],
+						sdi_fps[value & 0x07]);
+
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_STATUS_SDI1);
+	v4l2_info(sd, "SDI 1 locked : %s\n", (value & 0x80) ? "Yes" : "No");
+	if (value & 0x80)
+		v4l2_info(sd, "SDI 1 format %s: %s@%s\n", sdi_format[(value & 0x60) >> 5],
+						sdi_video[(value & 0x18) >> 3],
+						sdi_fps[value & 0x07]);
+	return 0;
+};
+
 static const struct v4l2_subdev_video_ops vbx3_fpga_video_ops = {
 	.s_routing = vbx3_fpga_s_routing,
 };
 
-static const struct v4l2_subdev_ops vbx3_fpga_ops = {
-	.video = &vbx3_fpga_video_ops,
+static const struct v4l2_subdev_core_ops vbx3_fpga_core_ops = {
+	.log_status = vbx3_fpga_log_status,
 };
 
+static const struct v4l2_subdev_ops vbx3_fpga_ops = {
+	.core = &vbx3_fpga_core_ops,
+	.video = &vbx3_fpga_video_ops,
+};
 
 /* i2c implementation */
 
@@ -92,7 +149,7 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 {
 	struct v4l2_subdev *sd;
 	struct vbx3_fpga_state *state;
-	int version;
+	int version, status;
 	int ret = 0;
 	int pad;
 
@@ -110,10 +167,15 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	} else {
 		v4l_info(client, "version read : 0x%x\n", version);
 	}
+	//i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0, 0x00);
+	//i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN1, 0x00);
+	status = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_GLOBAL_STATUS);
+	v4l_info(client, "Status : 0x%x\n", status);
 
 	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
 	if (state == NULL)
 		return -ENOMEM;
+	state->i2c_client = client;
 
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &vbx3_fpga_ops);
