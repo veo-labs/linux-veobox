@@ -283,8 +283,23 @@ void gen6_reset_rps_interrupts(struct drm_device *dev)
 void gen6_enable_rps_interrupts(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *crtc;
 
 	spin_lock_irq(&dev_priv->irq_lock);
+
+	for_each_intel_crtc(dev, crtc) {
+		u32 reg = PIPESTAT(crtc->pipe);
+		u32 pipestat;
+
+		if (crtc->cpu_fifo_underrun_disabled)
+			continue;
+
+		pipestat = I915_READ(reg) & 0xffff0000;
+		if ((pipestat & PIPE_FIFO_UNDERRUN_STATUS) == 0)
+			continue;
+
+		I915_WRITE(reg, pipestat | PIPE_FIFO_UNDERRUN_STATUS);
+		POSTING_READ(reg);
 
 	WARN_ON(dev_priv->rps.pm_iir);
 	WARN_ON(I915_READ(gen6_pm_iir(dev_priv)) & dev_priv->pm_rps_events);
@@ -3226,8 +3241,6 @@ static void gen8_irq_reset(struct drm_device *dev)
 
 void gen8_irq_power_well_post_enable(struct drm_i915_private *dev_priv)
 {
-	uint32_t extra_ier = GEN8_PIPE_VBLANK | GEN8_PIPE_FIFO_UNDERRUN;
-
 	spin_lock_irq(&dev_priv->irq_lock);
 	GEN8_IRQ_INIT_NDX(DE_PIPE, PIPE_B, dev_priv->de_irq_mask[PIPE_B],
 			  ~dev_priv->de_irq_mask[PIPE_B] | extra_ier);
