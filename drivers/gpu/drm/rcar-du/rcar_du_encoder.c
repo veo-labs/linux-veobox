@@ -147,8 +147,7 @@ static const struct drm_encoder_funcs encoder_funcs = {
 int rcar_du_encoder_init(struct rcar_du_device *rcdu,
 			 enum rcar_du_encoder_type type,
 			 enum rcar_du_output output,
-			 struct device_node *enc_node,
-			 struct device_node *con_node)
+			 struct device_node *np)
 {
 	struct rcar_du_encoder *renc;
 	struct drm_encoder *encoder;
@@ -202,8 +201,9 @@ int rcar_du_encoder_init(struct rcar_du_device *rcdu,
 		if (ret < 0)
 			goto done;
 
-		drm_encoder_helper_add(encoder, &encoder_helper_funcs);
-	}
+	switch (encoder_type) {
+	case DRM_MODE_ENCODER_LVDS:
+		return rcar_du_lvds_connector_init(rcdu, renc, np);
 
 	switch (encoder_type) {
 	case DRM_MODE_ENCODER_LVDS:
