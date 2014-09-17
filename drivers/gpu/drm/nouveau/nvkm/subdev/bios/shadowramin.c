@@ -45,10 +45,8 @@ static void
 pramin_fini(void *data)
 {
 	struct priv *priv = data;
-	if (priv) {
-		nv_wr32(priv->bios, 0x001700, priv->bar0);
-		kfree(priv);
-	}
+	nv_wr32(priv->bios, 0x001700, priv->bar0);
+	kfree(priv);
 }
 
 static void *
