@@ -207,7 +207,8 @@ static irqreturn_t ni6527_interrupt(int irq, void *d)
 		return IRQ_NONE;
 
 	if (status & NI6527_STATUS_EDGE) {
-		comedi_buf_write_samples(s, &s->state, 1);
+		comedi_buf_put(s, 0);
+		s->async->events |= COMEDI_CB_EOS;
 		comedi_handle_events(dev, s);
 	}
 
