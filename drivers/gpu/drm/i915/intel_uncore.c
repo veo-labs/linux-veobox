@@ -237,7 +237,75 @@ static int __gen6_gt_wait_for_fifo(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
-static void intel_uncore_fw_release_timer(unsigned long arg)
+static void vlv_force_wake_reset(struct drm_i915_private *dev_priv)
+{
+	__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
+			   _MASKED_BIT_DISABLE(0xffff));
+	__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
+			   _MASKED_BIT_DISABLE(0xffff));
+	/* something from same cacheline, but !FORCEWAKE_VLV */
+	__raw_posting_read(dev_priv, FORCEWAKE_ACK_VLV);
+}
+
+static void __vlv_force_wake_get(struct drm_i915_private *dev_priv,
+						int fw_engine)
+{
+	/*
+	 * WaRsDontPollForAckOnClearingFWBits:vlv
+	 * Hardware clears ack bits lazily (only when all ack
+	 * bits become 0) so don't poll for individiual ack
+	 * bits to be clear here like on other platforms.
+	 */
+
+	/* Check for Render Engine */
+	if (FORCEWAKE_RENDER & fw_engine) {
+
+		__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
+				   _MASKED_BIT_ENABLE(FORCEWAKE_KERNEL));
+
+		if (wait_for_atomic((__raw_i915_read32(dev_priv,
+						FORCEWAKE_ACK_VLV) &
+						FORCEWAKE_KERNEL),
+					FORCEWAKE_ACK_TIMEOUT_MS))
+			DRM_ERROR("Timed out: waiting for Render to ack.\n");
+	}
+
+	/* Check for Media Engine */
+	if (FORCEWAKE_MEDIA & fw_engine) {
+
+		__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
+				   _MASKED_BIT_ENABLE(FORCEWAKE_KERNEL));
+
+		if (wait_for_atomic((__raw_i915_read32(dev_priv,
+						FORCEWAKE_ACK_MEDIA_VLV) &
+						FORCEWAKE_KERNEL),
+					FORCEWAKE_ACK_TIMEOUT_MS))
+			DRM_ERROR("Timed out: waiting for media to ack.\n");
+	}
+}
+
+static void __vlv_force_wake_put(struct drm_i915_private *dev_priv,
+					int fw_engine)
+{
+
+	/* Check for Render Engine */
+	if (FORCEWAKE_RENDER & fw_engine)
+		__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
+					_MASKED_BIT_DISABLE(FORCEWAKE_KERNEL));
+
+
+	/* Check for Media Engine */
+	if (FORCEWAKE_MEDIA & fw_engine)
+		__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
+				_MASKED_BIT_DISABLE(FORCEWAKE_KERNEL));
+
+	/* something from same cacheline, but !FORCEWAKE_VLV */
+	__raw_posting_read(dev_priv, FORCEWAKE_ACK_VLV);
+	if (!IS_CHERRYVIEW(dev_priv->dev))
+		gen6_gt_check_fifodbg(dev_priv);
+}
+
+static void vlv_force_wake_get(struct drm_i915_private *dev_priv, int fw_engine)
 {
 	struct intel_uncore_forcewake_domain *domain = (void *)arg;
 	unsigned long irqflags;
