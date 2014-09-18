@@ -1119,10 +1119,17 @@ static bool pci230_handle_ao_fifo(struct comedi_device *dev,
 
 	/* Get DAC FIFO status. */
 	dacstat = inw(devpriv->daqio + PCI230_DACCON);
-
-	if (cmd->stop_src == TRIG_COUNT && num_scans == 0)
-		events |= COMEDI_CB_EOA;
-
+	/* Determine number of scans available in buffer. */
+	num_scans = comedi_buf_read_n_available(s) / comedi_bytes_per_scan(s);
+	if (cmd->stop_src == TRIG_COUNT) {
+		/* Fixed number of scans. */
+		if (num_scans > devpriv->ao_scan_count)
+			num_scans = devpriv->ao_scan_count;
+		if (devpriv->ao_scan_count == 0) {
+			/* End of acquisition. */
+			events |= COMEDI_CB_EOA;
+		}
+	}
 	if (events == 0) {
 		/* Check for FIFO underrun. */
 		if (dacstat & PCI230P2_DAC_FIFO_UNDERRUN_LATCHED) {
