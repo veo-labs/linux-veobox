@@ -209,11 +209,19 @@ static irqreturn_t apci2032_interrupt(int irq, void *d)
 				bits |= (1 << i);
 		}
 
-		comedi_buf_write_samples(s, &bits, 1);
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    s->async->scans_done >= cmd->stop_arg)
-			s->async->events |= COMEDI_CB_EOA;
+		if (comedi_buf_put(s, bits)) {
+			s->async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
+			if (cmd->stop_src == TRIG_COUNT &&
+			    subpriv->stop_count > 0) {
+				subpriv->stop_count--;
+				if (subpriv->stop_count == 0) {
+					/* end of acquisition */
+					s->async->events |= COMEDI_CB_EOA;
+				}
+			}
+		} else {
+			s->async->events |= COMEDI_CB_OVERFLOW;
+		}
 	}
 
 	spin_unlock(&subpriv->spinlock);
