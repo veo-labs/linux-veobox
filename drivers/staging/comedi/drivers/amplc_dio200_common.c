@@ -265,12 +265,23 @@ static void dio200_read_scan_intr(struct comedi_device *dev,
 		if (triggered & (1U << ch))
 			val |= (1U << n);
 	}
+	/* Write the scan to the buffer. */
+	if (comedi_buf_put(s, val)) {
+		s->async->events |= (COMEDI_CB_BLOCK | COMEDI_CB_EOS);
+	} else {
+		/* Error!  Stop acquisition.  */
+		s->async->events |= COMEDI_CB_ERROR | COMEDI_CB_OVERFLOW;
+		dev_err(dev->class_dev, "buffer overflow\n");
+	}
 
-	comedi_buf_write_samples(s, &val, 1);
-
-	if (cmd->stop_src == TRIG_COUNT &&
-	    s->async->scans_done >= cmd->stop_arg)
-		s->async->events |= COMEDI_CB_EOA;
+	/* Check for end of acquisition. */
+	if (cmd->stop_src == TRIG_COUNT) {
+		if (subpriv->stopcount > 0) {
+			subpriv->stopcount--;
+			if (subpriv->stopcount == 0)
+				s->async->events |= COMEDI_CB_EOA;
+		}
+	}
 }
 
 static int dio200_handle_read_intr(struct comedi_device *dev,
