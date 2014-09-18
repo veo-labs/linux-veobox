@@ -3842,9 +3842,9 @@ static const struct opcode group4[] = {
 static const struct opcode group5[] = {
 	F(DstMem | SrcNone | Lock,		em_inc),
 	F(DstMem | SrcNone | Lock,		em_dec),
-	I(SrcMem | NearBranch,			em_call_near_abs),
+	I(SrcMem | Stack,			em_call_near_abs),
 	I(SrcMemFAddr | ImplicitOps | Stack,	em_call_far),
-	I(SrcMem | NearBranch,			em_jmp_abs),
+	I(SrcMem | Stack,			em_jmp_abs),
 	I(SrcMemFAddr | ImplicitOps,		em_jmp_far),
 	I(SrcMem | Stack,			em_push), D(Undefined),
 };
