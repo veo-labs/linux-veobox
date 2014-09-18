@@ -166,9 +166,10 @@ static irqreturn_t apci1564_interrupt(int irq, void *d)
 		outl(status & APCI1564_DI_INT_DISABLE,
 		     dev->iobase + APCI1564_DI_IRQ_REG);
 
-		s->state = inl(dev->iobase + APCI1564_DI_INT_STATUS_REG) &
-			   0xffff;
-		comedi_buf_write_samples(s, &s->state, 1);
+		s->state = inl(dev->iobase + APCI1564_DI_INT_STATUS_REG)
+			       & 0xffff;
+		comedi_buf_put(s, s->state);
+		s->async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
 		comedi_handle_events(dev, s);
 
 		/* enable the interrupt */
