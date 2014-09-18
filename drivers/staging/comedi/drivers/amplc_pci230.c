@@ -1082,16 +1082,23 @@ static void pci230_handle_ao_nofifo(struct comedi_device *dev,
 	for (i = 0; i < cmd->chanlist_len; i++) {
 		unsigned int chan = CR_CHAN(cmd->chanlist[i]);
 
-		if (!comedi_buf_read_samples(s, &data, 1)) {
-			async->events |= COMEDI_CB_OVERFLOW;
+		/* Read sample from Comedi's circular buffer. */
+		ret = comedi_buf_get(s, &data);
+		if (ret == 0) {
+			s->async->events |= COMEDI_CB_OVERFLOW;
 			return;
 		}
 		pci230_ao_write_nofifo(dev, data, chan);
 		s->readback[chan] = data;
 	}
-
-	if (cmd->stop_src == TRIG_COUNT && async->scans_done >= cmd->stop_arg)
-		async->events |= COMEDI_CB_EOA;
+	async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
+	if (cmd->stop_src == TRIG_COUNT) {
+		devpriv->ao_scan_count--;
+		if (devpriv->ao_scan_count == 0) {
+			/* End of acquisition. */
+			async->events |= COMEDI_CB_EOA;
+		}
+	}
 }
 
 /*
@@ -1178,6 +1185,10 @@ static bool pci230_handle_ao_fifo(struct comedi_device *dev,
 			events |= COMEDI_CB_OVERFLOW | COMEDI_CB_ERROR;
 		}
 	}
+	if (events & (COMEDI_CB_EOA | COMEDI_CB_ERROR | COMEDI_CB_OVERFLOW))
+		running = false;
+	else
+		running = true;
 	async->events |= events;
 	return !(async->events & COMEDI_CB_CANCEL_MASK);
 }
@@ -2074,9 +2085,17 @@ static void pci230_handle_ai(struct comedi_device *dev,
 			break;
 		}
 	}
-
-	/* update FIFO interrupt trigger level if still running */
-	if (!(async->events & COMEDI_CB_CANCEL_MASK))
+	if (cmd->stop_src == TRIG_COUNT && devpriv->ai_scan_count == 0) {
+		/* End of acquisition. */
+		events |= COMEDI_CB_EOA;
+	} else {
+		/* More samples required, tell Comedi to block. */
+		events |= COMEDI_CB_BLOCK;
+	}
+	async->events |= events;
+	if (!(async->events & (COMEDI_CB_EOA | COMEDI_CB_ERROR |
+			       COMEDI_CB_OVERFLOW))) {
+		/* update FIFO interrupt trigger level */
 		pci230_ai_update_fifo_trigger_level(dev, s);
 }
 
