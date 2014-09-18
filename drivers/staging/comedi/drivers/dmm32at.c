@@ -435,6 +435,7 @@ static irqreturn_t dmm32at_isr(int irq, void *d)
 		    s->async->scans_done >= cmd->stop_arg)
 			s->async->events |= COMEDI_CB_EOA;
 
+		}
 		comedi_handle_events(dev, s);
 	}
 
