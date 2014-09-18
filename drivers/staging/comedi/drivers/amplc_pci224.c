@@ -513,7 +513,8 @@ static void pci224_ao_handle_fifo(struct comedi_device *dev,
 {
 	struct pci224_private *devpriv = dev->private;
 	struct comedi_cmd *cmd = &s->async->cmd;
-	unsigned int num_scans = comedi_nscans_left(s, 0);
+	unsigned int bytes_per_scan = comedi_bytes_per_scan(s);
+	unsigned int num_scans;
 	unsigned int room;
 	unsigned short dacstat;
 	unsigned int i, n;
