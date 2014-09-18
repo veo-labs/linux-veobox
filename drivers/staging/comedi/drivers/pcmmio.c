@@ -355,11 +355,17 @@ static void pcmmio_handle_dio_intr(struct comedi_device *dev,
 			val |= (1 << i);
 	}
 
-	comedi_buf_write_samples(s, &val, 1);
+	/* Write the scan to the buffer. */
+	if (comedi_buf_put(s, val) &&
+	    comedi_buf_put(s, val >> 16))
+		s->async->events |= (COMEDI_CB_BLOCK | COMEDI_CB_EOS);
 
-	if (cmd->stop_src == TRIG_COUNT &&
-	    s->async->scans_done >= cmd->stop_arg)
-		s->async->events |= COMEDI_CB_EOA;
+	/* Check for end of acquisition. */
+	if (cmd->stop_src == TRIG_COUNT && devpriv->stop_count > 0) {
+		devpriv->stop_count--;
+		if (devpriv->stop_count == 0)
+			s->async->events |= COMEDI_CB_EOA;
+	}
 
 done:
 	spin_unlock_irqrestore(&devpriv->spinlock, flags);
