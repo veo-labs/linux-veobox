@@ -201,7 +201,7 @@ static void waveform_ai_interrupt(unsigned long arg)
 					       devpriv->usec_current +
 						   i * devpriv->scan_period +
 						   j * devpriv->convert_period);
-			comedi_buf_write_samples(s, &sample, 1);
+			cfc_write_to_buffer(s, sample);
 		}
 	}
 
