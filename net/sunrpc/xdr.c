@@ -630,8 +630,6 @@ void xdr_truncate_encode(struct xdr_stream *xdr, size_t len)
 
 	new = buf->page_base + buf->page_len;
 
-	xdr->page_ptr = buf->pages + (new >> PAGE_SHIFT);
-
 	if (buf->page_len) {
 		xdr->p = page_address(*xdr->page_ptr);
 		xdr->end = (void *)xdr->p + PAGE_SIZE;
