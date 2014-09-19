@@ -743,14 +743,6 @@ struct i915_fbc {
 	 * possible. */
 	bool enabled;
 
-	/* On gen8 some rings cannont perform fbc clean operation so for now
-	 * we are doing this on SW with mmio.
-	 * This variable works in the opposite information direction
-	 * of ring->fbc_dirty telling software on frontbuffer tracking
-	 * to perform the cache clean on sw side.
-	 */
-	bool need_sw_cache_clean;
-
 	struct intel_fbc_work {
 		struct delayed_work work;
 		struct drm_crtc *crtc;

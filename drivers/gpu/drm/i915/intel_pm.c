@@ -363,16 +363,7 @@ bool intel_fbc_enabled(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	/* If it wasn't never enabled by kernel parameter or platform default
-	 * we can avoid reading registers so many times in vain
-	 */
-	if (!i915.enable_fbc)
-		return false;
-
-	if (!dev_priv->display.fbc_enabled)
-		return false;
-
-	return dev_priv->display.fbc_enabled(dev);
+	return dev_priv->fbc.enabled;
 }
 
 void bdw_fbc_sw_flush(struct drm_device *dev, u32 value)
@@ -7055,8 +7046,10 @@ static void intel_init_fbc(struct drm_i915_private *dev_priv)
 
 static void intel_init_fbc(struct drm_i915_private *dev_priv)
 {
-	if (!HAS_FBC(dev_priv))
+	if (!HAS_FBC(dev_priv)) {
+		dev_priv->fbc.enabled = false;
 		return;
+	}
 
 	if (INTEL_INFO(dev_priv)->gen >= 7) {
 		dev_priv->display.fbc_enabled = ironlake_fbc_enabled;
@@ -7078,6 +7071,8 @@ static void intel_init_fbc(struct drm_i915_private *dev_priv)
 		/* This value was pulled out of someone's hat */
 		I915_WRITE(FBC_CONTROL, 500 << FBC_CTL_INTERVAL_SHIFT);
 	}
+
+	dev_priv->fbc.enabled = dev_priv->display.fbc_enabled(dev_priv->dev);
 }
 
 /* Set up chip specific power management-related functions */
