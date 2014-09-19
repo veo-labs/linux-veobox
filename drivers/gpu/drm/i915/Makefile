@@ -48,8 +48,6 @@ i915-y += intel_renderstate_gen6.o \
 i915-y += intel_audio.o \
 	  intel_bios.o \
 	  intel_display.o \
-	  intel_fbc.o \
-	  intel_fifo_underrun.o \
 	  intel_frontbuffer.o \
 	  intel_modes.o \
 	  intel_overlay.o \

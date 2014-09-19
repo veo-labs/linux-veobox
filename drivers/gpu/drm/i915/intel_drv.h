@@ -882,13 +882,6 @@ int intel_fb_align_height(struct drm_device *dev, int height,
 void intel_fb_obj_flush(struct drm_i915_gem_object *obj, bool retire);
 
 
-/* intel_audio.c */
-void intel_init_audio(struct drm_device *dev);
-void intel_audio_codec_enable(struct intel_encoder *encoder);
-void intel_audio_codec_disable(struct intel_encoder *encoder);
-void i915_audio_component_init(struct drm_i915_private *dev_priv);
-void i915_audio_component_cleanup(struct drm_i915_private *dev_priv);
-
 /* intel_display.c */
 extern const struct drm_plane_funcs intel_plane_funcs;
 bool intel_has_pending_fb_unpin(struct drm_device *dev);
