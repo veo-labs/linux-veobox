@@ -791,10 +791,11 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 	/* WaForceEnableNonCoherent:bdw */
 	/* WaHdcDisableFetchWhenMasked:bdw */
 	/* WaDisableFenceDestinationToSLM:bdw (GT3 pre-production) */
-	WA_SET_BIT_MASKED(HDC_CHICKEN0,
-			  HDC_FORCE_NON_COHERENT |
-			  HDC_DONOT_FETCH_MEM_WHEN_MASKED |
-			  (IS_BDW_GT3(dev) ? HDC_FENCE_DEST_SLM_DISABLE : 0));
+	intel_ring_emit_wa(ring, HDC_CHICKEN0,
+			   _MASKED_BIT_ENABLE(HDC_FORCE_NON_COHERENT |
+					      (IS_BDW_GT3(dev) ?
+					       HDC_FENCE_DEST_SLM_DISABLE : 0)
+				   ));
 
 	/* From the Haswell PRM, Command Reference: Registers, CACHE_MODE_0:
 	 * "The Hierarchical Z RAW Stall Optimization allows non-overlapping
