@@ -32,8 +32,6 @@ nvbios_pcirTe(struct nvkm_bios *bios, u32 base, u8 *ver, u16 *hdr)
 		data += base;
 		switch (nv_ro32(bios, data + 0x00)) {
 		case 0x52494350: /* PCIR */
-		case 0x53494752: /* RGIS */
-		case 0x5344504e: /* NPDS */
 			*hdr = nv_ro16(bios, data + 0x0a);
 			*ver = nv_ro08(bios, data + 0x0c);
 			break;
