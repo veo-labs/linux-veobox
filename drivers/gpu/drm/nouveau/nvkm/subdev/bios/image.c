@@ -46,7 +46,7 @@ nvbios_imagen(struct nvkm_bios *bios, struct nvbios_image *image)
 		return false;
 	image->size = pcir.image_size;
 	image->type = pcir.image_type;
-	image->last = true;
+	image->last = pcir.last;
 	return true;
 }
 
@@ -54,7 +54,10 @@ bool
 nvbios_image(struct nvkm_bios *bios, int idx, struct nvbios_image *image)
 {
 	memset(image, 0x00, sizeof(*image));
-	if (idx)
-		return false;
-	return nvbios_imagen(bios, image);
+	do {
+		image->base += image->size;
+		if (image->last || !nvbios_imagen(bios, image))
+			return false;
+	} while(idx--);
+	return true;
 }
