@@ -24,11 +24,13 @@
 #include <subdev/bios.h>
 #include <subdev/bios/image.h>
 #include <subdev/bios/pcir.h>
+#include <subdev/bios/npde.h>
 
 static bool
 nvbios_imagen(struct nvkm_bios *bios, struct nvbios_image *image)
 {
 	struct nvbios_pcirT pcir;
+	struct nvbios_npdeT npde;
 	u8  ver;
 	u16 hdr;
 	u32 data;
@@ -47,6 +49,11 @@ nvbios_imagen(struct nvkm_bios *bios, struct nvbios_image *image)
 	image->size = pcir.image_size;
 	image->type = pcir.image_type;
 	image->last = pcir.last;
+
+	if (!(data = nvbios_npdeTp(bios, image->base, &npde)))
+		return true;
+	image->size = npde.image_size;
+	image->last = npde.last;
 	return true;
 }
 
