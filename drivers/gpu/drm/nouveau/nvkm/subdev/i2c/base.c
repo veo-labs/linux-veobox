@@ -540,8 +540,12 @@ nvkm_i2c_create_(struct nvkm_object *parent, struct nvkm_object *engine,
 		case DCB_I2C_NV04_BIT:
 		case DCB_I2C_NV4E_BIT:
 		case DCB_I2C_NVIO_BIT:
+			nouveau_i2c_create_port(i2c, NV_I2C_PORT(index),
+						info.type, &info);
+			break;
 		case DCB_I2C_NVIO_AUX:
-			nouveau_i2c_create_port(i2c, index, info.type, &info);
+			nouveau_i2c_create_port(i2c, NV_I2C_AUX(index),
+						info.type, &info);
 			break;
 		case DCB_I2C_UNUSED:
 		default:
