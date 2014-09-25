@@ -52,10 +52,15 @@ nvbios_imagen(struct nvkm_bios *bios, struct nvbios_image *image)
 	image->type = pcir.image_type;
 	image->last = pcir.last;
 
-	if (!(data = nvbios_npdeTp(bios, image->base, &npde)))
-		return true;
-	image->size = npde.image_size;
-	image->last = npde.last;
+	if (image->type != 0x70) {
+		if (!(data = nvbios_npdeTp(bios, image->base, &npde)))
+			return true;
+		image->size = npde.image_size;
+		image->last = npde.last;
+	} else {
+		image->last = true;
+	}
+
 	return true;
 }
 
