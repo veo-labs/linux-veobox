@@ -317,10 +317,6 @@ static int tegra_thermctl_get_temp(void *data, long *out_temp)
 	return 0;
 }
 
-static const struct thermal_zone_of_device_ops tegra_of_thermal_ops = {
-	.get_temp = tegra_thermctl_get_temp,
-};
-
 static const struct of_device_id tegra_soctherm_of_match[] = {
 	{ .compatible = "nvidia,tegra124-soctherm" },
 	{ },
@@ -420,7 +416,8 @@ static int tegra_soctherm_probe(struct platform_device *pdev)
 		zone->shift = t124_thermctl_temp_zones[i].shift;
 
 		tz = thermal_zone_of_sensor_register(&pdev->dev, i, zone,
-						     &tegra_of_thermal_ops);
+						     tegra_thermctl_get_temp,
+						     NULL);
 		if (IS_ERR(tz)) {
 			err = PTR_ERR(tz);
 			dev_err(&pdev->dev, "failed to register sensor: %d\n",
