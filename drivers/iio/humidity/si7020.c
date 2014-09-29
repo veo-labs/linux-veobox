@@ -45,20 +45,21 @@ static int si7020_read_raw(struct iio_dev *indio_dev,
 			   struct iio_chan_spec const *chan, int *val,
 			   int *val2, long mask)
 {
-	struct i2c_client *client = iio_priv(indio_dev);
+	struct i2c_client **client = iio_priv(indio_dev);
 	int ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		ret = i2c_smbus_read_word_data(client,
+		ret = i2c_smbus_read_word_data(*client,
 					       chan->type == IIO_TEMP ?
 					       SI7020CMD_TEMP_HOLD :
 					       SI7020CMD_RH_HOLD);
 		if (ret < 0)
 			return ret;
-		*val = ret >> 2;
-		if (chan->type == IIO_HUMIDITYRELATIVE)
-			*val &= GENMASK(11, 0);
+		if (chan->type == IIO_TEMP)
+			*val = ret >> 2;
+		else
+			*val = (ret & 0x3FFF) >> 2;
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
 		if (chan->type == IIO_TEMP)
@@ -132,6 +133,7 @@ static int si7020_probe(struct i2c_client *client,
 
 	data = iio_priv(indio_dev);
 	*data = client;
+	i2c_set_clientdata(client, indio_dev);
 
 	indio_dev->dev.parent = &client->dev;
 	indio_dev->name = dev_name(&client->dev);
