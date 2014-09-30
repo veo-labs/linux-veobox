@@ -968,6 +968,9 @@ static int spi_nor_check(struct spi_nor *nor)
 		return -EINVAL;
 	}
 
+	if (!nor->wait_till_ready)
+		nor->wait_till_ready = spi_nor_wait_till_ready;
+
 	return 0;
 }
 
