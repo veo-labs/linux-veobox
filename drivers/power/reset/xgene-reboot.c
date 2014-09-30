@@ -44,22 +44,25 @@ struct xgene_reboot_context {
 static int xgene_restart_handler(struct notifier_block *this,
 				 unsigned long mode, void *cmd)
 {
-	struct xgene_reboot_context *ctx = xgene_restart_ctx;
+	struct xgene_reboot_context *ctx =
+		container_of(this, struct xgene_reboot_context,
+			     restart_handler);
 
 	/* Issue the reboot */
 	writel(ctx->mask, ctx->csr);
 
 	mdelay(1000);
 
-	mdelay(1000);
-
 	dev_emerg(ctx->dev, "Unable to restart system\n");
+
+	return NOTIFY_DONE;
 }
 
 static int xgene_reboot_probe(struct platform_device *pdev)
 {
 	struct xgene_reboot_context *ctx;
 	struct device *dev = &pdev->dev;
+	int err;
 
 	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -75,8 +78,11 @@ static int xgene_reboot_probe(struct platform_device *pdev)
 		ctx->mask = 0xFFFFFFFF;
 
 	ctx->dev = dev;
-	arm_pm_restart = xgene_restart;
-	xgene_restart_ctx = ctx;
+	ctx->restart_handler.notifier_call = xgene_restart_handler;
+	ctx->restart_handler.priority = 128;
+	err = register_restart_handler(&ctx->restart_handler);
+	if (err)
+		dev_err(dev, "cannot register restart handler (err=%d)\n", err);
 
 	return err;
 }
