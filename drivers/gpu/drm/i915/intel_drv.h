@@ -1184,6 +1184,27 @@ void intel_runtime_pm_put(struct drm_i915_private *dev_priv);
 
 void intel_display_set_init_power(struct drm_i915_private *dev, bool enable);
 
+/* intel_runtime_pm.c */
+int intel_power_domains_init(struct drm_i915_private *);
+void intel_power_domains_remove(struct drm_i915_private *);
+void intel_power_domains_init_hw(struct drm_i915_private *dev_priv);
+void intel_init_runtime_pm(struct drm_i915_private *dev_priv);
+void intel_fini_runtime_pm(struct drm_i915_private *dev_priv);
+
+bool intel_display_power_enabled(struct drm_i915_private *dev_priv,
+				 enum intel_display_power_domain domain);
+bool intel_display_power_enabled_unlocked(struct drm_i915_private *dev_priv,
+					  enum intel_display_power_domain domain);
+void intel_display_power_get(struct drm_i915_private *dev_priv,
+			     enum intel_display_power_domain domain);
+void intel_display_power_put(struct drm_i915_private *dev_priv,
+			     enum intel_display_power_domain domain);
+void intel_aux_display_runtime_get(struct drm_i915_private *dev_priv);
+void intel_aux_display_runtime_put(struct drm_i915_private *dev_priv);
+void intel_runtime_pm_get(struct drm_i915_private *dev_priv);
+void intel_runtime_pm_get_noresume(struct drm_i915_private *dev_priv);
+void intel_runtime_pm_put(struct drm_i915_private *dev_priv);
+
 /* intel_pm.c */
 void intel_init_clock_gating(struct drm_device *dev);
 void intel_suspend_hw(struct drm_device *dev);
