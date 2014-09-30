@@ -260,7 +260,17 @@ static void __gen6_disable_pm_irq(struct drm_i915_private *dev_priv,
 	snb_update_pm_irq(dev_priv, mask, 0);
 }
 
-void gen6_disable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
+/**
+  * bdw_update_pm_irq - update GT interrupt 2
+  * @dev_priv: driver private
+  * @interrupt_mask: mask of interrupt bits to update
+  * @enabled_irq_mask: mask of interrupt bits to enable
+  *
+  * Copied from the snb function, updated with relevant register offsets
+  */
+static void bdw_update_pm_irq(struct drm_i915_private *dev_priv,
+			      uint32_t interrupt_mask,
+			      uint32_t enabled_irq_mask)
 {
 	if (WARN_ON(!intel_irqs_enabled(dev_priv)))
 		return;
@@ -268,89 +278,14 @@ void gen6_disable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
 	__gen6_disable_pm_irq(dev_priv, mask);
 }
 
-void gen6_reset_rps_interrupts(struct drm_device *dev)
+void gen8_enable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	uint32_t reg = gen6_pm_iir(dev_priv);
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	I915_WRITE(reg, dev_priv->pm_rps_events);
-	I915_WRITE(reg, dev_priv->pm_rps_events);
-	POSTING_READ(reg);
-	spin_unlock_irq(&dev_priv->irq_lock);
+	bdw_update_pm_irq(dev_priv, mask, mask);
 }
 
-void gen6_enable_rps_interrupts(struct drm_device *dev)
+void gen8_disable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_crtc *crtc;
-
-	spin_lock_irq(&dev_priv->irq_lock);
-
-	for_each_intel_crtc(dev, crtc) {
-		u32 reg = PIPESTAT(crtc->pipe);
-		u32 pipestat;
-
-		if (crtc->cpu_fifo_underrun_disabled)
-			continue;
-
-		pipestat = I915_READ(reg) & 0xffff0000;
-		if ((pipestat & PIPE_FIFO_UNDERRUN_STATUS) == 0)
-			continue;
-
-		I915_WRITE(reg, pipestat | PIPE_FIFO_UNDERRUN_STATUS);
-		POSTING_READ(reg);
-
-	WARN_ON(dev_priv->rps.pm_iir);
-	WARN_ON(I915_READ(gen6_pm_iir(dev_priv)) & dev_priv->pm_rps_events);
-	dev_priv->rps.interrupts_enabled = true;
-	I915_WRITE(gen6_pm_ier(dev_priv), I915_READ(gen6_pm_ier(dev_priv)) |
-				dev_priv->pm_rps_events);
-	gen6_enable_pm_irq(dev_priv, dev_priv->pm_rps_events);
-
-	spin_unlock_irq(&dev_priv->irq_lock);
-}
-
-u32 gen6_sanitize_rps_pm_mask(struct drm_i915_private *dev_priv, u32 mask)
-{
-	/*
-	 * SNB,IVB can while VLV,CHV may hard hang on looping batchbuffer
-	 * if GEN6_PM_UP_EI_EXPIRED is masked.
-	 *
-	 * TODO: verify if this can be reproduced on VLV,CHV.
-	 */
-	if (INTEL_INFO(dev_priv)->gen <= 7 && !IS_HASWELL(dev_priv))
-		mask &= ~GEN6_PM_RP_UP_EI_EXPIRED;
-
-	if (INTEL_INFO(dev_priv)->gen >= 8)
-		mask &= ~GEN8_PMINTR_REDIRECT_TO_NON_DISP;
-
-	return mask;
-}
-
-void gen6_disable_rps_interrupts(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	dev_priv->rps.interrupts_enabled = false;
-	spin_unlock_irq(&dev_priv->irq_lock);
-
-	cancel_work_sync(&dev_priv->rps.work);
-
-	spin_lock_irq(&dev_priv->irq_lock);
-
-	I915_WRITE(GEN6_PMINTRMSK, gen6_sanitize_rps_pm_mask(dev_priv, ~0));
-
-	__gen6_disable_pm_irq(dev_priv, dev_priv->pm_rps_events);
-	I915_WRITE(gen6_pm_ier(dev_priv), I915_READ(gen6_pm_ier(dev_priv)) &
-				~dev_priv->pm_rps_events);
-	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
-	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
-
-	dev_priv->rps.pm_iir = 0;
-
-	spin_unlock_irq(&dev_priv->irq_lock);
+	bdw_update_pm_irq(dev_priv, mask, 0);
 }
 
 /**
@@ -377,160 +312,6 @@ void ibx_display_interrupt_update(struct drm_i915_private *dev_priv,
 	I915_WRITE(SDEIMR, sdeimr);
 	POSTING_READ(SDEIMR);
 }
-#define ibx_enable_display_interrupt(dev_priv, bits) \
-	ibx_display_interrupt_update((dev_priv), (bits), (bits))
-#define ibx_disable_display_interrupt(dev_priv, bits) \
-	ibx_display_interrupt_update((dev_priv), (bits), 0)
-
-static void ibx_set_fifo_underrun_reporting(struct drm_device *dev,
-					    enum transcoder pch_transcoder,
-					    bool enable)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	uint32_t bit = (pch_transcoder == TRANSCODER_A) ?
-		       SDE_TRANSA_FIFO_UNDER : SDE_TRANSB_FIFO_UNDER;
-
-	if (enable)
-		ibx_enable_display_interrupt(dev_priv, bit);
-	else
-		ibx_disable_display_interrupt(dev_priv, bit);
-}
-
-static void cpt_set_fifo_underrun_reporting(struct drm_device *dev,
-					    enum transcoder pch_transcoder,
-					    bool enable, bool old)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	if (enable) {
-		I915_WRITE(SERR_INT,
-			   SERR_INT_TRANS_FIFO_UNDERRUN(pch_transcoder));
-
-		if (!cpt_can_enable_serr_int(dev))
-			return;
-
-		ibx_enable_display_interrupt(dev_priv, SDE_ERROR_CPT);
-	} else {
-		ibx_disable_display_interrupt(dev_priv, SDE_ERROR_CPT);
-
-		if (old && I915_READ(SERR_INT) &
-		    SERR_INT_TRANS_FIFO_UNDERRUN(pch_transcoder)) {
-			DRM_ERROR("uncleared pch fifo underrun on pch transcoder %c\n",
-				  transcoder_name(pch_transcoder));
-		}
-	}
-}
-
-/**
- * intel_set_cpu_fifo_underrun_reporting - enable/disable FIFO underrun messages
- * @dev: drm device
- * @pipe: pipe
- * @enable: true if we want to report FIFO underrun errors, false otherwise
- *
- * This function makes us disable or enable CPU fifo underruns for a specific
- * pipe. Notice that on some Gens (e.g. IVB, HSW), disabling FIFO underrun
- * reporting for one pipe may also disable all the other CPU error interruts for
- * the other pipes, due to the fact that there's just one interrupt mask/enable
- * bit for all the pipes.
- *
- * Returns the previous state of underrun reporting.
- */
-static bool __intel_set_cpu_fifo_underrun_reporting(struct drm_device *dev,
-						    enum pipe pipe, bool enable)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	bool old;
-
-	assert_spin_locked(&dev_priv->irq_lock);
-
-	old = !intel_crtc->cpu_fifo_underrun_disabled;
-	intel_crtc->cpu_fifo_underrun_disabled = !enable;
-
-	if (HAS_GMCH_DISPLAY(dev))
-		i9xx_set_fifo_underrun_reporting(dev, pipe, enable, old);
-	else if (IS_GEN5(dev) || IS_GEN6(dev))
-		ironlake_set_fifo_underrun_reporting(dev, pipe, enable);
-	else if (IS_GEN7(dev))
-		ivybridge_set_fifo_underrun_reporting(dev, pipe, enable, old);
-	else if (IS_GEN8(dev) || IS_GEN9(dev))
-		broadwell_set_fifo_underrun_reporting(dev, pipe, enable);
-
-	return old;
-}
-
-bool intel_set_cpu_fifo_underrun_reporting(struct drm_device *dev,
-					   enum pipe pipe, bool enable)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	unsigned long flags;
-	bool ret;
-
-	spin_lock_irqsave(&dev_priv->irq_lock, flags);
-	ret = __intel_set_cpu_fifo_underrun_reporting(dev, pipe, enable);
-	spin_unlock_irqrestore(&dev_priv->irq_lock, flags);
-
-	return ret;
-}
-
-static bool __cpu_fifo_underrun_reporting_enabled(struct drm_device *dev,
-						  enum pipe pipe)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-
-	return !intel_crtc->cpu_fifo_underrun_disabled;
-}
-
-/**
- * intel_set_pch_fifo_underrun_reporting - enable/disable FIFO underrun messages
- * @dev: drm device
- * @pch_transcoder: the PCH transcoder (same as pipe on IVB and older)
- * @enable: true if we want to report FIFO underrun errors, false otherwise
- *
- * This function makes us disable or enable PCH fifo underruns for a specific
- * PCH transcoder. Notice that on some PCHs (e.g. CPT/PPT), disabling FIFO
- * underrun reporting for one transcoder may also disable all the other PCH
- * error interruts for the other transcoders, due to the fact that there's just
- * one interrupt mask/enable bit for all the transcoders.
- *
- * Returns the previous state of underrun reporting.
- */
-bool intel_set_pch_fifo_underrun_reporting(struct drm_device *dev,
-					   enum transcoder pch_transcoder,
-					   bool enable)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pch_transcoder];
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	unsigned long flags;
-	bool old;
-
-	/*
-	 * NOTE: Pre-LPT has a fixed cpu pipe -> pch transcoder mapping, but LPT
-	 * has only one pch transcoder A that all pipes can use. To avoid racy
-	 * pch transcoder -> pipe lookups from interrupt code simply store the
-	 * underrun statistics in crtc A. Since we never expose this anywhere
-	 * nor use it outside of the fifo underrun code here using the "wrong"
-	 * crtc on LPT won't cause issues.
-	 */
-
-	spin_lock_irqsave(&dev_priv->irq_lock, flags);
-
-	old = !intel_crtc->pch_fifo_underrun_disabled;
-	intel_crtc->pch_fifo_underrun_disabled = !enable;
-
-	if (HAS_PCH_IBX(dev))
-		ibx_set_fifo_underrun_reporting(dev, pch_transcoder, enable);
-	else
-		cpt_set_fifo_underrun_reporting(dev, pch_transcoder, enable, old);
-
-	spin_unlock_irqrestore(&dev_priv->irq_lock, flags);
-	return old;
-}
-
 
 static void
 __i915_enable_pipestat(struct drm_i915_private *dev_priv, enum pipe pipe,

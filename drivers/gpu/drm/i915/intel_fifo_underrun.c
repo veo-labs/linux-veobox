@@ -28,26 +28,6 @@
 #include "i915_drv.h"
 #include "intel_drv.h"
 
-/**
- * DOC: fifo underrun handling
- *
- * The i915 driver checks for display fifo underruns using the interrupt signals
- * provided by the hardware. This is enabled by default and fairly useful to
- * debug display issues, especially watermark settings.
- *
- * If an underrun is detected this is logged into dmesg. To avoid flooding logs
- * and occupying the cpu underrun interrupts are disabled after the first
- * occurrence until the next modeset on a given pipe.
- *
- * Note that underrun detection on gmch platforms is a bit more ugly since there
- * is no interrupt (despite that the signalling bit is in the PIPESTAT pipe
- * interrupt register). Also on some other platforms underrun interrupts are
- * shared, which means that if we detect an underrun we need to disable underrun
- * reporting on all pipes.
- *
- * The code also supports underrun detection on the PCH transcoder.
- */
-
 static bool ivb_can_enable_err_int(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -84,21 +64,14 @@ static bool cpt_can_enable_serr_int(struct drm_device *dev)
 	return true;
 }
 
-/**
- * i9xx_check_fifo_underruns - check for fifo underruns
- * @dev_priv: i915 device instance
- *
- * This function checks for fifo underruns on GMCH platforms. This needs to be
- * done manually on modeset to make sure that we catch all underruns since they
- * do not generate an interrupt by themselves on these platforms.
- */
-void i9xx_check_fifo_underruns(struct drm_i915_private *dev_priv)
+void i9xx_check_fifo_underruns(struct drm_device *dev)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_crtc *crtc;
 
 	spin_lock_irq(&dev_priv->irq_lock);
 
-	for_each_intel_crtc(dev_priv->dev, crtc) {
+	for_each_intel_crtc(dev, crtc) {
 		u32 reg = PIPESTAT(crtc->pipe);
 		u32 pipestat;
 
@@ -227,6 +200,20 @@ static void cpt_set_fifo_underrun_reporting(struct drm_device *dev,
 	}
 }
 
+/**
+ * intel_set_cpu_fifo_underrun_reporting - enable/disable FIFO underrun messages
+ * @dev: drm device
+ * @pipe: pipe
+ * @enable: true if we want to report FIFO underrun errors, false otherwise
+ *
+ * This function makes us disable or enable CPU fifo underruns for a specific
+ * pipe. Notice that on some Gens (e.g. IVB, HSW), disabling FIFO underrun
+ * reporting for one pipe may also disable all the other CPU error interruts for
+ * the other pipes, due to the fact that there's just one interrupt mask/enable
+ * bit for all the pipes.
+ *
+ * Returns the previous state of underrun reporting.
+ */
 static bool __intel_set_cpu_fifo_underrun_reporting(struct drm_device *dev,
 						    enum pipe pipe, bool enable)
 {
@@ -252,40 +239,24 @@ static bool __intel_set_cpu_fifo_underrun_reporting(struct drm_device *dev,
 	return old;
 }
 
-/**
- * intel_set_cpu_fifo_underrun_reporting - set cpu fifo underrrun reporting state
- * @dev_priv: i915 device instance
- * @pipe: (CPU) pipe to set state for
- * @enable: whether underruns should be reported or not
- *
- * This function sets the fifo underrun state for @pipe. It is used in the
- * modeset code to avoid false positives since on many platforms underruns are
- * expected when disabling or enabling the pipe.
- *
- * Notice that on some platforms disabling underrun reports for one pipe
- * disables for all due to shared interrupts. Actual reporting is still per-pipe
- * though.
- *
- * Returns the previous state of underrun reporting.
- */
-bool intel_set_cpu_fifo_underrun_reporting(struct drm_i915_private *dev_priv,
+bool intel_set_cpu_fifo_underrun_reporting(struct drm_device *dev,
 					   enum pipe pipe, bool enable)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	unsigned long flags;
 	bool ret;
 
 	spin_lock_irqsave(&dev_priv->irq_lock, flags);
-	ret = __intel_set_cpu_fifo_underrun_reporting(dev_priv->dev, pipe,
-						      enable);
+	ret = __intel_set_cpu_fifo_underrun_reporting(dev, pipe, enable);
 	spin_unlock_irqrestore(&dev_priv->irq_lock, flags);
 
 	return ret;
 }
 
-static bool
-__cpu_fifo_underrun_reporting_enabled(struct drm_i915_private *dev_priv,
-				      enum pipe pipe)
+bool __cpu_fifo_underrun_reporting_enabled(struct drm_device *dev,
+					   enum pipe pipe)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pipe];
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 
@@ -293,10 +264,10 @@ __cpu_fifo_underrun_reporting_enabled(struct drm_i915_private *dev_priv,
 }
 
 /**
- * intel_set_pch_fifo_underrun_reporting - set PCH fifo underrun reporting state
- * @dev_priv: i915 device instance
+ * intel_set_pch_fifo_underrun_reporting - enable/disable FIFO underrun messages
+ * @dev: drm device
  * @pch_transcoder: the PCH transcoder (same as pipe on IVB and older)
- * @enable: whether underruns should be reported or not
+ * @enable: true if we want to report FIFO underrun errors, false otherwise
  *
  * This function makes us disable or enable PCH fifo underruns for a specific
  * PCH transcoder. Notice that on some PCHs (e.g. CPT/PPT), disabling FIFO
@@ -306,10 +277,11 @@ __cpu_fifo_underrun_reporting_enabled(struct drm_i915_private *dev_priv,
  *
  * Returns the previous state of underrun reporting.
  */
-bool intel_set_pch_fifo_underrun_reporting(struct drm_i915_private *dev_priv,
+bool intel_set_pch_fifo_underrun_reporting(struct drm_device *dev,
 					   enum transcoder pch_transcoder,
 					   bool enable)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_crtc *crtc = dev_priv->pipe_to_crtc_mapping[pch_transcoder];
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	unsigned long flags;
@@ -329,53 +301,11 @@ bool intel_set_pch_fifo_underrun_reporting(struct drm_i915_private *dev_priv,
 	old = !intel_crtc->pch_fifo_underrun_disabled;
 	intel_crtc->pch_fifo_underrun_disabled = !enable;
 
-	if (HAS_PCH_IBX(dev_priv->dev))
-		ibx_set_fifo_underrun_reporting(dev_priv->dev, pch_transcoder,
-						enable);
+	if (HAS_PCH_IBX(dev))
+		ibx_set_fifo_underrun_reporting(dev, pch_transcoder, enable);
 	else
-		cpt_set_fifo_underrun_reporting(dev_priv->dev, pch_transcoder,
-						enable, old);
+		cpt_set_fifo_underrun_reporting(dev, pch_transcoder, enable, old);
 
 	spin_unlock_irqrestore(&dev_priv->irq_lock, flags);
 	return old;
-}
-
-/**
- * intel_cpu_fifo_underrun_irq_handler - handle CPU fifo underrun interrupt
- * @dev_priv: i915 device instance
- * @pipe: (CPU) pipe to set state for
- *
- * This handles a CPU fifo underrun interrupt, generating an underrun warning
- * into dmesg if underrun reporting is enabled and then disables the underrun
- * interrupt to avoid an irq storm.
- */
-void intel_cpu_fifo_underrun_irq_handler(struct drm_i915_private *dev_priv,
-					 enum pipe pipe)
-{
-	/* GMCH can't disable fifo underruns, filter them. */
-	if (HAS_GMCH_DISPLAY(dev_priv->dev) &&
-	    !__cpu_fifo_underrun_reporting_enabled(dev_priv, pipe))
-		return;
-
-	if (intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, false))
-		DRM_ERROR("CPU pipe %c FIFO underrun\n",
-			  pipe_name(pipe));
-}
-
-/**
- * intel_pch_fifo_underrun_irq_handler - handle PCH fifo underrun interrupt
- * @dev_priv: i915 device instance
- * @pch_transcoder: the PCH transcoder (same as pipe on IVB and older)
- *
- * This handles a PCH fifo underrun interrupt, generating an underrun warning
- * into dmesg if underrun reporting is enabled and then disables the underrun
- * interrupt to avoid an irq storm.
- */
-void intel_pch_fifo_underrun_irq_handler(struct drm_i915_private *dev_priv,
-					 enum transcoder pch_transcoder)
-{
-	if (intel_set_pch_fifo_underrun_reporting(dev_priv, pch_transcoder,
-						  false))
-		DRM_ERROR("PCH transcoder %c FIFO underrun\n",
-			  transcoder_name(pch_transcoder));
 }
