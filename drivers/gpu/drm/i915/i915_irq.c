@@ -1798,10 +1798,8 @@ static void valleyview_pipestat_irq_handler(struct drm_device *dev, u32 iir)
 		if (pipe_stats[pipe] & PIPE_CRC_DONE_INTERRUPT_STATUS)
 			i9xx_pipe_crc_irq_handler(dev, pipe);
 
-		if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS &&
-		    intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe,
-							  false))
-			DRM_ERROR("pipe %c underrun\n", pipe_name(pipe));
+		if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS)
+			intel_cpu_fifo_underrun_irq_handler(dev_priv, pipe);
 	}
 
 	if (pipe_stats[0] & PIPE_GMBUS_INTERRUPT_STATUS)
@@ -1968,16 +1966,10 @@ static void ibx_irq_handler(struct drm_device *dev, u32 pch_iir)
 		DRM_DEBUG_DRIVER("PCH transcoder CRC error interrupt\n");
 
 	if (pch_iir & SDE_TRANSA_FIFO_UNDER)
-		if (intel_set_pch_fifo_underrun_reporting(dev_priv,
-							  TRANSCODER_A,
-							  false))
-			DRM_ERROR("PCH transcoder A FIFO underrun\n");
+		intel_pch_fifo_underrun_irq_handler(dev_priv, TRANSCODER_A);
 
 	if (pch_iir & SDE_TRANSB_FIFO_UNDER)
-		if (intel_set_pch_fifo_underrun_reporting(dev_priv,
-							  TRANSCODER_B,
-							  false))
-			DRM_ERROR("PCH transcoder B FIFO underrun\n");
+		intel_pch_fifo_underrun_irq_handler(dev_priv, TRANSCODER_B);
 }
 
 static void ivb_err_int_handler(struct drm_device *dev)
@@ -1990,12 +1982,8 @@ static void ivb_err_int_handler(struct drm_device *dev)
 		DRM_ERROR("Poison interrupt\n");
 
 	for_each_pipe(dev_priv, pipe) {
-		if (err_int & ERR_INT_FIFO_UNDERRUN(pipe)) {
-			if (intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe,
-								  false))
-				DRM_ERROR("Pipe %c FIFO underrun\n",
-					  pipe_name(pipe));
-		}
+		if (err_int & ERR_INT_FIFO_UNDERRUN(pipe))
+			intel_cpu_fifo_underrun_irq_handler(dev_priv, pipe);
 
 		if (err_int & ERR_INT_PIPE_CRC_DONE(pipe)) {
 			if (IS_IVYBRIDGE(dev))
@@ -2017,19 +2005,13 @@ static void cpt_serr_int_handler(struct drm_device *dev)
 		DRM_ERROR("PCH poison interrupt\n");
 
 	if (serr_int & SERR_INT_TRANS_A_FIFO_UNDERRUN)
-		if (intel_set_pch_fifo_underrun_reporting(dev_priv, TRANSCODER_A,
-							  false))
-			DRM_ERROR("PCH transcoder A FIFO underrun\n");
+		intel_pch_fifo_underrun_irq_handler(dev_priv, TRANSCODER_A);
 
 	if (serr_int & SERR_INT_TRANS_B_FIFO_UNDERRUN)
-		if (intel_set_pch_fifo_underrun_reporting(dev_priv, TRANSCODER_B,
-							  false))
-			DRM_ERROR("PCH transcoder B FIFO underrun\n");
+		intel_pch_fifo_underrun_irq_handler(dev_priv, TRANSCODER_B);
 
 	if (serr_int & SERR_INT_TRANS_C_FIFO_UNDERRUN)
-		if (intel_set_pch_fifo_underrun_reporting(dev_priv, TRANSCODER_C,
-							  false))
-			DRM_ERROR("PCH transcoder C FIFO underrun\n");
+		intel_pch_fifo_underrun_irq_handler(dev_priv, TRANSCODER_C);
 
 	I915_WRITE(SERR_INT, serr_int);
 }
@@ -2095,11 +2077,7 @@ static void ilk_display_irq_handler(struct drm_device *dev, u32 de_iir)
 			intel_check_page_flip(dev, pipe);
 
 		if (de_iir & DE_PIPE_FIFO_UNDERRUN(pipe))
-			if (intel_set_cpu_fifo_underrun_reporting(dev_priv,
-								  pipe,
-								  false))
-				DRM_ERROR("Pipe %c FIFO underrun\n",
-					  pipe_name(pipe));
+			intel_cpu_fifo_underrun_irq_handler(dev_priv, pipe);
 
 		if (de_iir & DE_PIPE_CRC_DONE(pipe))
 			i9xx_pipe_crc_irq_handler(dev, pipe);
@@ -2324,13 +2302,9 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 			if (pipe_iir & GEN8_PIPE_CDCLK_CRC_DONE)
 				hsw_pipe_crc_irq_handler(dev, pipe);
 
-			if (pipe_iir & GEN8_PIPE_FIFO_UNDERRUN) {
-				if (intel_set_cpu_fifo_underrun_reporting(dev_priv,
-									  pipe,
-									  false))
-					DRM_ERROR("Pipe %c FIFO underrun\n",
-						  pipe_name(pipe));
-			}
+			if (pipe_iir & GEN8_PIPE_FIFO_UNDERRUN)
+				intel_cpu_fifo_underrun_irq_handler(dev_priv,
+								    pipe);
 
 
 			if (IS_GEN9(dev))
@@ -3823,10 +3797,9 @@ static irqreturn_t i8xx_irq_handler(int irq, void *arg)
 			if (pipe_stats[pipe] & PIPE_CRC_DONE_INTERRUPT_STATUS)
 				i9xx_pipe_crc_irq_handler(dev, pipe);
 
-			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS &&
-			    intel_set_cpu_fifo_underrun_reporting(dev_priv,
-								  pipe, false))
-				DRM_ERROR("pipe %c underrun\n", pipe_name(pipe));
+			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS)
+				intel_cpu_fifo_underrun_irq_handler(dev_priv,
+								    pipe);
 		}
 
 		iir = new_iir;
@@ -4015,10 +3988,9 @@ static irqreturn_t i915_irq_handler(int irq, void *arg)
 			if (pipe_stats[pipe] & PIPE_CRC_DONE_INTERRUPT_STATUS)
 				i9xx_pipe_crc_irq_handler(dev, pipe);
 
-			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS &&
-			    intel_set_cpu_fifo_underrun_reporting(dev_priv,
-								  pipe, false))
-				DRM_ERROR("pipe %c underrun\n", pipe_name(pipe));
+			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS)
+				intel_cpu_fifo_underrun_irq_handler(dev_priv,
+								    pipe);
 		}
 
 		if (blc_event || (iir & I915_ASLE_INTERRUPT))
@@ -4238,10 +4210,8 @@ static irqreturn_t i965_irq_handler(int irq, void *arg)
 			if (pipe_stats[pipe] & PIPE_CRC_DONE_INTERRUPT_STATUS)
 				i9xx_pipe_crc_irq_handler(dev, pipe);
 
-			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS &&
-			    intel_set_cpu_fifo_underrun_reporting(dev_priv,
-								  pipe, false))
-				DRM_ERROR("pipe %c underrun\n", pipe_name(pipe));
+			if (pipe_stats[pipe] & PIPE_FIFO_UNDERRUN_STATUS)
+				intel_cpu_fifo_underrun_irq_handler(dev_priv, pipe);
 		}
 
 		if (blc_event || (iir & I915_ASLE_INTERRUPT))
