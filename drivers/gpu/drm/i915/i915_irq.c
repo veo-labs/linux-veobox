@@ -4554,7 +4554,7 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 
 	pm_qos_add_request(&dev_priv->pm_qos, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 
-	if (IS_GEN2(dev_priv)) {
+	if (IS_GEN2(dev)) {
 		dev->max_vblank_count = 0;
 		dev->driver->get_vblank_counter = i8xx_get_vblank_counter;
 	} else if (IS_G4X(dev_priv) || INTEL_INFO(dev_priv)->gen >= 5) {
@@ -4674,17 +4674,6 @@ void intel_hpd_init(struct drm_i915_private *dev_priv)
 	spin_unlock_irq(&dev_priv->irq_lock);
 }
 
-/**
- * intel_irq_install - enables the hardware interrupt
- * @dev_priv: i915 device instance
- *
- * This function enables the hardware interrupt handling, but leaves the hotplug
- * handling still disabled. It is called after intel_irq_init().
- *
- * In the driver load and resume code we need working interrupts in a few places
- * but don't want to deal with the hassle of concurrent probe and hotplug
- * workers. Hence the split into this two-stage approach.
- */
 int intel_irq_install(struct drm_i915_private *dev_priv)
 {
 	/*
@@ -4695,6 +4684,27 @@ int intel_irq_install(struct drm_i915_private *dev_priv)
 	dev_priv->pm.irqs_enabled = true;
 
 	return drm_irq_install(dev_priv->dev, dev_priv->dev->pdev->irq);
+}
+
+void intel_irq_uninstall(struct drm_i915_private *dev_priv)
+{
+	drm_irq_uninstall(dev_priv->dev);
+	intel_hpd_cancel_work(dev_priv);
+	dev_priv->pm.irqs_enabled = false;
+}
+
+/* Disable interrupts so we can allow runtime PM. */
+void intel_runtime_pm_disable_interrupts(struct drm_device *dev)
+{
+	/*
+	 * We enable some interrupt sources in our postinstall hooks, so mark
+	 * interrupts as enabled _before_ actually enabling them to avoid
+	 * special cases in our ordering checks.
+	 */
+	dev_priv->pm.irqs_enabled = true;
+
+	dev->driver->irq_uninstall(dev);
+	dev_priv->pm.irqs_enabled = false;
 }
 
 /**
@@ -4711,29 +4721,7 @@ void intel_irq_uninstall(struct drm_i915_private *dev_priv)
 	dev_priv->pm.irqs_enabled = false;
 }
 
-/**
- * intel_runtime_pm_disable_interrupts - runtime interrupt disabling
- * @dev_priv: i915 device instance
- *
- * This function is used to disable interrupts at runtime, both in the runtime
- * pm and the system suspend/resume code.
- */
-void intel_runtime_pm_disable_interrupts(struct drm_i915_private *dev_priv)
-{
-	dev_priv->dev->driver->irq_uninstall(dev_priv->dev);
-	dev_priv->pm.irqs_enabled = false;
-}
-
-/**
- * intel_runtime_pm_enable_interrupts - runtime interrupt enabling
- * @dev_priv: i915 device instance
- *
- * This function is used to enable interrupts at runtime, both in the runtime
- * pm and the system suspend/resume code.
- */
-void intel_runtime_pm_enable_interrupts(struct drm_i915_private *dev_priv)
-{
 	dev_priv->pm.irqs_enabled = true;
-	dev_priv->dev->driver->irq_preinstall(dev_priv->dev);
-	dev_priv->dev->driver->irq_postinstall(dev_priv->dev);
+	dev->driver->irq_preinstall(dev);
+	dev->driver->irq_postinstall(dev);
 }
