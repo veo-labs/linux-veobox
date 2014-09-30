@@ -593,6 +593,8 @@ static int i915_drm_suspend(struct drm_device *dev)
 
 		intel_dp_mst_suspend(dev);
 
+		flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+
 		intel_runtime_pm_disable_interrupts(dev_priv);
 		intel_hpd_cancel_work(dev_priv);
 
@@ -695,7 +697,7 @@ static int i915_drm_resume(struct drm_device *dev)
 		mutex_unlock(&dev->struct_mutex);
 
 		/* We need working interrupts for modeset enabling ... */
-		intel_runtime_pm_restore_interrupts(dev);
+		intel_runtime_pm_enable_interrupts(dev_priv);
 
 		intel_modeset_init_hw(dev);
 
@@ -1391,7 +1393,12 @@ static int intel_runtime_suspend(struct device *device)
 	i915_gem_release_all_mmaps(dev_priv);
 	mutex_unlock(&dev->struct_mutex);
 
-	intel_suspend_gt_powersave(dev);
+	/*
+	 * rps.work can't be rearmed here, since we get here only after making
+	 * sure the GPU is idle and the RPS freq is set to the minimum. See
+	 * intel_mark_idle().
+	 */
+	cancel_work_sync(&dev_priv->rps.work);
 	intel_runtime_pm_disable_interrupts(dev_priv);
 
 	ret = intel_suspend_complete(dev_priv);
@@ -1467,7 +1474,7 @@ static int intel_runtime_resume(struct device *device)
 	gen6_update_ring_freq(dev);
 
 	intel_runtime_pm_enable_interrupts(dev_priv);
-	intel_enable_gt_powersave(dev);
+	intel_reset_gt_powersave(dev);
 
 	if (ret)
 		DRM_ERROR("Runtime resume failed, disabling it (%d)\n", ret);

@@ -4524,13 +4524,6 @@ static void intel_hpd_irq_reenable_work(struct work_struct *work)
 	intel_runtime_pm_put(dev_priv);
 }
 
-/**
- * intel_irq_init - initializes irq support
- * @dev_priv: i915 device instance
- *
- * This function initializes all the irq support including work items, timers
- * and all the vtables. It does not setup the interrupt itself though.
- */
 void intel_irq_init(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
@@ -4554,7 +4547,7 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 
 	pm_qos_add_request(&dev_priv->pm_qos, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 
-	if (IS_GEN2(dev)) {
+	if (IS_GEN2(dev_priv)) {
 		dev->max_vblank_count = 0;
 		dev->driver->get_vblank_counter = i8xx_get_vblank_counter;
 	} else if (IS_G4X(dev_priv) || INTEL_INFO(dev_priv)->gen >= 5) {
@@ -4594,7 +4587,7 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 		dev->driver->enable_vblank = valleyview_enable_vblank;
 		dev->driver->disable_vblank = valleyview_disable_vblank;
 		dev_priv->display.hpd_irq_setup = i915_hpd_irq_setup;
-	} else if (INTEL_INFO(dev)->gen >= 8) {
+	} else if (INTEL_INFO(dev_priv)->gen >= 8) {
 		dev->driver->irq_handler = gen8_irq_handler;
 		dev->driver->irq_preinstall = gen8_irq_reset;
 		dev->driver->irq_postinstall = gen8_irq_postinstall;
@@ -4634,18 +4627,6 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 	}
 }
 
-/**
- * intel_hpd_init - initializes and enables hpd support
- * @dev_priv: i915 device instance
- *
- * This function enables the hotplug support. It requires that interrupts have
- * already been enabled with intel_irq_init_hw(). From this point on hotplug and
- * poll request can run concurrently to other code, so locking rules must be
- * obeyed.
- *
- * This is a separate step from interrupt enabling to simplify the locking rules
- * in the driver load and resume code.
- */
 void intel_hpd_init(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
@@ -4694,34 +4675,16 @@ void intel_irq_uninstall(struct drm_i915_private *dev_priv)
 }
 
 /* Disable interrupts so we can allow runtime PM. */
-void intel_runtime_pm_disable_interrupts(struct drm_device *dev)
+void intel_runtime_pm_disable_interrupts(struct drm_i915_private *dev_priv)
 {
-	/*
-	 * We enable some interrupt sources in our postinstall hooks, so mark
-	 * interrupts as enabled _before_ actually enabling them to avoid
-	 * special cases in our ordering checks.
-	 */
-	dev_priv->pm.irqs_enabled = true;
-
-	dev->driver->irq_uninstall(dev);
+	dev_priv->dev->driver->irq_uninstall(dev_priv->dev);
 	dev_priv->pm.irqs_enabled = false;
 }
 
-/**
- * intel_irq_uninstall - finilizes all irq handling
- * @dev_priv: i915 device instance
- *
- * This stops interrupt and hotplug handling and unregisters and frees all
- * resources acquired in the init functions.
- */
-void intel_irq_uninstall(struct drm_i915_private *dev_priv)
+/* Restore interrupts so we can recover from runtime PM. */
+void intel_runtime_pm_enable_interrupts(struct drm_i915_private *dev_priv)
 {
-	drm_irq_uninstall(dev_priv->dev);
-	intel_hpd_cancel_work(dev_priv);
-	dev_priv->pm.irqs_enabled = false;
-}
-
 	dev_priv->pm.irqs_enabled = true;
-	dev->driver->irq_preinstall(dev);
-	dev->driver->irq_postinstall(dev);
+	dev_priv->dev->driver->irq_preinstall(dev_priv->dev);
+	dev_priv->dev->driver->irq_postinstall(dev_priv->dev);
 }
