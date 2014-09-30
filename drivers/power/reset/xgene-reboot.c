@@ -64,7 +64,7 @@ static int xgene_reboot_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int err;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
+	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
