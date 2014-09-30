@@ -70,7 +70,7 @@ static int xgene_reboot_probe(struct platform_device *pdev)
 
 	ctx->csr = of_iomap(dev->of_node, 0);
 	if (!ctx->csr) {
-		dev_err(dev, "can not map resource\n");
+		dev_err(&pdev->dev, "can not map resource\n");
 		return -ENODEV;
 	}
 
