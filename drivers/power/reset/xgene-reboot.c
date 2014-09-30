@@ -44,16 +44,14 @@ struct xgene_reboot_context {
 static int xgene_restart_handler(struct notifier_block *this,
 				 unsigned long mode, void *cmd)
 {
-	struct xgene_reboot_context *ctx =
-		container_of(this, struct xgene_reboot_context,
-			     restart_handler);
+	struct xgene_reboot_context *ctx = xgene_restart_ctx;
 
 	/* Issue the reboot */
 	writel(ctx->mask, ctx->csr);
 
 	mdelay(1000);
 
-	dev_emerg(ctx->dev, "Unable to restart system\n");
+	mdelay(1000);
 
 	dev_emerg(ctx->dev, "Unable to restart system\n");
 }
