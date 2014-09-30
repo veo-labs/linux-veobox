@@ -55,22 +55,21 @@ static int xgene_restart_handler(struct notifier_block *this,
 
 	dev_emerg(ctx->dev, "Unable to restart system\n");
 
-	return NOTIFY_DONE;
+	dev_emerg(ctx->dev, "Unable to restart system\n");
 }
 
 static int xgene_reboot_probe(struct platform_device *pdev)
 {
 	struct xgene_reboot_context *ctx;
 	struct device *dev = &pdev->dev;
-	int err;
 
-	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
+	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
 	ctx->csr = of_iomap(dev->of_node, 0);
 	if (!ctx->csr) {
-		dev_err(&pdev->dev, "can not map resource\n");
+		dev_err(dev, "can not map resource\n");
 		return -ENODEV;
 	}
 
@@ -78,11 +77,8 @@ static int xgene_reboot_probe(struct platform_device *pdev)
 		ctx->mask = 0xFFFFFFFF;
 
 	ctx->dev = dev;
-	ctx->restart_handler.notifier_call = xgene_restart_handler;
-	ctx->restart_handler.priority = 128;
-	err = register_restart_handler(&ctx->restart_handler);
-	if (err)
-		dev_err(dev, "cannot register restart handler (err=%d)\n", err);
+	arm_pm_restart = xgene_restart;
+	xgene_restart_ctx = ctx;
 
 	return err;
 }
