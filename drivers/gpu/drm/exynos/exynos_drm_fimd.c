@@ -1009,7 +1009,7 @@ static void fimd_te_handler(struct exynos_drm_crtc *crtc)
 		wake_up(&ctx->wait_vsync_queue);
 	}
 
-	if (test_bit(0, &ctx->irq_flags))
+	if (!atomic_read(&ctx->triggering))
 		drm_handle_vblank(ctx->drm_dev, ctx->pipe);
 }
 
