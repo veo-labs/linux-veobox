@@ -2748,11 +2748,13 @@ static void dgap_firmware_reset_port(struct channel_t *ch)
  *=======================================================================*/
 static int dgap_param(struct channel_t *ch, struct board_t *bd, u32 un_type)
 {
-	u16 head;
-	u16 cflag;
-	u16 iflag;
-	u8 mval;
-	u8 hflow;
+	struct channel_t *ch;
+	struct un_t *un;
+	struct bs_t __iomem *bs;
+	char __iomem *vaddr;
+	u16 head, tail, tmask, remain;
+	int bufcount, n;
+	ulong lock_flags;
 
 	/*
 	 * If baud rate is zero, flush queues, and set mval to drop DTR.
@@ -2774,12 +2776,7 @@ static int dgap_param(struct channel_t *ch, struct board_t *bd, u32 un_type)
 		mval = D_DTR(ch) | D_RTS(ch);
 		ch->ch_baud_info = 0;
 
-	} else if (ch->ch_custom_speed && (bd->bd_flags & BD_FEP5PLUS)) {
-		/*
-		 * Tell the fep to do the command
-		 */
-
-		dgap_cmdw_ext(ch, 0xff01, ch->ch_custom_speed, 0);
+	spin_lock_irqsave(&ch->ch_lock, lock_flags);
 
 		/*
 		 * Now go get from fep mem, what the fep
