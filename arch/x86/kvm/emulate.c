@@ -683,14 +683,23 @@ static __always_inline int __linearize(struct x86_emulate_ctxt *ctxt,
 		}
 		if (addr.ea > lim)
 			goto bad;
-		if (lim == 0xffffffff)
-			*max_size = ~0u;
-		else {
-			*max_size = (u64)lim + 1 - addr.ea;
-			if (size > *max_size)
+		*max_size = min_t(u64, ~0u, (u64)lim + 1 - addr.ea);
+		if (size > *max_size)
+			goto bad;
+		cpl = ctxt->ops->cpl(ctxt);
+		if (!fetch) {
+			/* data segment or readable code segment */
+			if (cpl > desc.dpl)
+				goto bad;
+		} else if ((desc.type & 8) && !(desc.type & 4)) {
+			/* nonconforming code segment */
+			if (cpl != desc.dpl)
+				goto bad;
+		} else if ((desc.type & 8) && (desc.type & 4)) {
+			/* conforming code segment */
+			if (cpl < desc.dpl)
 				goto bad;
 		}
-		la &= (u32)-1;
 		break;
 	}
 	if (ctxt->mode != X86EMUL_MODE_PROT64)
