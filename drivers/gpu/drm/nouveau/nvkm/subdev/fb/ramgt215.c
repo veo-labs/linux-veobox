@@ -53,6 +53,7 @@ struct gt215_ramfuc {
 	struct ramfuc base;
 	struct ramfuc_reg r_0x001610;
 	struct ramfuc_reg r_0x001700;
+	struct ramfuc_reg r_0x002504;
 	struct ramfuc_reg r_0x004000;
 	struct ramfuc_reg r_0x004004;
 	struct ramfuc_reg r_0x004018;
@@ -426,6 +427,37 @@ nva3_ram_timing_calc(struct nouveau_fb *pfb, u32 *timing)
 }
 #undef T
 
+static void
+nouveau_sddr3_dll_reset(struct nva3_ramfuc *fuc)
+{
+	ram_mask(fuc, mr[0], 0x100, 0x100);
+	ram_nsec(fuc, 1000);
+	ram_mask(fuc, mr[0], 0x100, 0x000);
+	ram_nsec(fuc, 1000);
+}
+
+static void
+nouveau_sddr3_dll_disable(struct nva3_ramfuc *fuc, u32 *mr)
+{
+	u32 mr1_old = ram_rd32(fuc, mr[1]);
+
+	if (!(mr1_old & 0x1)) {
+		ram_wr32(fuc, 0x1002d4, 0x00000001);
+		ram_wr32(fuc, mr[1], mr[1]);
+		ram_nsec(fuc, 1000);
+	}
+}
+
+static void
+nva3_ram_lock_pll(struct nva3_ramfuc *fuc, struct nva3_clock_info *mclk)
+{
+	ram_wr32(fuc, 0x004004, mclk->pll);
+	ram_mask(fuc, 0x004000, 0x00000001, 0x00000001);
+	ram_mask(fuc, 0x004000, 0x00000010, 0x00000000);
+	ram_wait(fuc, 0x004000, 0x00020000, 0x00020000, 64000);
+	ram_mask(fuc, 0x004000, 0x00000010, 0x00000010);
+}
+
 static int
 gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 {
@@ -441,6 +473,7 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	u32 unk714, unk718, unk71c;
 	int ret, i;
 	u32 timing[9];
+	bool pll2pll;
 
 	next = &ram->base.target;
 	next->freq = freq;
@@ -501,14 +534,8 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram->base.mr[2] = ram_rd32(fuc, mr[2]);
 
 	switch (ram->base.type) {
-	case NV_MEM_TYPE_DDR2:
-		ret = nvkm_sddr2_calc(&ram->base);
-		break;
 	case NV_MEM_TYPE_DDR3:
 		ret = nvkm_sddr3_calc(&ram->base);
-		break;
-	case NV_MEM_TYPE_GDDR3:
-		ret = nvkm_gddr3_calc(&ram->base);
 		break;
 	default:
 		ret = -ENOSYS;
@@ -561,25 +588,13 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram_block(fuc);
 	ram_nsec(fuc, 2000);
 
-	if (!next->bios.ramcfg_10_02_10) {
-		if (ram->base.type == NV_MEM_TYPE_GDDR3)
-			ram_mask(fuc, 0x111100, 0x04020000, 0x00020000);
-		else
-			ram_mask(fuc, 0x111100, 0x04020000, 0x04020000);
-	}
+
+	if (!next->bios.ramcfg_10_02_10)
+		ram_mask(fuc, 0x111100, 0x04020000, 0x04020000); /*XXX*/
 
 	/* If we're disabling the DLL, do it now */
-	switch (next->bios.ramcfg_10_DLLoff * ram->base.type) {
-	case NV_MEM_TYPE_DDR3:
-		nvkm_sddr3_dll_disable(fuc, ram->base.mr);
-		break;
-	case NV_MEM_TYPE_GDDR3:
-		nvkm_gddr3_dll_disable(fuc, ram->base.mr);
-		break;
-	}
-
-	if (fuc->r_gpioFBVREF.addr && next->bios.timing_10_ODT)
-		gt215_ram_fbvref(fuc, 0);
+	if (next->bios.ramcfg_10_DLLoff)
+		nouveau_sddr3_dll_disable(fuc, ram->base.mr);
 
 	/* Brace RAM for impact */
 	ram_wr32(fuc, 0x1002d4, 0x00000001);
@@ -662,6 +677,14 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram_wr32(fuc, 0x100210, 0x80000000);
 	ram_nsec(fuc, 2000);
 
+	/* Set RAM MR parameters and timings */
+	ram_wr32(fuc, mr[2], ram->base.mr[2]);
+	ram_nsec(fuc, 1000);
+	ram_wr32(fuc, mr[1], ram->base.mr[1]);
+	ram_nsec(fuc, 1000);
+	ram_wr32(fuc, mr[0], ram->base.mr[0]);
+	ram_nsec(fuc, 1000);
+
 	ram_wr32(fuc, 0x100220[3], timing[3]);
 	ram_wr32(fuc, 0x100220[1], timing[1]);
 	ram_wr32(fuc, 0x100220[6], timing[6]);
@@ -687,18 +710,11 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 			if (nv_device(pfb)->chipset != 0xa8)
 				r111100 |= 0x00000004;
 			/* no break */
-		case NV_MEM_TYPE_DDR2:
-			r111100 |= 0x08000000;
-			break;
 		default:
 			break;
 		}
 	} else {
 		switch (ram->base.type) {
-		case NV_MEM_TYPE_DDR2:
-			r111100 |= 0x1a800000;
-			unk714  |= 0x00000010;
-			break;
 		case NV_MEM_TYPE_DDR3:
 			if (nv_device(pfb)->chipset == 0xa8) {
 				r111100 |=  0x08000000;
@@ -707,10 +723,6 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 				r111100 |=  0x12800000;
 			}
 			unk714  |= 0x00000010;
-			break;
-		case NV_MEM_TYPE_GDDR3:
-			r111100 |= 0x30000000;
-			unk714  |= 0x00000020;
 			break;
 		default:
 			break;
@@ -737,23 +749,14 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram_mask(fuc, 0x100718, 0xffffffff, unk718);
 	ram_mask(fuc, 0x111100, 0xffffffff, r111100);
 
-	if (fuc->r_gpioFBVREF.addr && !next->bios.timing_10_ODT)
-		gt215_ram_fbvref(fuc, 1);
-
 	/* Reset DLL */
 	if (!next->bios.ramcfg_10_DLLoff)
-		nvkm_sddr2_dll_reset(fuc);
+		nouveau_sddr3_dll_reset(fuc);
 
-	if (ram->base.type == NV_MEM_TYPE_GDDR3) {
-		ram_nsec(fuc, 31000);
-	} else {
-		ram_nsec(fuc, 14000);
-	}
+	ram_nsec(fuc, 14000);
 
-	if (ram->base.type == NV_MEM_TYPE_DDR3) {
-		ram_wr32(fuc, 0x100264, 0x1);
-		ram_nsec(fuc, 2000);
-	}
+	ram_wr32(fuc, 0x100264, 0x1);
+	ram_nsec(fuc, 2000);
 
 	ram_nuke(fuc, 0x100700);
 	ram_mask(fuc, 0x100700, 0x01000000, 0x01000000);
@@ -876,6 +879,7 @@ gt215_ram_ctor(struct nvkm_object *parent, struct nvkm_object *engine,
 
 	ram->fuc.r_0x001610 = ramfuc_reg(0x001610);
 	ram->fuc.r_0x001700 = ramfuc_reg(0x001700);
+	ram->fuc.r_0x002504 = ramfuc_reg(0x002504);
 	ram->fuc.r_0x004000 = ramfuc_reg(0x004000);
 	ram->fuc.r_0x004004 = ramfuc_reg(0x004004);
 	ram->fuc.r_0x004018 = ramfuc_reg(0x004018);
