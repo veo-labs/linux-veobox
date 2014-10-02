@@ -188,7 +188,6 @@ static int tegra_mipi_wait(struct tegra_mipi *mipi)
 
 int tegra_mipi_calibrate(struct tegra_mipi_device *device)
 {
-	const struct tegra_mipi_soc *soc = device->mipi->soc;
 	unsigned int i;
 	u32 value;
 	int err;
