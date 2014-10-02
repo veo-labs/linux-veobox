@@ -366,6 +366,66 @@ gt215_link_train_fini(struct nvkm_fb *pfb)
 		pfb->ram->put(pfb, &ram->ltrain.mem);
 }
 
+/*
+ * RAM reclocking
+ */
+#define T(t) cfg->timing_10_##t
+static int
+nva3_ram_timing_calc(struct nouveau_fb *pfb, u32 *timing)
+{
+	struct nva3_ram *ram = (void *)pfb->ram;
+	struct nvbios_ramcfg *cfg = &ram->base.target.bios;
+	int tUNK_base;
+	u32 cur3, cur7, cur8;
+
+	cur3 = nv_rd32(pfb, 0x10022c);
+	cur7 = nv_rd32(pfb, 0x10023c);
+	cur8 = nv_rd32(pfb, 0x100240);
+
+	if (T(CWL) == 0)
+		T(CWL) = ((nv_rd32(pfb, 0x100228) & 0x0f000000) >> 24) + 1;
+
+	tUNK_base =  ((cur7 & 0x00ff0000) >> 16) -
+		     (cur3 & 0x000000ff) - 1;
+
+	timing[0] = (T(RP) << 24 | T(RAS) << 16 | T(RFC) << 8 | T(RC));
+	timing[1] = (T(WR) + 1 + T(CWL)) << 24 |
+		    max_t(u8,T(18), 1) << 16 |
+		    (T(WTR) + 1 + T(CWL)) << 8 |
+		    (5 + T(CL) - T(CWL));
+	timing[2] = (T(CWL) - 1) << 24 |
+		    (T(RRD) << 16) |
+		    (T(RCDWR) << 8) |
+		    T(RCDRD);
+	timing[3] = (cur3 & 0x00ff0000) |
+		    (0x30 + T(CL)) << 24 |
+		    (0xb + T(CL)) << 8 |
+		    (T(CL) - 1);
+	timing[4] = T(20) << 24 |
+		    T(21) << 16 |
+		    T(13) << 8 |
+		    T(13);
+	timing[5] = T(RFC) << 24 |
+		    max_t(u8,T(RCDRD), T(RCDWR)) << 16 |
+		    (T(CWL) + 6) << 8 |
+		    T(RP);
+	timing[6] = (0x5a + T(CL)) << 16 |
+		    (6 - T(CL) + T(CWL)) << 8 |
+		    (0x50 + T(CL) - T(CWL));
+	timing[7] = (cur7 & 0xff000000) |
+		    ((tUNK_base + T(CL)) << 16) |
+		    0x202;
+	timing[8] = cur8 & 0xffffff00;
+
+	nv_debug(pfb, "Entry: 220: %08x %08x %08x %08x\n",
+			timing[0], timing[1], timing[2], timing[3]);
+	nv_debug(pfb, "  230: %08x %08x %08x %08x\n",
+			timing[4], timing[5], timing[6], timing[7]);
+	nv_debug(pfb, "  240: %08x\n", timing[8]);
+	return 0;
+}
+#undef T
+
 static int
 gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 {
@@ -381,7 +441,6 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	u32 unk714, unk718, unk71c;
 	int ret, i;
 	u32 timing[9];
-	bool pll2pll;
 
 	next = &ram->base.target;
 	next->freq = freq;
@@ -602,14 +661,6 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram_wr32(fuc, 0x1002d4, 0x00000001);
 	ram_wr32(fuc, 0x100210, 0x80000000);
 	ram_nsec(fuc, 2000);
-
-	/* Set RAM MR parameters and timings */
-	for (i = 2; i >= 0; i--) {
-		if (ram_rd32(fuc, mr[i]) != ram->base.mr[i]) {
-			ram_wr32(fuc, mr[i], ram->base.mr[i]);
-			ram_nsec(fuc, 1000);
-		}
-	}
 
 	ram_wr32(fuc, 0x100220[3], timing[3]);
 	ram_wr32(fuc, 0x100220[1], timing[1]);
