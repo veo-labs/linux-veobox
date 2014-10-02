@@ -283,6 +283,10 @@ static int lmh0395_probe(struct spi_device *spi)
 
 	sd = &state->sd;
 	v4l2_spi_subdev_init(sd, spi, &lmh0395_ops);
+	snprintf(sd->name, sizeof(sd->name), "%s-%d@spi%d",
+		spi->dev.driver->name,
+		spi->chip_select,
+		spi->master->bus_num);
 
 	v4l2_dbg(1, debug, sd, "Configuring equalizer\n");
 	lmh0395_get_control(sd);
