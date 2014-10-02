@@ -103,6 +103,16 @@ static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 		"50p",
 		"60p",
 	};
+	static const char * const chan_audio[] = {
+		"HDMI",
+		"SDI",
+		"sgtl5000",
+		"sgtl5000",
+	};
+	static const char * const chan_video[] = {
+		"HDMI",
+		"SDI",
+	};
 
 	v4l2_info(sd, "-----Chip status-----\n");
 
@@ -125,6 +135,13 @@ static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 		v4l2_info(sd, "SDI 1 format %s: %s@%s\n", sdi_format[(value & 0x60) >> 5],
 						sdi_video[(value & 0x18) >> 3],
 						sdi_fps[value & 0x07]);
+	v4l2_info(sd, "-----Control channels-----\n");
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0);
+	v4l2_info(sd, "Channel 0 : Audio %s, Video %s\n", chan_audio[(value & 0x06)>>1],
+							  chan_video[(value & 0x01)]);
+	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN1);
+	v4l2_info(sd, "Channel 1 : Audio %s, Video %s\n", chan_audio[(value & 0x06)>>1],
+							  chan_video[(value & 0x01)]);
 	return 0;
 };
 
