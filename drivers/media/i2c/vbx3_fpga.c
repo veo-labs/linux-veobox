@@ -44,18 +44,17 @@ MODULE_LICENSE("GPL");
 #define	VBX3_FPGA_REG_EVENT_CHAN1		0x08
 
 enum vbx3_fpga_input_pads {
-	VBX3_FPGA_INPUT_SDI0,
+	VBX3_FPGA_INPUT_SDI0 = 0,
 	VBX3_FPGA_INPUT_ADV7611_HDMI,
 	VBX3_FPGA_INPUT_SDI1,
 	VBX3_FPGA_INPUT_ADV7604_HDMI,
-	VBX3_FPGA_INPUT_ADV7604_VGA,
 };
 enum vbx3_fpga_output_pads {
-	VBX3_FPGA_OUTPUT_CHANNEL0,
+	VBX3_FPGA_OUTPUT_CHANNEL0 = 4,
 	VBX3_FPGA_OUTPUT_CHANNEL1,
 };
 
-#define	VBX3_FPGA_PADS_INPUT_NUM	5
+#define	VBX3_FPGA_PADS_INPUT_NUM	4
 #define	VBX3_FPGA_PADS_OUTPUT_NUM	2
 #define	VBX3_FPGA_PADS_NUM		VBX3_FPGA_PADS_INPUT_NUM+VBX3_FPGA_PADS_OUTPUT_NUM
 
@@ -129,12 +128,53 @@ static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 	return 0;
 };
 
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+static int vbx3_fpga_g_register(struct v4l2_subdev *sd,
+					struct v4l2_dbg_register *reg)
+{
+	int ret;
+	struct vbx3_fpga_state *state = to_state(sd);
+	struct i2c_client *client = state->i2c_client;
+
+	ret = i2c_smbus_read_byte_data(client, reg->reg);
+	if (ret < 0) {
+		v4l2_info(sd, "Register %03llx not supported\n", reg->reg);
+		return ret;
+	}
+
+	reg->size = 1;
+	reg->val = ret;
+
+	return 0;
+}
+
+static int vbx3_fpga_s_register(struct v4l2_subdev *sd,
+					struct v4l2_dbg_register *reg)
+{
+	int ret;
+	struct vbx3_fpga_state *state = to_state(sd);
+	struct i2c_client *client = state->i2c_client;
+
+	ret = i2c_smbus_write_byte_data(client, reg->reg, reg->val);
+	if (ret < 0) {
+		v4l2_info(sd, "Register %03llx not supported\n", reg->reg);
+		return ret;
+	}
+
+	return 0;
+}
+#endif
+
 static const struct v4l2_subdev_video_ops vbx3_fpga_video_ops = {
 	.s_routing = vbx3_fpga_s_routing,
 };
 
 static const struct v4l2_subdev_core_ops vbx3_fpga_core_ops = {
 	.log_status = vbx3_fpga_log_status,
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	.g_register = vbx3_fpga_g_register,
+	.s_register = vbx3_fpga_s_register,
+#endif
 };
 
 static const struct v4l2_subdev_ops vbx3_fpga_ops = {
