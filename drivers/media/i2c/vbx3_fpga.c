@@ -237,9 +237,12 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &vbx3_fpga_ops);
 	strlcpy(sd->name, "VBX3 FPGA video switch", sizeof(sd->name));
+	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 
-	for (pad = VBX3_FPGA_INPUT_SDI0; pad < VBX3_FPGA_INPUT_ADV7604_VGA; pad++)
-		state->pads[pad].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_INPUT_SDI0].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_INPUT_ADV7611_HDMI].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_INPUT_SDI1].flags = MEDIA_PAD_FL_SINK;
+	state->pads[VBX3_FPGA_INPUT_ADV7604_HDMI].flags = MEDIA_PAD_FL_SINK;
 
 	state->pads[VBX3_FPGA_OUTPUT_CHANNEL0].flags = MEDIA_PAD_FL_SOURCE;
 	state->pads[VBX3_FPGA_OUTPUT_CHANNEL1].flags = MEDIA_PAD_FL_SOURCE;
@@ -247,6 +250,14 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	ret = media_entity_init(&state->sd.entity, VBX3_FPGA_PADS_NUM, state->pads, 0);
 	if (ret < 0)
 		v4l2_err(client, "media entity failed with error %d\n", ret);
+
+	ret = v4l2_async_register_subdev(sd);
+	if (ret < 0) {
+		media_entity_cleanup(&state->sd.entity);
+		return ret;
+	}
+
+	v4l_info(client, "device probed\n");
 
 	return ret;
 }
@@ -258,6 +269,7 @@ static int vbx3_fpga_remove(struct i2c_client *client)
 
 	sd = &state->sd;
 	media_entity_cleanup(&sd->entity);
+	v4l2_async_unregister_subdev(sd);
 	v4l2_device_unregister_subdev(sd);
 	return 0;
 }
