@@ -32,8 +32,19 @@
 #include <subdev/bios/M0205.h>
 #include <subdev/bios/rammap.h>
 #include <subdev/bios/timing.h>
-#include <subdev/clk/gt215.h>
-#include <subdev/gpio.h>
+
+#include <subdev/clock/nva3.h>
+#include <subdev/clock/pll.h>
+
+#include <subdev/timer.h>
+
+#include <engine/fifo.h>
+
+#include <core/option.h>
+
+#include "ramfuc.h"
+
+#include "nv50.h"
 
 /* XXX: Remove when memx gains GPIO support */
 extern int nv50_gpio_location(int line, u32 *reg, u32 *shift);
@@ -42,7 +53,6 @@ struct gt215_ramfuc {
 	struct ramfuc base;
 	struct ramfuc_reg r_0x001610;
 	struct ramfuc_reg r_0x001700;
-	struct ramfuc_reg r_0x002504;
 	struct ramfuc_reg r_0x004000;
 	struct ramfuc_reg r_0x004004;
 	struct ramfuc_reg r_0x004018;
@@ -93,10 +103,24 @@ struct gt215_ltrain {
 	struct nvkm_mem *mem;
 };
 
-struct gt215_ram {
-	struct nvkm_ram base;
-	struct gt215_ramfuc fuc;
-	struct gt215_ltrain ltrain;
+struct nva3_ltrain {
+	enum {
+		NVA3_TRAIN_UNKNOWN,
+		NVA3_TRAIN_UNSUPPORTED,
+		NVA3_TRAIN_ONCE,
+		NVA3_TRAIN_EXEC,
+		NVA3_TRAIN_DONE
+	} state;
+	u32 r_100720;
+	u32 r_1111e0;
+	u32 r_111400;
+	struct nouveau_mem *mem;
+};
+
+struct nva3_ram {
+	struct nouveau_ram base;
+	struct nva3_ramfuc fuc;
+	struct nva3_ltrain ltrain;
 };
 
 void
@@ -340,150 +364,6 @@ gt215_link_train_fini(struct nvkm_fb *pfb)
 
 	if (ram->ltrain.mem)
 		pfb->ram->put(pfb, &ram->ltrain.mem);
-}
-
-/*
- * RAM reclocking
- */
-#define T(t) cfg->timing_10_##t
-static int
-gt215_ram_timing_calc(struct nvkm_fb *pfb, u32 *timing)
-{
-	struct gt215_ram *ram = (void *)pfb->ram;
-	struct nvbios_ramcfg *cfg = &ram->base.target.bios;
-	int tUNK_base, tUNK_40_0, prevCL;
-	u32 cur2, cur3, cur7, cur8;
-
-	cur2 = nv_rd32(pfb, 0x100228);
-	cur3 = nv_rd32(pfb, 0x10022c);
-	cur7 = nv_rd32(pfb, 0x10023c);
-	cur8 = nv_rd32(pfb, 0x100240);
-
-
-	switch ((!T(CWL)) * ram->base.type) {
-	case NV_MEM_TYPE_DDR2:
-		T(CWL) = T(CL) - 1;
-		break;
-	case NV_MEM_TYPE_GDDR3:
-		T(CWL) = ((cur2 & 0xff000000) >> 24) + 1;
-		break;
-	}
-
-	prevCL = (cur3 & 0x000000ff) + 1;
-	tUNK_base = ((cur7 & 0x00ff0000) >> 16) - prevCL;
-
-	timing[0] = (T(RP) << 24 | T(RAS) << 16 | T(RFC) << 8 | T(RC));
-	timing[1] = (T(WR) + 1 + T(CWL)) << 24 |
-		    max_t(u8,T(18), 1) << 16 |
-		    (T(WTR) + 1 + T(CWL)) << 8 |
-		    (5 + T(CL) - T(CWL));
-	timing[2] = (T(CWL) - 1) << 24 |
-		    (T(RRD) << 16) |
-		    (T(RCDWR) << 8) |
-		    T(RCDRD);
-	timing[3] = (cur3 & 0x00ff0000) |
-		    (0x30 + T(CL)) << 24 |
-		    (0xb + T(CL)) << 8 |
-		    (T(CL) - 1);
-	timing[4] = T(20) << 24 |
-		    T(21) << 16 |
-		    T(13) << 8 |
-		    T(13);
-	timing[5] = T(RFC) << 24 |
-		    max_t(u8,T(RCDRD), T(RCDWR)) << 16 |
-		    max_t(u8, (T(CWL) + 6), (T(CL) + 2)) << 8 |
-		    T(RP);
-	timing[6] = (0x5a + T(CL)) << 16 |
-		    max_t(u8, 1, (6 - T(CL) + T(CWL))) << 8 |
-		    (0x50 + T(CL) - T(CWL));
-	timing[7] = (cur7 & 0xff000000) |
-		    ((tUNK_base + T(CL)) << 16) |
-		    0x202;
-	timing[8] = cur8 & 0xffffff00;
-
-	switch (ram->base.type) {
-	case NV_MEM_TYPE_DDR2:
-	case NV_MEM_TYPE_GDDR3:
-		tUNK_40_0 = prevCL - (cur8 & 0xff);
-		if (tUNK_40_0 > 0)
-			timing[8] |= T(CL);
-		break;
-	default:
-		break;
-	}
-
-	nv_debug(pfb, "Entry: 220: %08x %08x %08x %08x\n",
-			timing[0], timing[1], timing[2], timing[3]);
-	nv_debug(pfb, "  230: %08x %08x %08x %08x\n",
-			timing[4], timing[5], timing[6], timing[7]);
-	nv_debug(pfb, "  240: %08x\n", timing[8]);
-	return 0;
-}
-#undef T
-
-static void
-nvkm_sddr2_dll_reset(struct gt215_ramfuc *fuc)
-{
-	ram_mask(fuc, mr[0], 0x100, 0x100);
-	ram_nsec(fuc, 1000);
-	ram_mask(fuc, mr[0], 0x100, 0x000);
-	ram_nsec(fuc, 1000);
-}
-
-static void
-nvkm_sddr3_dll_disable(struct gt215_ramfuc *fuc, u32 *mr)
-{
-	u32 mr1_old = ram_rd32(fuc, mr[1]);
-
-	if (!(mr1_old & 0x1)) {
-		ram_wr32(fuc, 0x1002d4, 0x00000001);
-		ram_wr32(fuc, mr[1], mr[1]);
-		ram_nsec(fuc, 1000);
-	}
-}
-
-static void
-nvkm_gddr3_dll_disable(struct gt215_ramfuc *fuc, u32 *mr)
-{
-	u32 mr1_old = ram_rd32(fuc, mr[1]);
-
-	if (!(mr1_old & 0x40)) {
-		ram_wr32(fuc, mr[1], mr[1]);
-		ram_nsec(fuc, 1000);
-	}
-}
-
-static void
-gt215_ram_lock_pll(struct gt215_ramfuc *fuc, struct gt215_clk_info *mclk)
-{
-	ram_wr32(fuc, 0x004004, mclk->pll);
-	ram_mask(fuc, 0x004000, 0x00000001, 0x00000001);
-	ram_mask(fuc, 0x004000, 0x00000010, 0x00000000);
-	ram_wait(fuc, 0x004000, 0x00020000, 0x00020000, 64000);
-	ram_mask(fuc, 0x004000, 0x00000010, 0x00000010);
-}
-
-static void
-gt215_ram_fbvref(struct gt215_ramfuc *fuc, u32 val)
-{
-	struct nvkm_gpio *gpio = nvkm_gpio(fuc->base.pfb);
-	struct dcb_gpio_func func;
-	u32 reg, sh, gpio_val;
-	int ret;
-
-	if (gpio->get(gpio, 0, 0x2e, DCB_GPIO_UNUSED) != val) {
-		ret = gpio->find(gpio, 0, 0x2e, DCB_GPIO_UNUSED, &func);
-		if (ret)
-			return;
-
-		nv50_gpio_location(func.line, &reg, &sh);
-		gpio_val = ram_rd32(fuc, gpioFBVREF);
-		if (gpio_val & (8 << sh))
-			val = !val;
-
-		ram_mask(fuc, gpioFBVREF, (0x3 << sh), ((val | 0x2) << sh));
-		ram_nsec(fuc, 20000);
-	}
 }
 
 static int
@@ -945,7 +825,6 @@ gt215_ram_ctor(struct nvkm_object *parent, struct nvkm_object *engine,
 
 	ram->fuc.r_0x001610 = ramfuc_reg(0x001610);
 	ram->fuc.r_0x001700 = ramfuc_reg(0x001700);
-	ram->fuc.r_0x002504 = ramfuc_reg(0x002504);
 	ram->fuc.r_0x004000 = ramfuc_reg(0x004000);
 	ram->fuc.r_0x004004 = ramfuc_reg(0x004004);
 	ram->fuc.r_0x004018 = ramfuc_reg(0x004018);
