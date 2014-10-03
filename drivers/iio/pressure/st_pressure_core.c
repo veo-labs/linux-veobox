@@ -438,11 +438,11 @@ int st_press_common_probe(struct iio_dev *indio_dev)
 	pdata->odr = pdata->sensor_settings->odr.odr_avl[0].hz;
 
 	/* Some devices don't support a data ready pin. */
-	if (!plat_data && pdata->sensor_settings->drdy_irq.addr)
-		plat_data =
+	if (!pdata->dev->platform_data && pdata->sensor_settings->drdy_irq.addr)
+		pdata->dev->platform_data =
 			(struct st_sensors_platform_data *)&default_press_pdata;
 
-	err = st_sensors_init_sensor(indio_dev, press_data->dev->platform_data);
+	err = st_sensors_init_sensor(indio_dev, pdata->dev->platform_data);
 	if (err < 0)
 		return err;
 
