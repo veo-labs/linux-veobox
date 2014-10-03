@@ -159,8 +159,8 @@ uisctrl_unregister_req_handler_ex(uuid_le switch_uuid)
 {
 	int rc = 0;		/* assume failure */
 
-	LOGINF("type=%pUL.\n", &switchTypeGuid);
-	if (req_handler_del(switchTypeGuid) < 0) {
+	LOGINF("type=%pUL.\n", &switch_uuid);
+	if (req_handler_del(switch_uuid) < 0) {
 		LOGERR("failed to remove %pUL from server list\n",
 		       &switch_uuid);
 		return 0;
