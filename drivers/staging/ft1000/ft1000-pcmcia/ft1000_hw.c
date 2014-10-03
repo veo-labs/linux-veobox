@@ -2055,7 +2055,7 @@ struct net_device *init_ft1000_card(struct pcmcia_device *link,
 		flarion_ft1000_cnt--;
 
 		dev_info(&link->dev,
-			 "This driver can not support more than one instance\n");
+			   "This driver can not support more than one instance\n");
 		return NULL;
 	}
 
