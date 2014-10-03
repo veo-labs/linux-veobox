@@ -182,8 +182,8 @@ int WAIT_FOR_IO_CHANNEL(struct spar_io_channel_protocol __iomem  *chanptr)
 }
 
 /* Write the contents of <info> to the ULTRA_VBUS_CHANNEL_PROTOCOL.ChpInfo. */
-static int write_vbus_chp_info(struct spar_vbus_channel_protocol *chan,
-			       struct ultra_vbus_deviceinfo *info)
+static int write_vbus_chpInfo(struct ultra_vbus_channel_protocol *chan,
+			      ULTRA_VBUS_DEVICEINFO *info)
 {
 	int off;
 
@@ -201,8 +201,8 @@ static int write_vbus_chp_info(struct spar_vbus_channel_protocol *chan,
 }
 
 /* Write the contents of <info> to the ULTRA_VBUS_CHANNEL_PROTOCOL.BusInfo. */
-static int write_vbus_bus_info(struct spar_vbus_channel_protocol *chan,
-			       struct ultra_vbus_deviceinfo *info)
+static int write_vbus_busInfo(struct ultra_vbus_channel_protocol *chan,
+			      ULTRA_VBUS_DEVICEINFO *info)
 {
 	int off;
 
@@ -223,8 +223,8 @@ static int write_vbus_bus_info(struct spar_vbus_channel_protocol *chan,
  * ULTRA_VBUS_CHANNEL_PROTOCOL.DevInfo[<devix>].
  */
 static int
-write_vbus_dev_info(struct spar_vbus_channel_protocol *chan,
-		    struct ultra_vbus_deviceinfo *info, int devix)
+write_vbus_devInfo(struct ultra_vbus_channel_protocol *chan,
+		   ULTRA_VBUS_DEVICEINFO *info, int devix)
 {
 	int off;
 

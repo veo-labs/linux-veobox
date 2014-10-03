@@ -43,13 +43,21 @@ static const uuid_le spar_vbus_channel_protocol_uuid =
 * increment this. */
 #define SPAR_VBUS_CHANNEL_PROTOCOL_VERSIONID 1
 
-#define SPAR_VBUS_CHANNEL_OK_CLIENT(ch)       \
-	spar_check_channel_client(ch,				\
-				   spar_vbus_channel_protocol_uuid,	\
-				   "vbus",				\
-				   sizeof(struct spar_vbus_channel_protocol),\
-				   SPAR_VBUS_CHANNEL_PROTOCOL_VERSIONID, \
-				   SPAR_VBUS_CHANNEL_PROTOCOL_SIGNATURE)
+#define ULTRA_VBUS_CHANNEL_OK_CLIENT(pChannel, logCtx)       \
+	(ULTRA_check_channel_client(pChannel,				\
+				    UltraVbusChannelProtocolGuid,	\
+				    "vbus",				\
+				    sizeof(struct ultra_vbus_channel_protocol),\
+				    ULTRA_VBUS_CHANNEL_PROTOCOL_VERSIONID, \
+				    ULTRA_VBUS_CHANNEL_PROTOCOL_SIGNATURE, \
+				    __FILE__, __LINE__, logCtx))
+
+#define ULTRA_VBUS_CHANNEL_OK_SERVER(actualBytes, logCtx)    \
+	(ULTRA_check_channel_server(UltraVbusChannelProtocolGuid,	\
+				    "vbus",				\
+				    sizeof(struct ultra_vbus_channel_protocol),\
+				    actualBytes,			\
+				    __FILE__, __LINE__, logCtx))
 
 #define SPAR_VBUS_CHANNEL_OK_SERVER(actual_bytes)    \
 	(spar_check_channel_server(spar_vbus_channel_protocol_uuid,	\
@@ -72,16 +80,17 @@ struct spar_vbus_headerinfo {
 	u8 reserved[104];
 };
 
-struct spar_vbus_channel_protocol {
-	struct channel_header channel_header;	/* initialized by server */
-	struct spar_vbus_headerinfo hdr_info;	/* initialized by server */
+struct ultra_vbus_channel_protocol {
+	ULTRA_CHANNEL_PROTOCOL ChannelHeader;	/* initialized by server */
+	ULTRA_VBUS_HEADERINFO HdrInfo;	/* initialized by server */
 	/* the remainder of this channel is filled in by the client */
-	struct ultra_vbus_deviceinfo chp_info;
-	/* describes client chipset device and driver */
-	struct ultra_vbus_deviceinfo bus_info;
-	/* describes client bus device and driver */
-	struct ultra_vbus_deviceinfo dev_info[0];
-	/* describes client device and driver for each device on the bus */
+	ULTRA_VBUS_DEVICEINFO ChpInfo;	/* describes client chipset device and
+					 * driver */
+	ULTRA_VBUS_DEVICEINFO BusInfo;	/* describes client bus device and
+					 * driver */
+	ULTRA_VBUS_DEVICEINFO DevInfo[0];	/* describes client device and
+						 * driver for */
+	/* each device on the bus */
 };
 
 #define VBUS_CH_SIZE_EXACT(MAXDEVICES) \
