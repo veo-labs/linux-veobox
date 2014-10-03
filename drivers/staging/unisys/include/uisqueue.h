@@ -34,7 +34,7 @@
 #include "controlvmcompletionstatus.h"
 
 struct uisqueue_info {
-	struct channel_header __iomem *chan;
+	CHANNEL_HEADER __iomem *chan;
 	/* channel containing queues in which scsi commands &
 	 * responses are queued
 	 */
@@ -183,6 +183,7 @@ struct sn_list_entry {
  * IO messages sent to UisnicControlChanFunc & UissdControlChanFunc by
  * code that processes the ControlVm channel messages.
  */
+
 
 enum iopart_msg_type {
 	IOPART_ADD_VNIC,
@@ -372,7 +373,7 @@ struct init_chipset_guestpart {
 };
 
 struct guest_msgs {
-	enum guestpart_msg_type msgtype;
+	GUESTPART_MSG_TYPE msgtype;
 
 	/* additional params needed by messages */
 	union {
