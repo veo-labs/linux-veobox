@@ -904,7 +904,7 @@ int
 uislib_client_inject_add_vhba(u32 bus_no, u32 dev_no,
 			      u64 phys_chan_addr, u32 chan_bytes,
 			      int is_test_addr, uuid_le inst_uuid,
-			      struct InterruptInfo *intr)
+			      struct irq_info *intr)
 {
 	struct controlvm_message msg;
 
@@ -928,9 +928,9 @@ uislib_client_inject_add_vhba(u32 bus_no, u32 dev_no,
 	if (intr)
 		msg.cmd.create_device.intr = *intr;
 	else
-		memset(&msg.cmd.create_device.intr, 0,
+		memset(&msg.cmd.createDevice.intr, 0,
 		       sizeof(struct irq_info));
-	msg.cmd.create_device.channel_addr = phys_chan_addr;
+	msg.cmd.createDevice.channelAddr = phys_chan_addr;
 	if (chan_bytes < MIN_IO_CHANNEL_SIZE) {
 		LOGERR("wrong channel size.chan_bytes = 0x%x IO_CHANNEL_SIZE= 0x%x\n",
 		       chan_bytes, (unsigned int)MIN_IO_CHANNEL_SIZE);
@@ -963,7 +963,7 @@ int
 uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 			      u64 phys_chan_addr, u32 chan_bytes,
 			      int is_test_addr, uuid_le inst_uuid,
-			      struct InterruptInfo *intr)
+			      struct irq_info *intr)
 {
 	struct controlvm_message msg;
 
@@ -987,9 +987,9 @@ uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 	if (intr)
 		msg.cmd.create_device.intr = *intr;
 	else
-		memset(&msg.cmd.create_device.intr, 0,
+		memset(&msg.cmd.createDevice.intr, 0,
 		       sizeof(struct irq_info));
-	msg.cmd.create_device.channel_addr = phys_chan_addr;
+	msg.cmd.createDevice.channelAddr = phys_chan_addr;
 	if (chan_bytes < MIN_IO_CHANNEL_SIZE) {
 		LOGERR("wrong channel size.chan_bytes = 0x%x IO_CHANNEL_SIZE= 0x%x\n",
 		       chan_bytes, (unsigned int)MIN_IO_CHANNEL_SIZE);
@@ -1058,6 +1058,82 @@ uislib_client_inject_del_vnic(u32 bus_no, u32 dev_no)
 	return delete_device_glue(bus_no, dev_no);
 }
 EXPORT_SYMBOL_GPL(uislib_client_inject_del_vnic);
+
+static int
+uislib_client_add_vnic(u32 busNo)
+{
+	BOOL busCreated = FALSE;
+	int devNo = 0;		/* Default to 0, since only one device
+				 * will be created for this bus... */
+	CONTROLVM_MESSAGE msg;
+
+	init_msg_header(&msg, CONTROLVM_BUS_CREATE, 0, 0);
+	msg.hdr.Flags.testMessage = 1;
+	msg.cmd.createBus.busNo = busNo;
+	msg.cmd.createBus.deviceCount = 4;
+	msg.cmd.createBus.channelAddr = 0;
+	msg.cmd.createBus.channelBytes = 0;
+	if (create_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
+		LOGERR("client create_bus failed");
+		return 0;
+	}
+	busCreated = TRUE;
+
+	init_msg_header(&msg, CONTROLVM_DEVICE_CREATE, 0, 0);
+	msg.hdr.Flags.testMessage = 1;
+	msg.cmd.createDevice.busNo = busNo;
+	msg.cmd.createDevice.devNo = devNo;
+	msg.cmd.createDevice.devInstGuid = NULL_UUID_LE;
+	memset(&msg.cmd.createDevice.intr, 0, sizeof(struct irq_info));
+	msg.cmd.createDevice.channelAddr = PhysicalDataChan;
+	msg.cmd.createDevice.channelBytes = MIN_IO_CHANNEL_SIZE;
+	msg.cmd.createDevice.dataTypeGuid = UltraVnicChannelProtocolGuid;
+	if (create_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
+		LOGERR("client create_device failed");
+		goto AwayCleanup;
+	}
+
+	return 1;
+
+AwayCleanup:
+	if (busCreated) {
+		init_msg_header(&msg, CONTROLVM_BUS_DESTROY, 0, 0);
+		msg.hdr.Flags.testMessage = 1;
+		msg.cmd.destroyBus.busNo = busNo;
+		if (destroy_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS)
+			LOGERR("client destroy_bus failed.\n");
+	}
+
+	return 0;
+}				/* end uislib_client_add_vnic */
+EXPORT_SYMBOL_GPL(uislib_client_add_vnic);
+
+static int
+uislib_client_delete_vnic(u32 busNo)
+{
+	int devNo = 0;		/* Default to 0, since only one device
+				 * will be created for this bus... */
+	CONTROLVM_MESSAGE msg;
+
+	init_msg_header(&msg, CONTROLVM_DEVICE_DESTROY, 0, 0);
+	msg.hdr.Flags.testMessage = 1;
+	msg.cmd.destroyDevice.busNo = busNo;
+	msg.cmd.destroyDevice.devNo = devNo;
+	if (destroy_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
+		/* Don't error exit - try to see if bus can be destroyed... */
+		LOGERR("client destroy_device failed.\n");
+	}
+
+	init_msg_header(&msg, CONTROLVM_BUS_DESTROY, 0, 0);
+	msg.hdr.Flags.testMessage = 1;
+	msg.cmd.destroyBus.busNo = busNo;
+	if (destroy_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS)
+		LOGERR("client destroy_bus failed.\n");
+
+	return 1;
+}
+EXPORT_SYMBOL_GPL(uislib_client_delete_vnic);
+/* end client_delete_vnic */
 
 void *
 uislib_cache_alloc(struct kmem_cache *cur_pool, char *fn, int ln)
