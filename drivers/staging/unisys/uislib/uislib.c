@@ -1019,9 +1019,9 @@ uislib_client_inject_pause_vnic(u32 bus_no, u32 dev_no)
 	int rc;
 
 	init_msg_header(&msg, CONTROLVM_DEVICE_CHANGESTATE, 0, 0);
-	msg.cmd.device_change_state.bus_no = bus_no;
-	msg.cmd.device_change_state.dev_no = dev_no;
-	msg.cmd.device_change_state.state = segment_state_standby;
+	msg.cmd.deviceChangeState.busNo = bus_no;
+	msg.cmd.deviceChangeState.devNo = dev_no;
+	msg.cmd.deviceChangeState.state = SegmentStateStandby;
 	rc = pause_device(&msg);
 	if (rc != CONTROLVM_RESP_SUCCESS) {
 		LOGERR("VNIC pause_device failed. busNo=0x%x devNo=0x%x\n",
