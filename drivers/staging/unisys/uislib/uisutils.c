@@ -131,12 +131,12 @@ uisctrl_register_req_handler_ex(uuid_le switch_uuid,
 				&switch_uuid);
 		return 0;
 	}
-	req_handler = req_handler_add(switch_uuid,
-				      switch_type_name,
-				      controlfunc,
-				      min_channel_bytes,
-				      server_channel_ok, server_channel_init);
-	if (!req_handler) {
+	pReqHandlerInfo = req_handler_add(switchTypeGuid,
+					switch_type_name,
+					controlfunc,
+					min_channel_bytes,
+					server_channel_ok, server_channel_init);
+	if (!pReqHandlerInfo) {
 		LOGERR("failed to add %pUL to server list\n", &switch_uuid);
 		return 0;
 	}
@@ -266,7 +266,7 @@ static LIST_HEAD(req_handler_info_list); /* list of struct req_handler_info */
 static DEFINE_SPINLOCK(req_handler_info_list_lock);
 
 struct req_handler_info *
-ReqHandlerAdd(uuid_le switchTypeGuid,
+req_handler_add(uuid_le switch_uuid,
 	      const char *switch_type_name,
 	      int (*controlfunc)(struct io_msgs *),
 	      unsigned long min_channel_bytes,
@@ -280,7 +280,7 @@ ReqHandlerAdd(uuid_le switchTypeGuid,
 	rc = kzalloc(sizeof(*rc), GFP_ATOMIC);
 	if (!rc)
 		return NULL;
-	rc->switch_uuid = switchTypeGuid;
+	rc->switch_uuid = switch_uuid;
 	rc->controlfunc = controlfunc;
 	rc->min_channel_bytes = min_channel_bytes;
 	rc->server_channel_ok = server_channel_ok;
