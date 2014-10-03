@@ -233,7 +233,7 @@ create_bus(struct controlvm_message *msg, char *buf)
 		cmd.add_vbus.dev_count = deviceCount;
 		cmd.add_vbus.bus_uuid = msg->cmd.createBus.busDataTypeGuid;
 		cmd.add_vbus.instance_uuid = msg->cmd.createBus.busInstGuid;
-		if (!VirtControlChanFunc) {
+		if (!virt_control_chan_func) {
 			LOGERR("CONTROLVM_BUS_CREATE Failed: virtpci callback not registered.");
 			POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus->bus_no,
 					 POSTCODE_SEVERITY_ERR);
@@ -765,7 +765,7 @@ init_chipset(struct controlvm_message *msg, char *buf)
 	* from a user.  If no test_message is set, we will wait for the
 	* functions.
 	*/
-	if (!msg->hdr.flags.test_message)
+	if (!msg->hdr.Flags.testMessage)
 		WAIT_ON_CALLBACK(virt_control_chan_func);
 
 	chipset_inited = 1;
