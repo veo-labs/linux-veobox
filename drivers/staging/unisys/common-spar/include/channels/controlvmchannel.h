@@ -143,11 +143,45 @@ struct irq_info {
 };
 
 struct pci_id {
-	u16 domain;
-	u8 bus;
-	u8 slot;
-	u8 func;
-	u8 reserved[3];	/* Natural alignment purposes */
+	u16 Domain;
+	u8 Bus;
+	u8 Slot;
+	u8 Func;
+	u8 Reserved[3];	/* Natural alignment purposes */
+};
+
+struct PciConfigHdr {
+	u16 VendorId;
+	u16 SubSysVendor;
+	u16 DeviceId;
+	u16 SubSysDevice;
+	u32 ClassCode;
+	u32 Reserved;		/* Natural alignment purposes */
+};
+
+struct ScsiId {
+	u32 Bus;
+	u32 Target;
+	u32 Lun;
+	u32 Host; /* Command should ignore this for *
+		   * DiskArrival/RemovalEvents */
+};
+
+struct WWID {
+	u32 wwid1;
+	u32 wwid2;
+};
+
+struct virtDiskInfo  {
+	u32 switchNo;		/* defined by SWITCH_CREATE */
+	u32 externalPortNo;	/* 0 for SAS RAID provided (external)
+				 * virtual disks, 1 for virtual disk
+				 * images, 2 for gold disk images */
+	u16 VirtualDiskIndex;	/* Index of disk descriptor in the
+				 * VirtualDisk segment associated with
+				 * externalPortNo */
+	u16 Reserved1;
+	u32 Reserved2;
 };
 
 struct efi_spar_indication  {
