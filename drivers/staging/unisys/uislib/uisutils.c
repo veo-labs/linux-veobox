@@ -81,11 +81,11 @@ uisctrl_register_req_handler(int type, void *fptr,
 	case 2:
 		if (fptr) {
 			if (!virt_control_chan_func)
-				atomic_inc(&UisUtils_Registered_Services);
+				atomic_inc(&uisutils_registered_services);
 			virt_control_chan_func = fptr;
 		} else {
 			if (virt_control_chan_func)
-				atomic_dec(&UisUtils_Registered_Services);
+				atomic_dec(&uisutils_registered_services);
 			virt_control_chan_func = NULL;
 		}
 		break;
