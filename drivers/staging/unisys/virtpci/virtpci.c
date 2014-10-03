@@ -134,7 +134,7 @@ static struct device virtpci_rootbus_device = {
 };
 
 /* filled in with info about parent chipset driver when we register with it */
-static struct ultra_vbus_deviceinfo chipset_driver_info;
+static struct ultra_vbus_deviceinfo Chipset_DriverInfo;
 
 static const struct sysfs_ops virtpci_driver_sysfs_ops = {
 	.show = virtpci_driver_attr_show,
@@ -149,7 +149,7 @@ static struct virtpci_dev *vpcidev_list_head;
 static DEFINE_RWLOCK(vpcidev_list_lock);
 
 /* filled in with info about this driver, wrt it servicing client busses */
-static struct ultra_vbus_deviceinfo bus_driver_info;
+static struct ultra_vbus_deviceinfo Bus_DriverInfo;
 
 /*****************************************************/
 /* debugfs entries                                   */
@@ -183,7 +183,7 @@ int WAIT_FOR_IO_CHANNEL(struct spar_io_channel_protocol __iomem  *chanptr)
 
 /* Write the contents of <info> to the ULTRA_VBUS_CHANNEL_PROTOCOL.ChpInfo. */
 static int write_vbus_chpInfo(struct ultra_vbus_channel_protocol *chan,
-			      ULTRA_VBUS_DEVICEINFO *info)
+			      struct ultra_vbus_deviceinfo *info)
 {
 	int off;
 
@@ -202,7 +202,7 @@ static int write_vbus_chpInfo(struct ultra_vbus_channel_protocol *chan,
 
 /* Write the contents of <info> to the ULTRA_VBUS_CHANNEL_PROTOCOL.BusInfo. */
 static int write_vbus_busInfo(struct ultra_vbus_channel_protocol *chan,
-			      ULTRA_VBUS_DEVICEINFO *info)
+			      struct ultra_vbus_deviceinfo *info)
 {
 	int off;
 
@@ -224,7 +224,7 @@ static int write_vbus_busInfo(struct ultra_vbus_channel_protocol *chan,
  */
 static int
 write_vbus_devInfo(struct ultra_vbus_channel_protocol *chan,
-		   ULTRA_VBUS_DEVICEINFO *info, int devix)
+		   struct ultra_vbus_deviceinfo *info, int devix)
 {
 	int off;
 
@@ -762,8 +762,8 @@ static void fix_vbus_dev_info(struct device *dev, int dev_no, int dev_type,
 			      struct virtpci_driver *virtpcidrv)
 {
 	struct device *vbus;
-	void *chan;
-	struct ultra_vbus_deviceinfo dev_info;
+	void *pChan;
+	struct ultra_vbus_deviceinfo devInfo;
 	const char *stype;
 
 	if (!dev) {

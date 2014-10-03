@@ -195,10 +195,9 @@ struct visorchipset_busdev_responders {
  *  responses.
  */
 void
-visorchipset_register_busdev_client(
-			struct visorchipset_busdev_notifiers *notifiers,
-			struct visorchipset_busdev_responders *responders,
-			struct ultra_vbus_deviceinfo *driver_info);
+visorchipset_register_busdev_client(VISORCHIPSET_BUSDEV_NOTIFIERS *notifiers,
+				    VISORCHIPSET_BUSDEV_RESPONDERS *responders,
+				    struct ultra_vbus_deviceinfo *driverInfo);
 
 /** Register functions (in the bus driver) to get called by visorchipset
  *  whenever a bus or device appears for which this service partition is
@@ -207,10 +206,9 @@ visorchipset_register_busdev_client(
  *  responses.
  */
 void
-visorchipset_register_busdev_server(
-			struct visorchipset_busdev_notifiers *notifiers,
-			struct visorchipset_busdev_responders *responders,
-			struct ultra_vbus_deviceinfo *driver_info);
+visorchipset_register_busdev_server(VISORCHIPSET_BUSDEV_NOTIFIERS *notifiers,
+				    VISORCHIPSET_BUSDEV_RESPONDERS *responders,
+				    struct ultra_vbus_deviceinfo *driverInfo);
 
 typedef void (*SPARREPORTEVENT_COMPLETE_FUNC) (struct controlvm_message *msg,
 					       int status);
