@@ -837,10 +837,10 @@ uislib_client_inject_add_bus(u32 bus_no, uuid_le inst_uuid,
 	POSTCODE_LINUX_3(BUS_CREATE_ENTRY_PC, bus_no,
 			 POSTCODE_SEVERITY_WARNING);
 	init_msg_header(&msg, CONTROLVM_BUS_CREATE, 0, 0);
-	msg.cmd.create_bus.bus_no = bus_no;
-	msg.cmd.create_bus.dev_count = 23;	/* devNo+1; */
-	msg.cmd.create_bus.channel_addr = channel_addr;
-	msg.cmd.create_bus.channel_bytes = n_channel_bytes;
+	msg.cmd.createBus.busNo = bus_no;
+	msg.cmd.createBus.deviceCount = 23;	/* devNo+1; */
+	msg.cmd.createBus.channelAddr = channel_addr;
+	msg.cmd.createBus.channelBytes = n_channel_bytes;
 	if (create_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
 		LOGERR("create_bus failed.\n");
 		POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus_no,
