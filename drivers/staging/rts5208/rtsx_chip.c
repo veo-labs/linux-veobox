@@ -390,14 +390,10 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 			chip->aspm_level[0] = chip->aspm_l0s_l1_en;
 			if (CHK_SDIO_EXIST(chip)) {
 				chip->aspm_level[1] = chip->aspm_l0s_l1_en;
-				if (CHECK_PID(chip, 0x5288))
-					retval = rtsx_write_cfg_dw(chip, 2,
-							0xC0, 0xFF,
-							chip->aspm_l0s_l1_en);
-				else
-					retval = rtsx_write_cfg_dw(chip, 1,
-							0xC0, 0xFF,
-							chip->aspm_l0s_l1_en);
+				retval = rtsx_write_cfg_dw(chip,
+						CHECK_PID(chip, 0x5288) ? 2 : 1,
+						0xC0, 0xFF,
+						chip->aspm_l0s_l1_en);
 
 				if (retval != STATUS_SUCCESS)
 					TRACE_RET(chip, STATUS_FAIL);
@@ -422,12 +418,9 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 		TRACE_RET(chip, STATUS_FAIL);
 
 	if (CHK_SDIO_EXIST(chip)) {
-		if (CHECK_PID(chip, 0x5288))
-			retval = rtsx_write_cfg_dw(chip, 2, 0xC0,
-						   0xFF00, 0x0100);
-		else
-			retval = rtsx_write_cfg_dw(chip, 1, 0xC0,
-						   0xFF00, 0x0100);
+		retval = rtsx_write_cfg_dw(chip,
+					   CHECK_PID(chip, 0x5288) ? 2 : 1,
+					   0xC0, 0xFF00, 0x0100);
 
 		if (retval != STATUS_SUCCESS)
 			TRACE_RET(chip, STATUS_FAIL);
@@ -1859,12 +1852,8 @@ void rtsx_enable_aspm(struct rtsx_chip *chip)
 		if (CHK_SDIO_EXIST(chip)) {
 			u16 val = chip->aspm_l0s_l1_en | 0x0100;
 
-			if (CHECK_PID(chip, 0x5288))
-				rtsx_write_cfg_dw(chip, 2, 0xC0,
-						  0xFFFF, val);
-			else
-				rtsx_write_cfg_dw(chip, 1, 0xC0,
-						  0xFFFF, val);
+			rtsx_write_cfg_dw(chip, CHECK_PID(chip, 0x5288) ? 2 : 1,
+					  0xC0, 0xFFF, val);
 		}
 	}
 }
