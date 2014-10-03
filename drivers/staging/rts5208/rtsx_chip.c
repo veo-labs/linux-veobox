@@ -396,7 +396,6 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 
 				if (retval != STATUS_SUCCESS)
 					TRACE_RET(chip, STATUS_FAIL);
-
 			}
 
 			chip->aspm_enabled = 1;
@@ -440,9 +439,53 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 
 	RTSX_WRITE_REG(chip, PERST_GLITCH_WIDTH, 0xFF, 0x80);
 
-	retval = rtsx_enable_pcie_intr(chip);
-	if (retval != STATUS_SUCCESS)
-		TRACE_RET(chip, STATUS_FAIL);
+	/* Enable PCIE interrupt */
+	if (chip->asic_code) {
+		if (CHECK_PID(chip, 0x5208)) {
+			if (chip->phy_debug_mode) {
+				RTSX_WRITE_REG(chip, CDRESUMECTL, 0x77, 0);
+				rtsx_disable_bus_int(chip);
+			} else {
+				rtsx_enable_bus_int(chip);
+			}
+
+			if (chip->ic_version >= IC_VER_D) {
+				u16 reg;
+
+				retval = rtsx_read_phy_register(chip, 0x00,
+								&reg);
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+
+				reg &= 0xFE7F;
+				reg |= 0x80;
+				retval = rtsx_write_phy_register(chip, 0x00,
+								reg);
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+
+				retval = rtsx_read_phy_register(chip, 0x1C,
+								&reg);
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+
+				reg &= 0xFFF7;
+				retval = rtsx_write_phy_register(chip, 0x1C,
+								reg);
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+			}
+
+			if (chip->driver_first_load &&
+				(chip->ic_version < IC_VER_C))
+				rtsx_calibration(chip);
+
+		} else {
+			rtsx_enable_bus_int(chip);
+		}
+	} else {
+		rtsx_enable_bus_int(chip);
+	}
 
 	chip->need_reset = 0;
 
@@ -982,10 +1025,8 @@ void rtsx_polling_func(struct rtsx_chip *chip)
 
 			turn_off_led(chip, LED_GPIO);
 
-			if (chip->auto_power_down && !chip->card_ready &&
-			    !chip->sd_io)
-				rtsx_force_power_down(chip,
-						      SSC_PDCTL | OC_PDCTL);
+			if (chip->auto_power_down && !chip->card_ready && !chip->sd_io)
+				rtsx_force_power_down(chip, SSC_PDCTL | OC_PDCTL);
 		}
 	}
 
