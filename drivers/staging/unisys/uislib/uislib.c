@@ -193,8 +193,8 @@ create_bus(struct controlvm_message *msg, char *buf)
 	sprintf(bus->name, "%d", (int)bus->bus_no);
 	bus->device_count = dev_count;
 	bus->device =
-	    (struct device_info **)((char *)bus + sizeof(struct bus_info));
-	bus->bus_inst_uuid = msg->cmd.create_bus.bus_inst_uuid;
+	    (struct device_info **) ((char *) bus + sizeof(struct bus_info));
+	bus->bus_inst_uuid = msg->cmd.createBus.busInstGuid;
 	bus->bus_channel_bytes = 0;
 	bus->bus_channel = NULL;
 
@@ -216,24 +216,24 @@ create_bus(struct controlvm_message *msg, char *buf)
 		kfree(bus);
 		return CONTROLVM_RESP_ERROR_ALREADY_DONE;
 	}
-	if ((msg->cmd.create_bus.channel_addr != 0) &&
-	    (msg->cmd.create_bus.channel_bytes != 0)) {
-		bus->bus_channel_bytes = msg->cmd.create_bus.channel_bytes;
+	if ((msg->cmd.createBus.channelAddr != 0)
+	    && (msg->cmd.createBus.channelBytes != 0)) {
+		bus->bus_channel_bytes = msg->cmd.createBus.channelBytes;
 		bus->bus_channel =
-		    init_vbus_channel(msg->cmd.create_bus.channel_addr,
-				      msg->cmd.create_bus.channel_bytes);
+		    init_vbus_channel(msg->cmd.createBus.channelAddr,
+				      msg->cmd.createBus.channelBytes);
 	}
 	/* the msg is bound for virtpci; send guest_msgs struct to callback */
 	if (!msg->hdr.flags.server) {
 		struct guest_msgs cmd;
 
 		cmd.msgtype = GUEST_ADD_VBUS;
-		cmd.add_vbus.bus_no = bus_no;
+		cmd.add_vbus.busNo = busNo;
 		cmd.add_vbus.chanptr = bus->bus_channel;
-		cmd.add_vbus.dev_count = dev_count;
-		cmd.add_vbus.bus_uuid = msg->cmd.create_bus.bus_data_type_uuid;
-		cmd.add_vbus.instance_uuid = msg->cmd.create_bus.bus_inst_uuid;
-		if (!virt_control_chan_func) {
+		cmd.add_vbus.deviceCount = deviceCount;
+		cmd.add_vbus.busTypeGuid = msg->cmd.createBus.busDataTypeGuid;
+		cmd.add_vbus.busInstGuid = msg->cmd.createBus.busInstGuid;
+		if (!VirtControlChanFunc) {
 			LOGERR("CONTROLVM_BUS_CREATE Failed: virtpci callback not registered.");
 			POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus->bus_no,
 					 POSTCODE_SEVERITY_ERR);
