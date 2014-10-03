@@ -370,9 +370,37 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 
 	/* Enable ASPM */
 	if (chip->aspm_l0s_l1_en) {
-		retval = rtsx_reset_aspm(chip);
-		if (retval != STATUS_SUCCESS)
-			TRACE_RET(chip, STATUS_FAIL);
+		if (chip->dynamic_aspm) {
+			if (CHK_SDIO_EXIST(chip) && CHECK_PID(chip, 0x5288)) {
+				retval = rtsx_write_cfg_dw(chip, 2, 0xC0, 0xFF, chip->aspm_l0s_l1_en);
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+			}
+		} else {
+			if (CHECK_PID(chip, 0x5208))
+				RTSX_WRITE_REG(chip, ASPM_FORCE_CTL,
+					0xFF, 0x3F);
+
+			retval = rtsx_write_config_byte(chip, LCTLR,
+							chip->aspm_l0s_l1_en);
+			if (retval != STATUS_SUCCESS)
+				TRACE_RET(chip, STATUS_FAIL);
+
+			chip->aspm_level[0] = chip->aspm_l0s_l1_en;
+			if (CHK_SDIO_EXIST(chip)) {
+				chip->aspm_level[1] = chip->aspm_l0s_l1_en;
+				if (CHECK_PID(chip, 0x5288))
+					retval = rtsx_write_cfg_dw(chip, 2, 0xC0, 0xFF, chip->aspm_l0s_l1_en);
+				else
+					retval = rtsx_write_cfg_dw(chip, 1, 0xC0, 0xFF, chip->aspm_l0s_l1_en);
+
+				if (retval != STATUS_SUCCESS)
+					TRACE_RET(chip, STATUS_FAIL);
+
+			}
+
+			chip->aspm_enabled = 1;
+		}
 	} else {
 		if (chip->asic_code && CHECK_PID(chip, 0x5208)) {
 			retval = rtsx_write_phy_register(chip, 0x07, 0x0129);
@@ -1771,17 +1799,21 @@ void rtsx_enable_aspm(struct rtsx_chip *chip)
 			rtsx_write_phy_register(chip, 0x07, 0);
 		if (CHECK_PID(chip, 0x5208)) {
 			rtsx_write_register(chip, ASPM_FORCE_CTL, 0xF3,
-					    0x30 | chip->aspm_level[0]);
+				0x30 | chip->aspm_level[0]);
 		} else {
 			rtsx_write_config_byte(chip, LCTLR,
-					       chip->aspm_l0s_l1_en);
+					chip->aspm_l0s_l1_en);
 		}
 
 		if (CHK_SDIO_EXIST(chip)) {
 			u16 val = chip->aspm_l0s_l1_en | 0x0100;
 
-			rtsx_write_cfg_dw(chip, CHECK_PID(chip, 0x5288) ? 2 : 1,
-					  0xC0, 0xFFF, val);
+			if (CHECK_PID(chip, 0x5288))
+				rtsx_write_cfg_dw(chip, 2, 0xC0,
+						0xFFFF, val);
+			else
+				rtsx_write_cfg_dw(chip, 1, 0xC0,
+					0xFFFF, val);
 		}
 	}
 }
@@ -1799,7 +1831,7 @@ void rtsx_disable_aspm(struct rtsx_chip *chip)
 			rtsx_write_phy_register(chip, 0x07, 0x0129);
 		if (CHECK_PID(chip, 0x5208))
 			rtsx_write_register(chip, ASPM_FORCE_CTL,
-					    0xF3, 0x30);
+					0xF3, 0x30);
 		else
 			rtsx_write_config_byte(chip, LCTLR, 0x00);
 
