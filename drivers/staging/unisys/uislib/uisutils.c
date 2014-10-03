@@ -104,14 +104,15 @@ EXPORT_SYMBOL_GPL(uisctrl_register_req_handler);
 
 int
 uisctrl_register_req_handler_ex(uuid_le switch_uuid,
-			const char *switch_type_name,
-			int (*controlfunc)(struct io_msgs *),
-			unsigned long min_channel_bytes,
-			int (*server_channel_ok)(unsigned long channel_bytes),
-			int (*server_channel_init)(void *x,
+				const char *switch_type_name,
+				int (*controlfunc)(struct io_msgs *),
+				unsigned long min_channel_bytes,
+				int (*server_channel_ok)(unsigned long
+							  channel_bytes),
+				int (*server_channel_init)(void *x,
 						unsigned char *client_str,
 						u32 client_str_len, u64 bytes),
-			struct ultra_vbus_deviceinfo *chipset_driver_info)
+				ULTRA_VBUS_DEVICEINFO *chipset_driver_info)
 {
 	struct req_handler_info *req_handler;
 
@@ -131,7 +132,7 @@ uisctrl_register_req_handler_ex(uuid_le switch_uuid,
 				&switch_uuid);
 		return 0;
 	}
-	pReqHandlerInfo = req_handler_add(switchTypeGuid,
+	pReqHandlerInfo = req_handler_add(switch_uuid,
 					switch_type_name,
 					controlfunc,
 					min_channel_bytes,
