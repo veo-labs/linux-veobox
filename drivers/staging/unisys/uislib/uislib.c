@@ -963,7 +963,7 @@ int
 uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 			      u64 phys_chan_addr, u32 chan_bytes,
 			      int is_test_addr, uuid_le inst_uuid,
-			      struct irq_info *intr)
+			      struct InterruptInfo *intr)
 {
 	struct controlvm_message msg;
 
@@ -980,10 +980,10 @@ uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 		/* signify that the physical channel address does NOT
 		 * need to be ioremap()ed
 		 */
-		msg.hdr.flags.test_message = 1;
-	msg.cmd.create_device.bus_no = bus_no;
-	msg.cmd.create_device.dev_no = dev_no;
-	msg.cmd.create_device.dev_inst_uuid = inst_uuid;
+		msg.hdr.Flags.testMessage = 1;
+	msg.cmd.createDevice.busNo = bus_no;
+	msg.cmd.createDevice.devNo = dev_no;
+	msg.cmd.createDevice.devInstGuid = inst_uuid;
 	if (intr)
 		msg.cmd.create_device.intr = *intr;
 	else
