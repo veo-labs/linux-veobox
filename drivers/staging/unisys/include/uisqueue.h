@@ -184,7 +184,6 @@ struct sn_list_entry {
  * code that processes the ControlVm channel messages.
  */
 
-
 enum iopart_msg_type {
 	IOPART_ADD_VNIC,
 	IOPART_DEL_VNIC,
@@ -373,7 +372,7 @@ struct init_chipset_guestpart {
 };
 
 struct guest_msgs {
-	GUESTPART_MSG_TYPE msgtype;
+	enum guestpart_msg_type msgtype;
 
 	/* additional params needed by messages */
 	union {
