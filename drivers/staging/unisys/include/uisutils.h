@@ -54,8 +54,8 @@ extern int (*virt_control_chan_func)(struct guest_msgs *);
 #define CCF_PENDING      2	/* operation still pending */
 extern atomic_t uisutils_registered_services;
 
-struct req_handler_info {
-	uuid_le switch_uuid;
+typedef struct ReqHandlerInfo_struct {
+	uuid_le switchTypeGuid;
 	int (*controlfunc)(struct io_msgs *);
 	unsigned long min_channel_bytes;
 	int (*server_channel_ok)(unsigned long channel_bytes);
@@ -132,11 +132,16 @@ unsigned char *util_map_virt(struct phys_info *sg);
 void util_unmap_virt(struct phys_info *sg);
 unsigned char *util_map_virt_atomic(struct phys_info *sg);
 void util_unmap_virt_atomic(void *buf);
-int uislib_client_inject_add_bus(u32 bus_no, uuid_le inst_uuid,
-				 u64 channel_addr, ulong n_channel_bytes);
-int  uislib_client_inject_del_bus(u32 bus_no);
+int uislib_server_inject_add_vnic(u32 switchNo, u32 BusNo, u32 numIntPorts,
+				  u32 numExtPorts, u8 *pmac[ETH_ALEN],
+				  pCHANNEL_HEADER **chan);
+void uislib_server_inject_del_vnic(u32 switchNo, u32 busNo, u32 numIntPorts,
+				   u32 numExtPorts);
+int uislib_client_inject_add_bus(u32 busNo, uuid_le instGuid,
+				 u64 channelAddr, ulong nChannelBytes);
+int  uislib_client_inject_del_bus(u32 busNo);
 
-int uislib_client_inject_add_vhba(u32 bus_no, u32 dev_no,
+int uislib_client_inject_add_vhba(u32 busNo, u32 devNo,
 				  u64 phys_chan_addr, u32 chan_bytes,
 				  int is_test_addr, uuid_le inst_uuid,
 				  struct irq_info *intr);
