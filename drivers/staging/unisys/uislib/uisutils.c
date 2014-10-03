@@ -156,8 +156,10 @@ EXPORT_SYMBOL_GPL(uisctrl_register_req_handler_ex);
 int
 uisctrl_unregister_req_handler_ex(uuid_le switch_uuid)
 {
-	LOGINF("type=%pUL.\n", &switch_uuid);
-	if (req_handler_del(switch_uuid) < 0) {
+	int rc = 0;		/* assume failure */
+
+	LOGINF("type=%pUL.\n", &switchTypeGuid);
+	if (req_handler_del(switchTypeGuid) < 0) {
 		LOGERR("failed to remove %pUL from server list\n",
 		       &switch_uuid);
 		return 0;
@@ -323,7 +325,7 @@ req_handler_del(uuid_le switch_uuid)
 	spin_lock(&req_handler_info_list_lock);
 	list_for_each_safe(lelt, tmp, &req_handler_info_list) {
 		entry = list_entry(lelt, struct req_handler_info, list_link);
-		if (uuid_le_cmp(entry->switch_uuid, switchTypeGuid) == 0) {
+		if (uuid_le_cmp(entry->switch_uuid, switch_uuid) == 0) {
 			list_del(lelt);
 			kfree(entry);
 			rc++;
