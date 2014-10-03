@@ -266,7 +266,7 @@ static LIST_HEAD(req_handler_info_list); /* list of struct req_handler_info */
 static DEFINE_SPINLOCK(req_handler_info_list_lock);
 
 struct req_handler_info *
-req_handler_add(uuid_le switch_uuid,
+ReqHandlerAdd(uuid_le switchTypeGuid,
 	      const char *switch_type_name,
 	      int (*controlfunc)(struct io_msgs *),
 	      unsigned long min_channel_bytes,
@@ -296,7 +296,7 @@ req_handler_add(uuid_le switch_uuid,
 }
 
 struct req_handler_info *
-req_handler_find(uuid_le switch_uuid)
+ReqHandlerFind(uuid_le switchTypeGuid)
 {
 	struct list_head *lelt, *tmp;
 	struct req_handler_info *entry = NULL;
@@ -304,8 +304,8 @@ req_handler_find(uuid_le switch_uuid)
 	spin_lock(&req_handler_info_list_lock);
 	list_for_each_safe(lelt, tmp, &req_handler_info_list) {
 		entry = list_entry(lelt, struct req_handler_info, list_link);
-		if (uuid_le_cmp(entry->switch_uuid, switch_uuid) == 0) {
-			spin_unlock(&req_handler_info_list_lock);
+		if (uuid_le_cmp(entry->switchTypeGuid, switchTypeGuid) == 0) {
+			spin_unlock(&ReqHandlerInfo_list_lock);
 			return entry;
 		}
 	}
@@ -323,7 +323,7 @@ req_handler_del(uuid_le switch_uuid)
 	spin_lock(&req_handler_info_list_lock);
 	list_for_each_safe(lelt, tmp, &req_handler_info_list) {
 		entry = list_entry(lelt, struct req_handler_info, list_link);
-		if (uuid_le_cmp(entry->switch_uuid, switch_uuid) == 0) {
+		if (uuid_le_cmp(entry->switchTypeGuid, switchTypeGuid) == 0) {
 			list_del(lelt);
 			kfree(entry);
 			rc++;
