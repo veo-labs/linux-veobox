@@ -71,11 +71,11 @@ struct spar_vbus_headerinfo {
 	u32 device_info_struct_bytes;	/* sizeof(ULTRA_VBUS_DEVICEINFO) */
 	u32 dev_info_count;	/* num of items in DevInfo member */
 	/* (this is the allocated size) */
-	u32 chp_info_offset;	/* byte offset from beginning of this struct */
+	u32 chpInfoByteOffset;	/* byte offset from beginning of this struct */
 	/* to the ChpInfo struct (below) */
-	u32 bus_info_offset;	/* byte offset from beginning of this struct */
+	u32 busInfoByteOffset;	/* byte offset from beginning of this struct */
 	/* to the BusInfo struct (below) */
-	u32 dev_info_offset;	/* byte offset from beginning of this struct */
+	u32 devInfoByteOffset;	/* byte offset from beginning of this struct */
 	/* to the DevInfo array (below) */
 	u8 reserved[104];
 };
