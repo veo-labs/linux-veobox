@@ -1733,25 +1733,30 @@ vt6655_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
 				continue;
 			}
 
-			if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
-				/* This is IO */
+		if (!(pDevice->flags & DEVICE_FLAGS_OPENED)) {
+			rc = -EFAULT;
+			break;
+		}
+		rc = 0;
+		pReq = (PSCmdRequest)rq;
+		pReq->wResult = MAGIC_CODE;
+		break;
 
 				len = bar & (PCI_BASE_ADDRESS_IO_MASK & 0xffff);
 				len = len & ~(len - 1);
 
-				dev_dbg(&pcid->dev,
-					"IO space:  len in IO %x, BAR %d\n",
-					len, i);
-			} else {
-				len = bar & 0xfffffff0;
-				len = ~len + 1;
-
-				dev_dbg(&pcid->dev,
-					"len in MEM %x, BAR %d\n", len, i);
-			}
-		}
-	}
+#ifdef SndEvt_ToAPI
+		if ((((PSCmdRequest)rq)->wCmdCode != WLAN_CMD_SET_EVT) &&
+		    !(pDevice->flags & DEVICE_FLAGS_OPENED))
+#else
+			if (!(pDevice->flags & DEVICE_FLAGS_OPENED) &&
+			    (((PSCmdRequest)rq)->wCmdCode != WLAN_CMD_SET_WPA))
 #endif
+			{
+				rc = -EFAULT;
+				break;
+			}
+			rc = 0;
 
 	priv->PortOffset = ioremap(priv->memaddr & PCI_BASE_ADDRESS_MEM_MASK,
 				   priv->io_size);
