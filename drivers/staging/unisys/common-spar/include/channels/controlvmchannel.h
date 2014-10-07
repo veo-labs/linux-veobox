@@ -329,14 +329,14 @@ struct controlvm_message_packet  {
 			u32 dev_no;	/* bus-relative (0..n-1) device # */
 		} reconfigure_device;	/* for CONTROLVM_DEVICE_RECONFIGURE */
 		struct  {
-			u32 bus_no;
-			struct spar_segment_state state;
+			u32 busNo;
+			struct ultra_segment_state state;
 			u8 reserved[2];	/* Natural alignment purposes */
 		} bus_change_state;	/* for CONTROLVM_BUS_CHANGESTATE */
 		struct  {
-			u32 bus_no;
-			u32 dev_no;
-			struct spar_segment_state state;
+			u32 busNo;
+			u32 devNo;
+			struct ultra_segment_state state;
 			struct  {
 				u32 phys_device:1;	/* =1 if message is for
 							 * a physical device */
@@ -344,9 +344,9 @@ struct controlvm_message_packet  {
 			u8 reserved[2];	/* Natural alignment purposes */
 		} device_change_state;	/* for CONTROLVM_DEVICE_CHANGESTATE */
 		struct  {
-			u32 bus_no;
-			u32 dev_no;
-			struct spar_segment_state state;
+			u32 busNo;
+			u32 devNo;
+			struct ultra_segment_state state;
 			u8 reserved[6];	/* Natural alignment purposes */
 		} device_change_state_event;
 			/* for CONTROLVM_DEVICE_CHANGESTATE_EVENT */

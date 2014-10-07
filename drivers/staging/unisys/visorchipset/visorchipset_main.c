@@ -343,14 +343,13 @@ static struct platform_device Visorchipset_platform_device = {
 };
 
 /* Function prototypes */
-static void controlvm_respond(struct controlvm_message_header *msgHdr,
-			      int response);
-static void controlvm_respond_chipset_init(
-		struct controlvm_message_header *msgHdr, int response,
-		enum ultra_chipset_feature features);
+static void controlvm_respond(CONTROLVM_MESSAGE_HEADER *msgHdr, int response);
+static void controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr,
+					   int response,
+					   ULTRA_CHIPSET_FEATURE features);
 static void controlvm_respond_physdev_changestate(
-		struct controlvm_message_header *msgHdr, int response,
-		struct spar_segment_state state);
+			CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
+			struct ultra_segment_state state);
 
 static ssize_t toolaction_show(struct device *dev,
 			       struct device_attribute *attr,
@@ -743,9 +742,10 @@ controlvm_respond_chipset_init(struct controlvm_message_header *msgHdr,
 	}
 }
 
-static void controlvm_respond_physdev_changestate(
-		struct controlvm_message_header *msgHdr, int response,
-		struct spar_segment_state state)
+static void
+controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *msgHdr,
+				      int response, struct ultra_segment_state
+				      state)
 {
 	struct controlvm_message outmsg;
 
@@ -863,7 +863,7 @@ bus_responder(enum controlvm_id cmdId, ulong busNo, int response)
 static void
 device_changestate_responder(enum controlvm_id cmdId,
 			     ulong busNo, ulong devNo, int response,
-			     struct spar_segment_state responseState)
+			     struct ultra_segment_state responseState)
 {
 	struct visorchipset_device_info *p = NULL;
 	struct controlvm_message outmsg;
@@ -998,8 +998,8 @@ bus_epilog(u32 busNo,
 }
 
 static void
-device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
-	      struct controlvm_message_header *msgHdr, int response,
+device_epilog(u32 busNo, u32 devNo, struct ultra_segment_state state, u32 cmd,
+	      CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
 	      BOOL needResponse, BOOL for_visorbus)
 {
 	struct visorchipset_busdev_notifiers *notifiers = NULL;
@@ -1311,11 +1311,11 @@ Away:
 static void
 my_device_changestate(struct controlvm_message *inmsg)
 {
-	struct controlvm_message_packet *cmd = &inmsg->cmd;
-	ulong busNo = cmd->device_change_state.bus_no;
-	ulong devNo = cmd->device_change_state.dev_no;
-	struct spar_segment_state state = cmd->device_change_state.state;
-	struct visorchipset_device_info *pDevInfo = NULL;
+	CONTROLVM_MESSAGE_PACKET *cmd = &inmsg->cmd;
+	ulong busNo = cmd->deviceChangeState.busNo;
+	ulong devNo = cmd->deviceChangeState.devNo;
+	struct ultra_segment_state state = cmd->deviceChangeState.state;
+	VISORCHIPSET_DEVICE_INFO *pDevInfo = NULL;
 	int rc = CONTROLVM_RESP_SUCCESS;
 
 	pDevInfo = finddevice(&DevInfoList, busNo, devNo);
