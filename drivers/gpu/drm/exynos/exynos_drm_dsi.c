@@ -1645,7 +1645,7 @@ static int exynos_dsi_bind(struct device *dev, struct device *master,
 				void *data)
 {
 	struct exynos_drm_display *display = dev_get_drvdata(dev);
-	struct exynos_dsi *dsi = display->ctx;
+	struct exynos_dsi *dsi = display_to_dsi(display);
 	struct drm_device *drm_dev = data;
 	int ret;
 
@@ -1663,7 +1663,7 @@ static void exynos_dsi_unbind(struct device *dev, struct device *master,
 				void *data)
 {
 	struct exynos_drm_display *display = dev_get_drvdata(dev);
-	struct exynos_dsi *dsi = display->ctx;
+	struct exynos_dsi *dsi = display_to_dsi(display);
 
 	exynos_dsi_dpms(display, DRM_MODE_DPMS_OFF);
 
@@ -1764,8 +1764,6 @@ static int exynos_dsi_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to request dsi irq\n");
 		goto err_del_component;
 	}
-
-	dsi->display.ctx = dsi;
 
 	platform_set_drvdata(pdev, &dsi->display);
 
