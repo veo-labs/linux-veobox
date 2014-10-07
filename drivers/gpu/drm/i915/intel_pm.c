@@ -3803,26 +3803,21 @@ ilk_update_sprite_wm(struct drm_plane *plane,
 		     uint32_t sprite_width, uint32_t sprite_height,
 		     int pixel_size, bool enabled, bool scaled)
 {
-	struct drm_device *dev = plane->dev;
-	struct intel_plane *intel_plane = to_intel_plane(plane);
+	if (IS_VALLEYVIEW(dev)) {
+		if (mode & (GEN7_RC_CTL_TO_MODE | GEN6_RC_CTL_EI_MODE(1)))
+			mode = GEN6_RC_CTL_RC6_ENABLE;
+		else
+			mode = 0;
+	}
+	if (HAS_RC6p(dev))
+		DRM_DEBUG_KMS("Enabling RC6 states: RC6 %s RC6p %s RC6pp %s\n",
+			      (mode & GEN6_RC_CTL_RC6_ENABLE) ? "on" : "off",
+			      (mode & GEN6_RC_CTL_RC6p_ENABLE) ? "on" : "off",
+			      (mode & GEN6_RC_CTL_RC6pp_ENABLE) ? "on" : "off");
 
-	intel_plane->wm.enabled = enabled;
-	intel_plane->wm.scaled = scaled;
-	intel_plane->wm.horiz_pixels = sprite_width;
-	intel_plane->wm.vert_pixels = sprite_width;
-	intel_plane->wm.bytes_per_pixel = pixel_size;
-
-	/*
-	 * IVB workaround: must disable low power watermarks for at least
-	 * one frame before enabling scaling.  LP watermarks can be re-enabled
-	 * when scaling is disabled.
-	 *
-	 * WaCxSRDisabledForSpriteScaling:ivb
-	 */
-	if (IS_IVYBRIDGE(dev) && scaled && ilk_disable_lp_wm(dev))
-		intel_wait_for_vblank(dev, intel_plane->pipe);
-
-	ilk_update_wm(crtc);
+	else
+		DRM_DEBUG_KMS("Enabling RC6 states: RC6 %s\n",
+			      (mode & GEN6_RC_CTL_RC6_ENABLE) ? "on" : "off");
 }
 
 static void skl_pipe_wm_active_state(uint32_t val,
@@ -3880,7 +3875,11 @@ static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 	int level, i, max_level;
 	uint32_t temp;
 
-	max_level = ilk_wm_max_level(dev);
+		if (HAS_RC6p(dev))
+			mask = INTEL_RC6_ENABLE | INTEL_RC6p_ENABLE |
+			       INTEL_RC6pp_ENABLE;
+		else
+			mask = INTEL_RC6_ENABLE;
 
 	hw->wm_linetime[pipe] = I915_READ(PIPE_WM_LINETIME(pipe));
 
