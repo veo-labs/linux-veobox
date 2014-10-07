@@ -1010,6 +1010,10 @@ tegra_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	 */
 	scdiv = ((8 * state->mul) / (state->div * state->lanes)) - 2;
 
+	err = tegra_dsi_set_phy_timing(dsi);
+	if (err < 0)
+		return err;
+
 	return 0;
 }
 
