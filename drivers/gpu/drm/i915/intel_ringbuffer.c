@@ -674,8 +674,7 @@ err:
 	return ret;
 }
 
-static int intel_ring_workarounds_emit(struct intel_engine_cs *ring,
-				       struct intel_context *ctx)
+static int intel_ring_workarounds_emit(struct intel_engine_cs *ring)
 {
 	int ret, i;
 	struct drm_device *dev = ring->dev;
@@ -690,16 +689,15 @@ static int intel_ring_workarounds_emit(struct intel_engine_cs *ring,
 	if (ret)
 		return ret;
 
-	ret = intel_ring_begin(ring, (w->count * 2 + 2));
+	ret = intel_ring_begin(ring, w->count * 3);
 	if (ret)
 		return ret;
 
-	intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(w->count));
 	for (i = 0; i < w->count; i++) {
+		intel_ring_emit(ring, MI_LOAD_REGISTER_IMM(1));
 		intel_ring_emit(ring, w->reg[i].addr);
 		intel_ring_emit(ring, w->reg[i].value);
 	}
-	intel_ring_emit(ring, MI_NOOP);
 
 	intel_ring_advance(ring);
 
@@ -730,7 +728,7 @@ static int intel_rcs_ctx_init(struct intel_engine_cs *ring,
 }
 
 static int wa_add(struct drm_i915_private *dev_priv,
-		  const u32 addr, const u32 mask, const u32 val)
+		  const u32 addr, const u32 val, const u32 mask)
 {
 	const u32 idx = dev_priv->workarounds.count;
 
@@ -746,25 +744,22 @@ static int wa_add(struct drm_i915_private *dev_priv,
 	return 0;
 }
 
-#define WA_REG(addr, mask, val) { \
-		const int r = wa_add(dev_priv, (addr), (mask), (val)); \
+#define WA_REG(addr, val, mask) { \
+		const int r = wa_add(dev_priv, (addr), (val), (mask)); \
 		if (r) \
 			return r; \
 	}
 
 #define WA_SET_BIT_MASKED(addr, mask) \
-	WA_REG(addr, (mask), _MASKED_BIT_ENABLE(mask))
+	WA_REG(addr, _MASKED_BIT_ENABLE(mask), (mask) & 0xffff)
 
 #define WA_CLR_BIT_MASKED(addr, mask) \
-	WA_REG(addr, (mask), _MASKED_BIT_DISABLE(mask))
+	WA_REG(addr, _MASKED_BIT_DISABLE(mask), (mask) & 0xffff)
 
-#define WA_SET_FIELD_MASKED(addr, mask, value) \
-	WA_REG(addr, mask, _MASKED_FIELD(mask, value))
+#define WA_SET_BIT(addr, mask) WA_REG(addr, I915_READ(addr) | (mask), mask)
+#define WA_CLR_BIT(addr, mask) WA_REG(addr, I915_READ(addr) & ~(mask), mask)
 
-#define WA_SET_BIT(addr, mask) WA_REG(addr, mask, I915_READ(addr) | (mask))
-#define WA_CLR_BIT(addr, mask) WA_REG(addr, mask, I915_READ(addr) & ~(mask))
-
-#define WA_WRITE(addr, val) WA_REG(addr, 0xffffffff, val)
+#define WA_WRITE(addr, val) WA_REG(addr, val, 0xffffffff)
 
 static int bdw_init_workarounds(struct intel_engine_cs *ring)
 {
@@ -773,13 +768,13 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 
 	/* WaDisablePartialInstShootdown:bdw */
 	/* WaDisableThreadStallDopClockGating:bdw (pre-production) */
-	intel_ring_emit_wa(ring, GEN8_ROW_CHICKEN,
-			   _MASKED_BIT_ENABLE(PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE
-					     | STALL_DOP_GATING_DISABLE));
+	WA_SET_BIT_MASKED(GEN8_ROW_CHICKEN,
+			  PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE |
+			  STALL_DOP_GATING_DISABLE);
 
 	/* WaDisableDopClockGating:bdw */
-	intel_ring_emit_wa(ring, GEN7_ROW_CHICKEN2,
-			   _MASKED_BIT_ENABLE(DOP_CLOCK_GATING_DISABLE));
+	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2,
+			  DOP_CLOCK_GATING_DISABLE);
 
 	WA_SET_BIT_MASKED(HALF_SLICE_CHICKEN3,
 			  GEN8_SAMPLER_POWER_BYPASS_DIS);
@@ -791,11 +786,9 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 	/* WaForceEnableNonCoherent:bdw */
 	/* WaHdcDisableFetchWhenMasked:bdw */
 	/* WaDisableFenceDestinationToSLM:bdw (GT3 pre-production) */
-	intel_ring_emit_wa(ring, HDC_CHICKEN0,
-			   _MASKED_BIT_ENABLE(HDC_FORCE_NON_COHERENT |
-					      (IS_BDW_GT3(dev) ?
-					       HDC_FENCE_DEST_SLM_DISABLE : 0)
-				   ));
+	WA_SET_BIT_MASKED(HDC_CHICKEN0,
+			  HDC_FORCE_NON_COHERENT |
+			  (IS_BDW_GT3(dev) ? HDC_FENCE_DEST_SLM_DISABLE : 0));
 
 	/* From the Haswell PRM, Command Reference: Registers, CACHE_MODE_0:
 	 * "The Hierarchical Z RAW Stall Optimization allows non-overlapping
@@ -819,9 +812,8 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 	 * disable bit, which we don't touch here, but it's good
 	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
 	 */
-	WA_SET_FIELD_MASKED(GEN7_GT_MODE,
-			    GEN6_WIZ_HASHING_MASK,
-			    GEN6_WIZ_HASHING_16x4);
+	WA_SET_BIT_MASKED(GEN7_GT_MODE,
+			  GEN6_WIZ_HASHING_MASK | GEN6_WIZ_HASHING_16x4);
 
 	return 0;
 }
@@ -832,20 +824,20 @@ static int chv_init_workarounds(struct intel_engine_cs *ring)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	/* WaDisablePartialInstShootdown:chv */
+	WA_SET_BIT_MASKED(GEN8_ROW_CHICKEN,
+		  PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE);
+
 	/* WaDisableThreadStallDopClockGating:chv */
 	WA_SET_BIT_MASKED(GEN8_ROW_CHICKEN,
-			  PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE |
-			  STALL_DOP_GATING_DISABLE);
+		  STALL_DOP_GATING_DISABLE);
 
-	/* Use Force Non-Coherent whenever executing a 3D context. This is a
-	 * workaround for a possible hang in the unlikely event a TLB
-	 * invalidation occurs during a PSD flush.
-	 */
-	/* WaForceEnableNonCoherent:chv */
-	/* WaHdcDisableFetchWhenMasked:chv */
-	WA_SET_BIT_MASKED(HDC_CHICKEN0,
-			  HDC_FORCE_NON_COHERENT |
-			  HDC_DONOT_FETCH_MEM_WHEN_MASKED);
+	/* WaDisableDopClockGating:chv (pre-production hw) */
+	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2,
+		  DOP_CLOCK_GATING_DISABLE);
+
+	/* WaDisableSamplerPowerBypass:chv (pre-production hw) */
+	WA_SET_BIT_MASKED(HALF_SLICE_CHICKEN3,
+		  GEN8_SAMPLER_POWER_BYPASS_DIS);
 
 	/* According to the CACHE_MODE_0 default value documentation, some
 	 * CHV platforms disable this optimization by default.  Turn it on.
@@ -874,7 +866,7 @@ static int chv_init_workarounds(struct intel_engine_cs *ring)
 	return 0;
 }
 
-int init_workarounds_ring(struct intel_engine_cs *ring)
+static int init_workarounds_ring(struct intel_engine_cs *ring)
 {
 	struct drm_device *dev = ring->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
