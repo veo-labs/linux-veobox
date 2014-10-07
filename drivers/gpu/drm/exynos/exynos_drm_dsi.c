@@ -1765,6 +1765,8 @@ static int exynos_dsi_probe(struct platform_device *pdev)
 		goto err_del_component;
 	}
 
+	dsi->display.ctx = dsi;
+
 	platform_set_drvdata(pdev, &dsi->display);
 
 	ret = component_add(dev, &exynos_dsi_component_ops);
