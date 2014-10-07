@@ -32,16 +32,10 @@
 #define ATMEL_HLCDC_PWMPS_MAX		0x6
 #define ATMEL_HLCDC_PWMPS(x)		((x) & ATMEL_HLCDC_PWMPS_MASK)
 
-struct atmel_hlcdc_pwm_errata {
-	bool slow_clk_erratum;
-	bool div1_clk_erratum;
-};
-
 struct atmel_hlcdc_pwm {
 	struct pwm_chip chip;
 	struct atmel_hlcdc *hlcdc;
 	struct clk *cur_clk;
-	const struct atmel_hlcdc_pwm_errata *errata;
 };
 
 static inline struct atmel_hlcdc_pwm *to_atmel_hlcdc_pwm(struct pwm_chip *chip)
@@ -62,18 +56,11 @@ static int atmel_hlcdc_pwm_config(struct pwm_chip *c,
 	u32 pwmcfg;
 	int pres;
 
-	if (!chip->errata || !chip->errata->slow_clk_erratum) {
-		clk_freq = clk_get_rate(new_clk);
-		if (!clk_freq)
-			return -EINVAL;
+	clk_freq = clk_get_rate(new_clk);
+	clk_period_ns = (u64)NSEC_PER_SEC * 256;
+	do_div(clk_period_ns, clk_freq);
 
-		clk_period_ns = (u64)NSEC_PER_SEC * 256;
-		do_div(clk_period_ns, clk_freq);
-	}
-
-	/* Errata: cannot use slow clk on some IP revisions */
-	if ((chip->errata && chip->errata->slow_clk_erratum) ||
-	    clk_period_ns > period_ns) {
+	if (clk_period_ns > period_ns) {
 		new_clk = hlcdc->sys_clk;
 		clk_freq = clk_get_rate(new_clk);
 		if (!clk_freq)
@@ -83,14 +70,9 @@ static int atmel_hlcdc_pwm_config(struct pwm_chip *c,
 		do_div(clk_period_ns, clk_freq);
 	}
 
-	for (pres = 0; pres <= ATMEL_HLCDC_PWMPS_MAX; pres++) {
-		/* Errata: cannot divide by 1 on some IP revisions */
-		if (!pres && chip->errata && chip->errata->div1_clk_erratum)
-			continue;
-
+	for (pres = 0; pres <= ATMEL_HLCDC_PWMPS_MAX; pres++)
 		if ((clk_period_ns << pres) >= period_ns)
 			break;
-	}
 
 	if (pres > ATMEL_HLCDC_PWMPS_MAX)
 		return -EINVAL;
@@ -208,29 +190,8 @@ static const struct pwm_ops atmel_hlcdc_pwm_ops = {
 	.owner = THIS_MODULE,
 };
 
-static const struct atmel_hlcdc_pwm_errata atmel_hlcdc_pwm_at91sam9x5_errata = {
-	.slow_clk_erratum = true,
-};
-
-static const struct atmel_hlcdc_pwm_errata atmel_hlcdc_pwm_sama5d3_errata = {
-	.div1_clk_erratum = true,
-};
-
-static const struct of_device_id atmel_hlcdc_dt_ids[] = {
-	{
-		.compatible = "atmel,at91sam9x5-hlcdc",
-		.data = &atmel_hlcdc_pwm_at91sam9x5_errata,
-	},
-	{
-		.compatible = "atmel,sama5d3-hlcdc",
-		.data = &atmel_hlcdc_pwm_sama5d3_errata,
-	},
-	{ /* sentinel */ },
-};
-
 static int atmel_hlcdc_pwm_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
 	struct device *dev = &pdev->dev;
 	struct atmel_hlcdc_pwm *chip;
 	struct atmel_hlcdc *hlcdc;
@@ -245,10 +206,6 @@ static int atmel_hlcdc_pwm_probe(struct platform_device *pdev)
 	ret = clk_prepare_enable(hlcdc->periph_clk);
 	if (ret)
 		return ret;
-
-	match = of_match_node(atmel_hlcdc_dt_ids, dev->parent->of_node);
-	if (match)
-		chip->errata = match->data;
 
 	chip->hlcdc = hlcdc;
 	chip->chip.ops = &atmel_hlcdc_pwm_ops;
