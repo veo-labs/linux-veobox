@@ -3140,7 +3140,7 @@ int drm_mode_addfb(struct drm_device *dev,
 
 	or->fb_id = r.fb_id;
 
-	return 0;
+	return ret;
 }
 
 static int format_check(const struct drm_mode_fb_cmd2 *r)
