@@ -65,6 +65,144 @@
 
 #include "dgap.h"
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Digi International, http://www.digi.com");
+MODULE_DESCRIPTION("Driver for the Digi International EPCA PCI based product line");
+MODULE_SUPPORTED_DEVICE("dgap");
+
+static int dgap_start(void);
+static void dgap_init_globals(void);
+static struct board_t *dgap_found_board(struct pci_dev *pdev, int id,
+					int boardnum);
+static void dgap_cleanup_board(struct board_t *brd);
+static void dgap_poll_handler(ulong dummy);
+static int dgap_init_one(struct pci_dev *pdev, const struct pci_device_id *ent);
+static void dgap_remove_one(struct pci_dev *dev);
+static int dgap_remap(struct board_t *brd);
+static void dgap_unmap(struct board_t *brd);
+static irqreturn_t dgap_intr(int irq, void *voidbrd);
+
+static int dgap_tty_open(struct tty_struct *tty, struct file *file);
+static void dgap_tty_close(struct tty_struct *tty, struct file *file);
+static int dgap_block_til_ready(struct tty_struct *tty, struct file *file,
+				struct channel_t *ch);
+static int dgap_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
+				unsigned long arg);
+static int dgap_tty_digigeta(struct channel_t *ch,
+			     struct digi_t __user *retinfo);
+static int dgap_tty_digiseta(struct channel_t *ch, struct board_t *bd,
+			     struct un_t *un, struct digi_t __user *new_info);
+static int dgap_tty_digigetedelay(struct tty_struct *tty, int __user *retinfo);
+static int dgap_tty_digisetedelay(struct channel_t *ch, struct board_t *bd,
+				  struct un_t *un, int __user *new_info);
+static int dgap_tty_write_room(struct tty_struct *tty);
+static int dgap_tty_chars_in_buffer(struct tty_struct *tty);
+static void dgap_tty_start(struct tty_struct *tty);
+static void dgap_tty_stop(struct tty_struct *tty);
+static void dgap_tty_throttle(struct tty_struct *tty);
+static void dgap_tty_unthrottle(struct tty_struct *tty);
+static void dgap_tty_flush_chars(struct tty_struct *tty);
+static void dgap_tty_flush_buffer(struct tty_struct *tty);
+static void dgap_tty_hangup(struct tty_struct *tty);
+static int dgap_wait_for_drain(struct tty_struct *tty);
+static int dgap_set_modem_info(struct channel_t *ch, struct board_t *bd,
+			       struct un_t *un, unsigned int command,
+			       unsigned int __user *value);
+static int dgap_get_modem_info(struct channel_t *ch,
+				unsigned int __user *value);
+static int dgap_tty_digisetcustombaud(struct channel_t *ch, struct board_t *bd,
+				      struct un_t *un, int __user *new_info);
+static int dgap_tty_digigetcustombaud(struct channel_t *ch, struct un_t *un,
+				      int __user *retinfo);
+static int dgap_tty_tiocmget(struct tty_struct *tty);
+static int dgap_tty_tiocmset(struct tty_struct *tty, unsigned int set,
+				unsigned int clear);
+static int dgap_tty_send_break(struct tty_struct *tty, int msec);
+static void dgap_tty_wait_until_sent(struct tty_struct *tty, int timeout);
+static int dgap_tty_write(struct tty_struct *tty, const unsigned char *buf,
+				int count);
+static void dgap_tty_set_termios(struct tty_struct *tty,
+				struct ktermios *old_termios);
+static int dgap_tty_put_char(struct tty_struct *tty, unsigned char c);
+static void dgap_tty_send_xchar(struct tty_struct *tty, char ch);
+
+static int dgap_tty_register(struct board_t *brd);
+static void dgap_tty_unregister(struct board_t *brd);
+static int dgap_tty_init(struct board_t *);
+static void dgap_tty_free(struct board_t *);
+static void dgap_cleanup_tty(struct board_t *);
+static void dgap_carrier(struct channel_t *ch);
+static void dgap_input(struct channel_t *ch);
+
+/*
+ * Our function prototypes from dgap_fep5
+ */
+static void dgap_cmdw_ext(struct channel_t *ch, u16 cmd, u16 word, uint ncmds);
+static int dgap_event(struct board_t *bd);
+
+static void dgap_poll_tasklet(unsigned long data);
+static void dgap_cmdb(struct channel_t *ch, u8 cmd, u8 byte1,
+			u8 byte2, uint ncmds);
+static void dgap_cmdw(struct channel_t *ch, u8 cmd, u16 word, uint ncmds);
+static void dgap_wmove(struct channel_t *ch, char *buf, uint cnt);
+static int dgap_param(struct channel_t *ch, struct board_t *bd, u32 un_type);
+static void dgap_parity_scan(struct channel_t *ch, unsigned char *cbuf,
+				unsigned char *fbuf, int *len);
+static uint dgap_get_custom_baud(struct channel_t *ch);
+static void dgap_firmware_reset_port(struct channel_t *ch);
+
+/*
+ * Function prototypes from dgap_parse.c.
+ */
+static int dgap_gettok(char **in);
+static char *dgap_getword(char **in);
+static int dgap_checknode(struct cnode *p);
+
+/*
+ * Function prototypes from dgap_sysfs.h
+ */
+static void dgap_create_ports_sysfiles(struct board_t *bd);
+static void dgap_remove_ports_sysfiles(struct board_t *bd);
+
+static int dgap_create_driver_sysfiles(struct pci_driver *);
+static void dgap_remove_driver_sysfiles(struct pci_driver *);
+
+static void dgap_create_tty_sysfs(struct un_t *un, struct device *c);
+static void dgap_remove_tty_sysfs(struct device *c);
+
+/*
+ * Function prototypes from dgap_parse.h
+ */
+static int dgap_parsefile(char **in);
+static struct cnode *dgap_find_config(int type, int bus, int slot);
+static uint dgap_config_get_num_prts(struct board_t *bd);
+static char *dgap_create_config_string(struct board_t *bd, char *string);
+static uint dgap_config_get_useintr(struct board_t *bd);
+static uint dgap_config_get_altpin(struct board_t *bd);
+
+static void dgap_do_bios_load(struct board_t *brd, const u8 *ubios, int len);
+static void dgap_do_fep_load(struct board_t *brd, const u8 *ufep, int len);
+#ifdef DIGI_CONCENTRATORS_SUPPORTED
+static void dgap_do_conc_load(struct board_t *brd, u8 *uaddr, int len);
+#endif
+static int dgap_alloc_flipbuf(struct board_t *brd);
+static void dgap_free_flipbuf(struct board_t *brd);
+static int dgap_request_irq(struct board_t *brd);
+static void dgap_free_irq(struct board_t *brd);
+
+static void dgap_get_vpd(struct board_t *brd);
+static void dgap_do_reset_board(struct board_t *brd);
+static int dgap_test_bios(struct board_t *brd);
+static int dgap_test_fep(struct board_t *brd);
+static int dgap_tty_register_ports(struct board_t *brd);
+static int dgap_firmware_load(struct pci_dev *pdev, int card_type,
+			      struct board_t *brd);
+static void dgap_cleanup_nodes(void);
+
+static void dgap_cleanup_module(void);
+
+module_exit(dgap_cleanup_module);
+
 /*
  * File operations permitted on Control/Management major.
  */
@@ -444,6 +582,26 @@ static uint dgap_config_get_useintr(struct board_t *bd)
 
 	/* If not found, then don't turn on interrupts. */
 	return 0;
+
+tty_free:
+	dgap_tty_free(brd);
+free_irq:
+	dgap_free_irq(brd);
+unregister_tty:
+	dgap_tty_unregister(brd);
+free_flipbuf:
+	dgap_free_flipbuf(brd);
+cleanup_brd:
+	dgap_cleanup_nodes();
+	dgap_unmap(brd);
+	kfree(brd);
+
+	return rc;
+}
+
+static void dgap_remove_one(struct pci_dev *dev)
+{
+	/* Do Nothing */
 }
 
 /*
@@ -486,8 +644,7 @@ static struct cnode *dgap_find_config(int type, int bus, int slot)
 		if (p->type != BNODE)
 			continue;
 
-		if (p->u.board.type != type)
-			continue;
+	dgap_unmap(brd);
 
 		if (p->u.board.v_pcibus &&
 		    p->u.board.pcibus != bus)
@@ -621,8 +778,23 @@ static char *dgap_create_config_string(struct board_t *bd, char *string)
 		}
 	}
 
-	*ptr = 0xff;
-	return string;
+	/* init our poll helper tasklet */
+	tasklet_init(&brd->helper_tasklet, dgap_poll_tasklet,
+			(unsigned long) brd);
+
+	ret = dgap_remap(brd);
+	if (ret)
+		goto free_brd;
+
+	pr_info("dgap: board %d: %s (rev %d), irq %ld\n",
+		boardnum, brd->name, brd->rev, brd->irq);
+
+	return brd;
+
+free_brd:
+	kfree(brd);
+
+	return ERR_PTR(ret);
 }
 
 /*
@@ -827,12 +999,13 @@ static int dgap_parsefile(char **in)
 			}
 			break;
 
-		case ID:	/* letter ID used in tty name */
-			s = dgap_getword(in);
-			if (!s) {
-				pr_err("unexpected end of file");
-				return -1;
-			}
+/*
+ * Remap PCI memory.
+ */
+static int dgap_remap(struct board_t *brd)
+{
+	if (!brd || brd->magic != DGAP_BOARD_MAGIC)
+		return -EIO;
 
 			p->u.board.status = kstrdup(s, GFP_KERNEL);
 
@@ -896,8 +1069,38 @@ static int dgap_parsefile(char **in)
 			if (!p->next)
 				return -1;
 
-			p = p->next;
-			p->type = TNODE;
+static void dgap_unmap(struct board_t *brd)
+{
+	iounmap(brd->re_map_port);
+	iounmap(brd->re_map_membase);
+	release_mem_region(brd->membase + PCI_IO_OFFSET, 0x200000);
+	release_mem_region(brd->membase, 0x200000);
+}
+/*****************************************************************************
+*
+* Function:
+*
+*    dgap_poll_handler
+*
+* Author:
+*
+*    Scott H Kilau
+*
+* Parameters:
+*
+*    dummy -- ignored
+*
+* Return Values:
+*
+*    none
+*
+* Description:
+*
+*    As each timer expires, it determines (a) whether the "transmit"
+*    waiter needs to be woken up, and (b) whether the poller needs to
+*    be rescheduled.
+*
+******************************************************************************/
 
 			s = dgap_getword(in);
 			if (!s) {
