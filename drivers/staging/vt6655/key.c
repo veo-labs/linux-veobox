@@ -31,7 +31,384 @@
 #include "key.h"
 #include "mac.h"
 
-int vnt_key_init_table(struct vnt_private *priv)
+/*---------------------  Static Definitions -------------------------*/
+
+/*---------------------  Static Classes  ----------------------------*/
+
+/*---------------------  Static Functions  --------------------------*/
+
+/*---------------------  Export Variables  --------------------------*/
+
+/*---------------------  Static Definitions -------------------------*/
+
+/*---------------------  Static Classes  ----------------------------*/
+
+/*---------------------  Static Variables  --------------------------*/
+
+/*---------------------  Static Functions  --------------------------*/
+static void
+s_vCheckKeyTableValid(PSKeyManagement pTable, void __iomem *dwIoBase)
+{
+	int i;
+
+	for (i = 0; i < MAX_KEY_TABLE; i++) {
+		if (pTable->KeyTable[i].bInUse &&
+		    !pTable->KeyTable[i].PairwiseKey.bKeyValid &&
+		    !pTable->KeyTable[i].GroupKey[0].bKeyValid &&
+		    !pTable->KeyTable[i].GroupKey[1].bKeyValid &&
+		    !pTable->KeyTable[i].GroupKey[2].bKeyValid &&
+		    !pTable->KeyTable[i].GroupKey[3].bKeyValid) {
+			pTable->KeyTable[i].bInUse = false;
+			pTable->KeyTable[i].wKeyCtl = 0;
+			pTable->KeyTable[i].bSoftWEP = false;
+			MACvDisableKeyEntry(dwIoBase, i);
+		}
+	}
+}
+
+/*---------------------  Export Functions  --------------------------*/
+
+/*
+ * Description: Init Key management table
+ *
+ * Parameters:
+ *  In:
+ *      pTable          - Pointer to Key table
+ *  Out:
+ *      none
+ *
+ * Return Value: none
+ *
+ */
+void KeyvInitTable(PSKeyManagement pTable, void __iomem *dwIoBase)
+{
+	int i;
+	int jj;
+
+	for (i = 0; i < MAX_KEY_TABLE; i++) {
+		pTable->KeyTable[i].bInUse = false;
+		pTable->KeyTable[i].PairwiseKey.bKeyValid = false;
+		pTable->KeyTable[i].PairwiseKey.pvKeyTable = (void *)&pTable->KeyTable[i];
+		for (jj = 0; jj < MAX_GROUP_KEY; jj++) {
+			pTable->KeyTable[i].GroupKey[jj].bKeyValid = false;
+			pTable->KeyTable[i].GroupKey[jj].pvKeyTable = (void *)&pTable->KeyTable[i];
+		}
+		pTable->KeyTable[i].wKeyCtl = 0;
+		pTable->KeyTable[i].dwGTKeyIndex = 0;
+		pTable->KeyTable[i].bSoftWEP = false;
+		MACvDisableKeyEntry(dwIoBase, i);
+	}
+}
+
+/*
+ * Description: Get Key from table
+ *
+ * Parameters:
+ *  In:
+ *      pTable          - Pointer to Key table
+ *      pbyBSSID        - BSSID of Key
+ *      dwKeyIndex      - Key Index (0xFFFFFFFF means pairwise key)
+ *  Out:
+ *      pKey            - Key return
+ *
+ * Return Value: true if found otherwise false
+ *
+ */
+bool KeybGetKey(
+	PSKeyManagement pTable,
+	unsigned char *pbyBSSID,
+	unsigned long dwKeyIndex,
+	PSKeyItem       *pKey
+)
+{
+	int i;
+
+	pr_debug("KeybGetKey()\n");
+
+	*pKey = NULL;
+	for (i = 0; i < MAX_KEY_TABLE; i++) {
+		if (pTable->KeyTable[i].bInUse &&
+		    ether_addr_equal(pTable->KeyTable[i].abyBSSID, pbyBSSID)) {
+			if (dwKeyIndex == 0xFFFFFFFF) {
+				if (pTable->KeyTable[i].PairwiseKey.bKeyValid) {
+					*pKey = &(pTable->KeyTable[i].PairwiseKey);
+					return true;
+				} else {
+					return false;
+				}
+			} else if (dwKeyIndex < MAX_GROUP_KEY) {
+				if (pTable->KeyTable[i].GroupKey[dwKeyIndex].bKeyValid) {
+					*pKey = &(pTable->KeyTable[i].GroupKey[dwKeyIndex]);
+					return true;
+				} else {
+					return false;
+				}
+			} else {
+				return false;
+			}
+		}
+	}
+	return false;
+}
+
+/*
+ * Description: Set Key to table
+ *
+ * Parameters:
+ *  In:
+ *      pTable          - Pointer to Key table
+ *      pbyBSSID        - BSSID of Key
+ *      dwKeyIndex      - Key index (reference to NDIS DDK)
+ *      uKeyLength      - Key length
+ *      KeyRSC          - Key RSC
+ *      pbyKey          - Pointer to key
+ *  Out:
+ *      none
+ *
+ * Return Value: true if success otherwise false
+ *
+ */
+bool KeybSetKey(
+	PSKeyManagement pTable,
+	unsigned char *pbyBSSID,
+	unsigned long dwKeyIndex,
+	unsigned long uKeyLength,
+	u64 *pKeyRSC,
+	unsigned char *pbyKey,
+	unsigned char byKeyDecMode,
+	void __iomem *dwIoBase,
+	unsigned char byLocalID
+)
+{
+	int i, j;
+	unsigned int ii;
+	PSKeyItem   pKey;
+	unsigned int uKeyIdx;
+
+	pr_debug("Enter KeybSetKey: %lX\n", dwKeyIndex);
+
+	j = (MAX_KEY_TABLE-1);
+	for (i = 0; i < (MAX_KEY_TABLE - 1); i++) {
+		if (!pTable->KeyTable[i].bInUse && (j == (MAX_KEY_TABLE-1))) {
+			// found empty table
+			j = i;
+		}
+		if (pTable->KeyTable[i].bInUse &&
+		    ether_addr_equal(pTable->KeyTable[i].abyBSSID, pbyBSSID)) {
+			// found table already exist
+			if ((dwKeyIndex & PAIRWISE_KEY) != 0) {
+				// Pairwise key
+				pKey = &(pTable->KeyTable[i].PairwiseKey);
+				pTable->KeyTable[i].wKeyCtl &= 0xFFF0;          // clear pairwise key control filed
+				pTable->KeyTable[i].wKeyCtl |= byKeyDecMode;
+				uKeyIdx = 4;                                    // use HW key entry 4 for pairwise key
+			} else {
+				// Group key
+				if ((dwKeyIndex & 0x000000FF) >= MAX_GROUP_KEY)
+					return false;
+				pKey = &(pTable->KeyTable[i].GroupKey[dwKeyIndex & 0x000000FF]);
+				if ((dwKeyIndex & TRANSMIT_KEY) != 0)  {
+					// Group transmit key
+					pTable->KeyTable[i].dwGTKeyIndex = dwKeyIndex;
+					pr_debug("Group transmit key(R)[%lX]: %d\n",
+						 pTable->KeyTable[i].dwGTKeyIndex, i);
+				}
+				pTable->KeyTable[i].wKeyCtl &= 0xFF0F;          // clear group key control filed
+				pTable->KeyTable[i].wKeyCtl |= (byKeyDecMode << 4);
+				pTable->KeyTable[i].wKeyCtl |= 0x0040;          // use group key for group address
+				uKeyIdx = (dwKeyIndex & 0x000000FF);
+			}
+			pTable->KeyTable[i].wKeyCtl |= 0x8000;              // enable on-fly
+
+			pKey->bKeyValid = true;
+			pKey->uKeyLength = uKeyLength;
+			pKey->dwKeyIndex = dwKeyIndex;
+			pKey->byCipherSuite = byKeyDecMode;
+			memcpy(pKey->abyKey, pbyKey, uKeyLength);
+			if (byKeyDecMode == KEY_CTL_WEP) {
+				if (uKeyLength == WLAN_WEP40_KEYLEN)
+					pKey->abyKey[15] &= 0x7F;
+				if (uKeyLength == WLAN_WEP104_KEYLEN)
+					pKey->abyKey[15] |= 0x80;
+			}
+			MACvSetKeyEntry(dwIoBase, pTable->KeyTable[i].wKeyCtl, i, uKeyIdx, pbyBSSID, (u32 *)pKey->abyKey, byLocalID);
+
+			if ((dwKeyIndex & USE_KEYRSC) == 0) {
+				// RSC set by NIC
+				pKey->KeyRSC = 0;
+			} else {
+				pKey->KeyRSC = *pKeyRSC;
+			}
+			pKey->dwTSC47_16 = 0;
+			pKey->wTSC15_0 = 0;
+
+			pr_debug("KeybSetKey(R):\n");
+			pr_debug("pKey->bKeyValid: %d\n ", pKey->bKeyValid);
+			pr_debug("pKey->abyKey: ");
+			for (ii = 0; ii < pKey->uKeyLength; ii++)
+				pr_debug("%02x ", pKey->abyKey[ii]);
+
+			pr_debug("\n");
+
+			pr_debug("pKey->dwTSC47_16: %lx\n ", pKey->dwTSC47_16);
+			pr_debug("pKey->wTSC15_0: %x\n ", pKey->wTSC15_0);
+			pr_debug("pKey->dwKeyIndex: %lx\n ", pKey->dwKeyIndex);
+
+			return true;
+		}
+	}
+	if (j < (MAX_KEY_TABLE-1)) {
+		memcpy(pTable->KeyTable[j].abyBSSID, pbyBSSID, ETH_ALEN);
+		pTable->KeyTable[j].bInUse = true;
+		if ((dwKeyIndex & PAIRWISE_KEY) != 0)  {
+			// Pairwise key
+			pKey = &(pTable->KeyTable[j].PairwiseKey);
+			pTable->KeyTable[j].wKeyCtl &= 0xFFF0;          // clear pairwise key control filed
+			pTable->KeyTable[j].wKeyCtl |= byKeyDecMode;
+			uKeyIdx = 4;                                    // use HW key entry 4 for pairwise key
+		} else {
+			// Group key
+			if ((dwKeyIndex & 0x000000FF) >= MAX_GROUP_KEY)
+				return false;
+			pKey = &(pTable->KeyTable[j].GroupKey[dwKeyIndex & 0x000000FF]);
+			if ((dwKeyIndex & TRANSMIT_KEY) != 0)  {
+				// Group transmit key
+				pTable->KeyTable[j].dwGTKeyIndex = dwKeyIndex;
+				pr_debug("Group transmit key(N)[%lX]: %d\n",
+					 pTable->KeyTable[j].dwGTKeyIndex, j);
+			}
+			pTable->KeyTable[j].wKeyCtl &= 0xFF0F;          // clear group key control filed
+			pTable->KeyTable[j].wKeyCtl |= (byKeyDecMode << 4);
+			pTable->KeyTable[j].wKeyCtl |= 0x0040;          // use group key for group address
+			uKeyIdx = (dwKeyIndex & 0x000000FF);
+		}
+		pTable->KeyTable[j].wKeyCtl |= 0x8000;              // enable on-fly
+
+		pKey->bKeyValid = true;
+		pKey->uKeyLength = uKeyLength;
+		pKey->dwKeyIndex = dwKeyIndex;
+		pKey->byCipherSuite = byKeyDecMode;
+		memcpy(pKey->abyKey, pbyKey, uKeyLength);
+		if (byKeyDecMode == KEY_CTL_WEP) {
+			if (uKeyLength == WLAN_WEP40_KEYLEN)
+				pKey->abyKey[15] &= 0x7F;
+			if (uKeyLength == WLAN_WEP104_KEYLEN)
+				pKey->abyKey[15] |= 0x80;
+		}
+		MACvSetKeyEntry(dwIoBase, pTable->KeyTable[j].wKeyCtl, j, uKeyIdx, pbyBSSID, (u32 *)pKey->abyKey, byLocalID);
+
+		if ((dwKeyIndex & USE_KEYRSC) == 0) {
+			// RSC set by NIC
+			pKey->KeyRSC = 0;
+		} else {
+			pKey->KeyRSC = *pKeyRSC;
+		}
+		pKey->dwTSC47_16 = 0;
+		pKey->wTSC15_0 = 0;
+
+		pr_debug("KeybSetKey(N):\n");
+		pr_debug("pKey->bKeyValid: %d\n ", pKey->bKeyValid);
+		pr_debug("pKey->uKeyLength: %d\n ", (int)pKey->uKeyLength);
+		pr_debug("pKey->abyKey: ");
+		for (ii = 0; ii < pKey->uKeyLength; ii++)
+			pr_debug("%02x ", pKey->abyKey[ii]);
+
+		pr_debug("\n");
+
+		pr_debug("pKey->dwTSC47_16: %lx\n ", pKey->dwTSC47_16);
+		pr_debug("pKey->wTSC15_0: %x\n ", pKey->wTSC15_0);
+		pr_debug("pKey->dwKeyIndex: %lx\n ", pKey->dwKeyIndex);
+
+		return true;
+	}
+	return false;
+}
+
+/*
+ * Description: Remove Key from table
+ *
+ * Parameters:
+ *  In:
+ *      pTable          - Pointer to Key table
+ *      pbyBSSID        - BSSID of Key
+ *      dwKeyIndex      - Key Index (reference to NDIS DDK)
+ *  Out:
+ *      none
+ *
+ * Return Value: true if success otherwise false
+ *
+ */
+bool KeybRemoveKey(
+	PSKeyManagement pTable,
+	unsigned char *pbyBSSID,
+	unsigned long dwKeyIndex,
+	void __iomem *dwIoBase
+)
+{
+	int  i;
+
+	if (is_broadcast_ether_addr(pbyBSSID)) {
+		// delete all keys
+		if ((dwKeyIndex & PAIRWISE_KEY) != 0) {
+			for (i = 0; i < MAX_KEY_TABLE; i++)
+				pTable->KeyTable[i].PairwiseKey.bKeyValid = false;
+
+			s_vCheckKeyTableValid(pTable, dwIoBase);
+			return true;
+		} else if ((dwKeyIndex & 0x000000FF) < MAX_GROUP_KEY) {
+			for (i = 0; i < MAX_KEY_TABLE; i++) {
+				pTable->KeyTable[i].GroupKey[dwKeyIndex & 0x000000FF].bKeyValid = false;
+				if ((dwKeyIndex & 0x7FFFFFFF) == (pTable->KeyTable[i].dwGTKeyIndex & 0x7FFFFFFF)) {
+					// remove Group transmit key
+					pTable->KeyTable[i].dwGTKeyIndex = 0;
+				}
+			}
+			s_vCheckKeyTableValid(pTable, dwIoBase);
+			return true;
+		}
+		return false;
+	}
+
+	for (i = 0; i < MAX_KEY_TABLE; i++) {
+		if (pTable->KeyTable[i].bInUse &&
+		    ether_addr_equal(pTable->KeyTable[i].abyBSSID, pbyBSSID)) {
+			if ((dwKeyIndex & PAIRWISE_KEY) != 0) {
+				pTable->KeyTable[i].PairwiseKey.bKeyValid = false;
+				s_vCheckKeyTableValid(pTable, dwIoBase);
+				return true;
+			} else if ((dwKeyIndex & 0x000000FF) < MAX_GROUP_KEY) {
+				pTable->KeyTable[i].GroupKey[dwKeyIndex & 0x000000FF].bKeyValid = false;
+				if ((dwKeyIndex & 0x7FFFFFFF) == (pTable->KeyTable[i].dwGTKeyIndex & 0x7FFFFFFF)) {
+					// remove Group transmit key
+					pTable->KeyTable[i].dwGTKeyIndex = 0;
+				}
+				s_vCheckKeyTableValid(pTable, dwIoBase);
+				return true;
+			}
+			return false;
+		}
+	}
+	return false;
+}
+
+/*
+ * Description: Remove Key from table
+ *
+ * Parameters:
+ *  In:
+ *      pTable          - Pointer to Key table
+ *      pbyBSSID        - BSSID of Key
+ *  Out:
+ *      none
+ *
+ * Return Value: true if success otherwise false
+ *
+ */
+bool KeybRemoveAllKey(
+	PSKeyManagement pTable,
+	unsigned char *pbyBSSID,
+	void __iomem *dwIoBase
+)
 {
 	u32 i;
 
