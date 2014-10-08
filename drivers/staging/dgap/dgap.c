@@ -1264,43 +1264,12 @@ static int dgap_parsefile(char **in)
 			if (!p->next)
 				return -1;
 
-			p = p->next;
-			p->type = FSNODE;
-
-			s = dgap_getword(in);
-			if (!s) {
-				pr_err("unexpected end of file");
-				return -1;
-			}
-			if (kstrtol(s, 0, &p->u.f2size)) {
-				pr_err("bad number for f2200size");
-				return -1;
-			}
-			break;
-
-		case VPSIZ:	/* vpix structure size */
-			if (dgap_checknode(p))
-				return -1;
-
-			p->next = kzalloc(sizeof(struct cnode), GFP_KERNEL);
-			if (!p->next)
-				return -1;
-
-			p = p->next;
-			p->type = VSNODE;
-
-			s = dgap_getword(in);
-			if (!s) {
-				pr_err("unexpected end of file");
-				return -1;
-			}
-			if (kstrtol(s, 0, &p->u.vpixsize)) {
-				pr_err("bad number for vpixsize");
-				return -1;
-			}
-			break;
-		}
-	}
+static void dgap_release_remap(struct board_t *brd)
+{
+	iounmap(brd->re_map_port);
+	iounmap(brd->re_map_membase);
+	release_mem_region(brd->membase + PCI_IO_OFFSET, 0x200000);
+	release_mem_region(brd->membase, 0x200000);
 }
 
 static void dgap_cleanup_nodes(void)
