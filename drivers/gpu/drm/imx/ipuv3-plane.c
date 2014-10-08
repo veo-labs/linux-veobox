@@ -207,6 +207,7 @@ int ipu_plane_mode_set(struct ipu_plane *ipu_plane, struct drm_crtc *crtc,
 		return ret;
 	}
 	ipu_cpmem_set_high_priority(ipu_plane->ipu_ch);
+	ipu_idmac_set_double_buffer(ipu_plane->ipu_ch, 1);
 	ipu_cpmem_set_stride(ipu_plane->ipu_ch, fb->pitches[0]);
 
 	ret = ipu_plane_set_base(ipu_plane, fb, src_x, src_y);
