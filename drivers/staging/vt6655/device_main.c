@@ -715,6 +715,20 @@ static void device_free_rd1_ring(struct vnt_private *pDevice)
 	}
 }
 
+static void device_free_frag_buf(struct vnt_private *pDevice)
+{
+	PSDeFragControlBlock pDeF;
+	int i;
+
+	for (i = 0; i < CB_MAX_RX_FRAG; i++) {
+		pDeF = &(pDevice->sRxDFCB[i]);
+
+		if (pDeF->skb)
+			dev_kfree_skb(pDeF->skb);
+
+	}
+}
+
 static void device_init_td0_ring(struct vnt_private *pDevice)
 {
 	int i;
