@@ -82,7 +82,7 @@ static const uuid_le spar_controlvm_channel_protocol_uuid =
  *  - issued on the EventQueue queue (q #2) in the ControlVm channel
  *  - responded to on the EventAckQueue queue (q #3) in the ControlVm channel
  */
-enum controlvm_id {
+enum control_vm_id {
 	CONTROLVM_INVALID = 0,
 	/* SWITCH commands required Parameter: SwitchNumber  */
 	/* BUS commands required Parameter: BusNumber  */
@@ -203,8 +203,8 @@ enum ultra_chipset_feature {
  *  queue.  Commands are easily distinguished from responses by
  *  looking at the flags.response field.
  */
-struct controlvm_message_header  {
-	u32 id;		/* See CONTROLVM_ID. */
+typedef struct _CONTROLVM_MESSAGE_HEADER  {
+	u32 Id;		/* See control_vm_id. */
 	/* For requests, indicates the message type. */
 	/* For responses, indicates the type of message we are responding to. */
 

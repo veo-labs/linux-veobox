@@ -77,16 +77,16 @@ typedef struct {
  */
 struct visorchipset_device_info {
 	struct list_head entry;
-	u32 bus_no;
-	u32 dev_no;
-	uuid_le dev_inst_uuid;
-	struct visorchipset_state state;
-	struct visorchipset_channel_info chan_info;
-	u32 reserved1;		/* control_vm_id */
-	u64 reserved2;
-	u32 switch_no;		/* when devState.attached==1 */
-	u32 internal_port_no;	/* when devState.attached==1 */
-	struct controlvm_message_header pending_msg_hdr;/* CONTROLVM_MESSAGE */
+	u32 busNo;
+	u32 devNo;
+	uuid_le devInstGuid;
+	VISORCHIPSET_STATE state;
+	VISORCHIPSET_CHANNEL_INFO chanInfo;
+	u32 Reserved1;		/* control_vm_id */
+	u64 Reserved2;
+	u32 switchNo;		/* when devState.attached==1 */
+	u32 internalPortNo;	/* when devState.attached==1 */
+	CONTROLVM_MESSAGE_HEADER pendingMsgHdr;	/* CONTROLVM_MESSAGE */
 	/** For private use by the bus driver */
 	void *bus_driver_context;
 
@@ -157,6 +157,61 @@ findbus(struct list_head *list, u32 bus_no)
 	}
 	return NULL;
 }
+
+/** Attributes for a particular Supervisor switch.
+ */
+typedef struct {
+	u32 switchNo;
+	VISORCHIPSET_STATE state;
+	uuid_le switchTypeGuid;
+	u8 *authService1;
+	u8 *authService2;
+	u8 *authService3;
+	u8 *securityContext;
+	u64 Reserved;
+	u32 Reserved2;		/* control_vm_id */
+	struct device dev;
+	BOOL dev_exists;
+	struct controlvm_message_header pending_msg_hdr;
+};
+
+/** Attributes for a particular Supervisor external port, which is connected
+ *  to a specific switch.
+ */
+struct visorchipset_externalport_info {
+	u32 switch_no;
+	u32 external_port_no;
+	struct visorchipset_state state;
+	uuid_le network_zone_uuid;
+	int pd_port;
+	u8 *ip;
+	u8 *ipNetmask;
+	u8 *ipBroadcast;
+	u8 *ipNetwork;
+	u8 *ipGateway;
+	u8 *ipDNS;
+	u64 Reserved1;
+	u32 Reserved2;		/* control_vm_id */
+	struct device dev;
+	BOOL dev_exists;
+	struct controlvm_message_header pending_msg_hdr;
+};
+
+/** Attributes for a particular Supervisor internal port, which is how a
+ *  device connects to a particular switch.
+ */
+typedef struct {
+	u32 switchNo;
+	u32 internalPortNo;
+	VISORCHIPSET_STATE state;
+	u32 busNo;		/* valid only when state.attached == 1 */
+	u32 devNo;		/* valid only when state.attached == 1 */
+	u64 Reserved1;
+	u32 Reserved2;		/* control_vm_id */
+	CONTROLVM_MESSAGE_HEADER pendingMsgHdr;
+	MYPROCOBJECT *procObject;
+
+} VISORCHIPSET_INTERNALPORT_INFO;
 
 /*  These functions will be called from within visorchipset when certain
  *  events happen.  (The implementation of these functions is outside of
