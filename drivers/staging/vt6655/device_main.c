@@ -1087,12 +1087,52 @@ static void vnt_check_bb_vga(struct vnt_private *priv)
 
 static  irqreturn_t  device_intr(int irq,  void *dev_instance)
 {
-	struct vnt_private *pDevice = dev_instance;
-	int             max_count = 0;
-	unsigned long dwMIBCounter = 0;
-	unsigned char byOrgPageSel = 0;
-	int             handled = 0;
-	unsigned long flags;
+	struct vnt_private *pDevice = netdev_priv(dev);
+	int i;
+#ifdef WPA_SM_Transtatus
+	extern SWPAResult wpa_Result;
+#endif
+
+	pDevice->rx_buf_sz = PKT_BUF_SZ;
+	if (!device_init_rings(pDevice))
+		return -ENOMEM;
+
+//2008-5-13 <add> by chester
+	i = request_irq(pDevice->pcid->irq, &device_intr, IRQF_SHARED, dev->name, dev);
+	if (i)
+		return i;
+
+#ifdef WPA_SM_Transtatus
+	memset(wpa_Result.ifname, 0, sizeof(wpa_Result.ifname));
+	wpa_Result.proto = 0;
+	wpa_Result.key_mgmt = 0;
+	wpa_Result.eap_type = 0;
+	wpa_Result.authenticated = false;
+	pDevice->fWPA_Authened = false;
+#endif
+	pr_debug("call device init rd0 ring\n");
+	device_init_rd0_ring(pDevice);
+	device_init_rd1_ring(pDevice);
+	device_init_defrag_cb(pDevice);
+	device_init_td0_ring(pDevice);
+	device_init_td1_ring(pDevice);
+
+	if (pDevice->bDiversityRegCtlON)
+		device_init_diversity_timer(pDevice);
+
+	vMgrObjectInit(pDevice);
+	vMgrTimerInit(pDevice);
+
+	pr_debug("call device_init_registers\n");
+	device_init_registers(pDevice);
+
+	MACvReadEtherAddress(pDevice->PortOffset, pDevice->abyCurrentNetAddr);
+	ether_addr_copy(pDevice->pMgmt->abyMACAddr, pDevice->abyCurrentNetAddr);
+	device_set_multi(pDevice->dev);
+
+	// Init for Key Management
+	KeyvInitTable(&pDevice->sKey, pDevice->PortOffset);
+	add_timer(&(pDevice->pMgmt->sTimerSecondCallback));
 
 	MACvReadISR(pDevice->PortOffset, &pDevice->dwIsr);
 
