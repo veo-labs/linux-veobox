@@ -477,6 +477,199 @@ static void device_init_registers(struct vnt_private *pDevice)
 	MACvStart(pDevice->PortOffset);
 }
 
+static void device_init_diversity_timer(struct vnt_private *pDevice)
+{
+	init_timer(&pDevice->TimerSQ3Tmax1);
+	pDevice->TimerSQ3Tmax1.data = (unsigned long) pDevice;
+	pDevice->TimerSQ3Tmax1.function = TimerSQ3CallBack;
+	pDevice->TimerSQ3Tmax1.expires = RUN_AT(HZ);
+
+	init_timer(&pDevice->TimerSQ3Tmax2);
+	pDevice->TimerSQ3Tmax2.data = (unsigned long) pDevice;
+	pDevice->TimerSQ3Tmax2.function = TimerSQ3CallBack;
+	pDevice->TimerSQ3Tmax2.expires = RUN_AT(HZ);
+
+	init_timer(&pDevice->TimerSQ3Tmax3);
+	pDevice->TimerSQ3Tmax3.data = (unsigned long) pDevice;
+	pDevice->TimerSQ3Tmax3.function = TimerState1CallBack;
+	pDevice->TimerSQ3Tmax3.expires = RUN_AT(HZ);
+}
+
+static bool device_release_WPADEV(struct vnt_private *pDevice)
+{
+	viawget_wpa_header *wpahdr;
+	int ii = 0;
+
+	//send device close to wpa_supplicnat layer
+	if (pDevice->bWPADEVUp) {
+		wpahdr = (viawget_wpa_header *)pDevice->skb->data;
+		wpahdr->type = VIAWGET_DEVICECLOSE_MSG;
+		wpahdr->resp_ie_len = 0;
+		wpahdr->req_ie_len = 0;
+		skb_put(pDevice->skb, sizeof(viawget_wpa_header));
+		pDevice->skb->dev = pDevice->wpadev;
+		skb_reset_mac_header(pDevice->skb);
+		pDevice->skb->pkt_type = PACKET_HOST;
+		pDevice->skb->protocol = htons(ETH_P_802_2);
+		memset(pDevice->skb->cb, 0, sizeof(pDevice->skb->cb));
+		netif_rx(pDevice->skb);
+		pDevice->skb = dev_alloc_skb((int)pDevice->rx_buf_sz);
+
+		while (pDevice->bWPADEVUp) {
+			set_current_state(TASK_UNINTERRUPTIBLE);
+			schedule_timeout(HZ / 20);          //wait 50ms
+			ii++;
+			if (ii > 20)
+				break;
+		}
+	}
+	return true;
+}
+
+static const struct net_device_ops device_netdev_ops = {
+	.ndo_open               = device_open,
+	.ndo_stop               = device_close,
+	.ndo_do_ioctl           = device_ioctl,
+	.ndo_start_xmit         = device_xmit,
+	.ndo_set_rx_mode	= device_set_multi,
+};
+
+static int
+vt6655_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
+{
+	static bool bFirst = true;
+	struct net_device *dev = NULL;
+	PCHIP_INFO  pChip_info = (PCHIP_INFO)ent->driver_data;
+	struct vnt_private *pDevice;
+	int         rc;
+
+	dev = alloc_etherdev(sizeof(*pDevice));
+
+	pDevice = netdev_priv(dev);
+
+	if (dev == NULL) {
+		pr_err(DEVICE_NAME ": allocate net device failed\n");
+		return -ENOMEM;
+	}
+
+	// Chain it all together
+	SET_NETDEV_DEV(dev, &pcid->dev);
+
+	if (bFirst) {
+		pr_notice("%s Ver. %s\n", DEVICE_FULL_DRV_NAM, DEVICE_VERSION);
+		pr_notice("Copyright (c) 2003 VIA Networking Technologies, Inc.\n");
+		bFirst = false;
+	}
+
+	vt6655_init_info(pcid, &pDevice, pChip_info);
+	pDevice->dev = dev;
+
+	if (pci_enable_device(pcid)) {
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+	dev->irq = pcid->irq;
+
+#ifdef	DEBUG
+	pr_debug("Before get pci_info memaddr is %x\n", pDevice->memaddr);
+#endif
+	if (!device_get_pci_info(pDevice, pcid)) {
+		pr_err(DEVICE_NAME ": Failed to find PCI device.\n");
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+
+#ifdef	DEBUG
+
+	pr_debug("after get pci_info memaddr is %x, io addr is %x,io_size is %d\n", pDevice->memaddr, pDevice->ioaddr, pDevice->io_size);
+	{
+		int i;
+		u32 bar, len;
+		u32 address[] = {
+			PCI_BASE_ADDRESS_0,
+			PCI_BASE_ADDRESS_1,
+			PCI_BASE_ADDRESS_2,
+			PCI_BASE_ADDRESS_3,
+			PCI_BASE_ADDRESS_4,
+			PCI_BASE_ADDRESS_5,
+			0};
+		for (i = 0; address[i]; i++) {
+			pci_read_config_dword(pcid, address[i], &bar);
+			pr_debug("bar %d is %x\n", i, bar);
+			if (!bar) {
+				pr_debug("bar %d not implemented\n", i);
+				continue;
+			}
+			if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
+				/* This is IO */
+
+				len = bar & (PCI_BASE_ADDRESS_IO_MASK & 0xFFFF);
+				len = len & ~(len - 1);
+
+				pr_debug("IO space:  len in IO %x, BAR %d\n", len, i);
+			} else {
+				len = bar & 0xFFFFFFF0;
+				len = ~len + 1;
+
+				pr_debug("len in MEM %x, BAR %d\n", len, i);
+			}
+		}
+	}
+#endif
+
+	pDevice->PortOffset = ioremap(pDevice->memaddr & PCI_BASE_ADDRESS_MEM_MASK, pDevice->io_size);
+
+	if (pDevice->PortOffset == NULL) {
+		pr_err(DEVICE_NAME ": Failed to IO remapping ..\n");
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+
+	rc = pci_request_regions(pcid, DEVICE_NAME);
+	if (rc) {
+		pr_err(DEVICE_NAME ": Failed to find PCI device\n");
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+
+	dev->base_addr = pDevice->ioaddr;
+	// do reset
+	if (!MACbSoftwareReset(pDevice->PortOffset)) {
+		pr_err(DEVICE_NAME ": Failed to access MAC hardware..\n");
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+	// initial to reload eeprom
+	MACvInitialize(pDevice->PortOffset);
+	MACvReadEtherAddress(pDevice->PortOffset, dev->dev_addr);
+
+	device_get_options(pDevice);
+	device_set_options(pDevice);
+	//Mask out the options cannot be set to the chip
+	pDevice->sOpts.flags &= pChip_info->flags;
+
+	//Enable the chip specified capabilities
+	pDevice->flags = pDevice->sOpts.flags | (pChip_info->flags & 0xFF000000UL);
+	pDevice->tx_80211 = device_dma0_tx_80211;
+	pDevice->sMgmtObj.pAdapter = (void *)pDevice;
+	pDevice->pMgmt = &(pDevice->sMgmtObj);
+
+	dev->irq                = pcid->irq;
+	dev->netdev_ops         = &device_netdev_ops;
+
+	dev->wireless_handlers = (struct iw_handler_def *)&iwctl_handler_def;
+
+	rc = register_netdev(dev);
+	if (rc) {
+		pr_err(DEVICE_NAME " Failed to register netdev\n");
+		device_free_info(pDevice);
+		return -ENODEV;
+	}
+	device_print_info(pDevice);
+	pci_set_drvdata(pcid, pDevice);
+	return 0;
+}
+
 static void device_print_info(struct vnt_private *pDevice)
 {
 	dev_info(&pDevice->pcid->dev, "%s\n", get_chip_name(pDevice->chip_id));
