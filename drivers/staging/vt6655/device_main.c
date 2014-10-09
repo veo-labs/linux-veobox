@@ -1089,9 +1089,6 @@ static  irqreturn_t  device_intr(int irq,  void *dev_instance)
 {
 	struct vnt_private *pDevice = netdev_priv(dev);
 	int i;
-#ifdef WPA_SM_Transtatus
-	extern SWPAResult wpa_Result;
-#endif
 
 	pDevice->rx_buf_sz = PKT_BUF_SZ;
 	if (!device_init_rings(pDevice))
@@ -1103,11 +1100,6 @@ static  irqreturn_t  device_intr(int irq,  void *dev_instance)
 		return i;
 
 #ifdef WPA_SM_Transtatus
-	memset(wpa_Result.ifname, 0, sizeof(wpa_Result.ifname));
-	wpa_Result.proto = 0;
-	wpa_Result.key_mgmt = 0;
-	wpa_Result.eap_type = 0;
-	wpa_Result.authenticated = false;
 	pDevice->fWPA_Authened = false;
 #endif
 	pr_debug("call device init rd0 ring\n");
