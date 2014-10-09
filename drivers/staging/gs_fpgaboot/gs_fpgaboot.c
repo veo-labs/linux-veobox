@@ -293,8 +293,8 @@ static int gs_fpgaboot(void)
 	struct fpgaimage	*fimage;
 
 	fimage = kmalloc(sizeof(struct fpgaimage), GFP_KERNEL);
-	if (fimage == NULL)
-		goto err_out;
+	if (!fimage)
+		return -ENOMEM;
 
 	err = gs_load_image(fimage, file);
 	if (err) {
