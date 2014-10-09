@@ -773,13 +773,13 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 
 	/* WaDisablePartialInstShootdown:bdw */
 	/* WaDisableThreadStallDopClockGating:bdw (pre-production) */
-	WA_SET_BIT_MASKED(GEN8_ROW_CHICKEN,
-			  PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE |
-			  STALL_DOP_GATING_DISABLE);
+	intel_ring_emit_wa(ring, GEN8_ROW_CHICKEN,
+			   _MASKED_BIT_ENABLE(PARTIAL_INSTRUCTION_SHOOTDOWN_DISABLE
+					     | STALL_DOP_GATING_DISABLE));
 
 	/* WaDisableDopClockGating:bdw */
-	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2,
-			  DOP_CLOCK_GATING_DISABLE);
+	intel_ring_emit_wa(ring, GEN7_ROW_CHICKEN2,
+			   _MASKED_BIT_ENABLE(DOP_CLOCK_GATING_DISABLE));
 
 	WA_SET_BIT_MASKED(HALF_SLICE_CHICKEN3,
 			  GEN8_SAMPLER_POWER_BYPASS_DIS);
