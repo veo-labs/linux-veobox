@@ -71,6 +71,7 @@ MODULE_DESCRIPTION("Driver for the Digi International EPCA PCI based product lin
 MODULE_SUPPORTED_DEVICE("dgap");
 
 static int dgap_start(void);
+static void dgap_stop(void);
 static void dgap_init_globals(void);
 static struct board_t *dgap_found_board(struct pci_dev *pdev, int id,
 					int boardnum);
@@ -457,16 +458,13 @@ static char *dgap_sindex(char *string, char *group)
 		}
 	}
 
-	return NULL;
-}
+	rc = pci_register_driver(&dgap_driver);
+	if (rc)
+		goto err_stop;
 
-/*
- * get a word from the input stream, also keep track of current line number.
- * words are separated by whitespace.
- */
-static char *dgap_getword(char **in)
-{
-	char *ret_ptr = *in;
+	rc = dgap_create_driver_sysfiles(&dgap_driver);
+	if (rc)
+		goto err_unregister;
 
 	char *ptr = dgap_sindex(*in, " \t\n");
 
@@ -474,17 +472,10 @@ static char *dgap_getword(char **in)
 	if (!ptr)
 		return NULL;
 
-	/* Mark new location for our buffer */
-	*ptr = '\0';
-	*in = ptr + 1;
-
-	/* Eat any extra spaces/tabs/newlines that might be present */
-	while (*in && **in && ((**in == ' ') ||
-			       (**in == '\t') ||
-			       (**in == '\n'))) {
-		**in = '\0';
-		*in = *in + 1;
-	}
+err_unregister:
+	pci_unregister_driver(&dgap_driver);
+err_stop:
+	dgap_stop();
 
 	return ret_ptr;
 }
@@ -604,10 +595,22 @@ static void dgap_remove_one(struct pci_dev *dev)
 	/* Do Nothing */
 }
 
-/*
- * Given a board pointer, returns whether we turn on altpin or not.
- */
-static uint dgap_config_get_altpin(struct board_t *bd)
+static void dgap_stop(void)
+{
+	unsigned long lock_flags;
+
+	spin_lock_irqsave(&dgap_poll_lock, lock_flags);
+	dgap_poll_stop = 1;
+	spin_unlock_irqrestore(&dgap_poll_lock, lock_flags);
+
+	del_timer_sync(&dgap_poll_timer);
+
+	device_destroy(dgap_class, MKDEV(DIGI_DGAP_MAJOR, 0));
+	class_destroy(dgap_class);
+	unregister_chrdev(DIGI_DGAP_MAJOR, "dgap");
+}
+
+static int dgap_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct cnode *p;
 
