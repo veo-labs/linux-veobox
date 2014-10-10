@@ -1995,14 +1995,8 @@ vt6655_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
 				len = bar & (PCI_BASE_ADDRESS_IO_MASK & 0xffff);
 				len = len & ~(len - 1);
 
-#ifdef SndEvt_ToAPI
-		if ((((PSCmdRequest)rq)->wCmdCode != WLAN_CMD_SET_EVT) &&
-		    !(pDevice->flags & DEVICE_FLAGS_OPENED))
-#else
-			if (!(pDevice->flags & DEVICE_FLAGS_OPENED) &&
-			    (((PSCmdRequest)rq)->wCmdCode != WLAN_CMD_SET_WPA))
-#endif
-			{
+		if (!(pDevice->flags & DEVICE_FLAGS_OPENED) &&
+		    (((PSCmdRequest)rq)->wCmdCode != WLAN_CMD_SET_WPA))	{
 				rc = -EFAULT;
 				break;
 			}
