@@ -72,7 +72,91 @@ static bool vnt_rx_data(struct vnt_private *priv, struct sk_buff *skb,
 			break;
 	}
 
-	priv->rx_rate = r;
+	if ((pKey != NULL) && (pKey->byCipherSuite == KEY_CTL_TKIP)) {
+		if (bIsWEP)
+			FrameSize -= 8;  //MIC
+	}
+
+	//--------------------------------------------------------------------------------
+	// Soft MIC
+	if ((pKey != NULL) && (pKey->byCipherSuite == KEY_CTL_TKIP)) {
+		if (bIsWEP) {
+			__le32 *pdwMIC_L;
+			__le32 *pdwMIC_R;
+			__le32 dwMIC_Priority;
+			__le32 dwMICKey0 = 0, dwMICKey1 = 0;
+			u32 dwLocalMIC_L = 0;
+			u32 dwLocalMIC_R = 0;
+			viawget_wpa_header *wpahdr;
+
+			if (pMgmt->eCurrMode == WMAC_MODE_ESS_AP) {
+				dwMICKey0 = cpu_to_le32(*(u32 *)(&pKey->abyKey[24]));
+				dwMICKey1 = cpu_to_le32(*(u32 *)(&pKey->abyKey[28]));
+			} else {
+				if (pDevice->pMgmt->eAuthenMode == WMAC_AUTH_WPANONE) {
+					dwMICKey0 = cpu_to_le32(*(u32 *)(&pKey->abyKey[16]));
+					dwMICKey1 = cpu_to_le32(*(u32 *)(&pKey->abyKey[20]));
+				} else if ((pKey->dwKeyIndex & BIT28) == 0) {
+					dwMICKey0 = cpu_to_le32(*(u32 *)(&pKey->abyKey[16]));
+					dwMICKey1 = cpu_to_le32(*(u32 *)(&pKey->abyKey[20]));
+				} else {
+					dwMICKey0 = cpu_to_le32(*(u32 *)(&pKey->abyKey[24]));
+					dwMICKey1 = cpu_to_le32(*(u32 *)(&pKey->abyKey[28]));
+				}
+			}
+
+			MIC_vInit(dwMICKey0, dwMICKey1);
+			MIC_vAppend((unsigned char *)&(pDevice->sRxEthHeader.abyDstAddr[0]), 12);
+			dwMIC_Priority = 0;
+			MIC_vAppend((unsigned char *)&dwMIC_Priority, 4);
+			// 4 is Rcv buffer header, 24 is MAC Header, and 8 is IV and Ext IV.
+			MIC_vAppend((unsigned char *)(skb->data + 4 + WLAN_HDR_ADDR3_LEN + 8),
+				    FrameSize - WLAN_HDR_ADDR3_LEN - 8);
+			MIC_vGetMIC(&dwLocalMIC_L, &dwLocalMIC_R);
+			MIC_vUnInit();
+
+			pdwMIC_L = (__le32 *)(skb->data + 4 + FrameSize);
+			pdwMIC_R = (__le32 *)(skb->data + 4 + FrameSize + 4);
+
+			if ((le32_to_cpu(*pdwMIC_L) != dwLocalMIC_L) ||
+			    (le32_to_cpu(*pdwMIC_R) != dwLocalMIC_R) ||
+			    pDevice->bRxMICFail) {
+				pr_debug("MIC comparison is fail!\n");
+				pDevice->bRxMICFail = false;
+				pDevice->s802_11Counter.TKIPLocalMICFailures++;
+				if (bDeFragRx) {
+					if (!device_alloc_frag_buf(pDevice, &pDevice->sRxDFCB[pDevice->uCurrentDFCBIdx])) {
+						pr_err("%s: can not alloc more frag bufs\n",
+						       pDevice->dev->name);
+					}
+				}
+				//2008-0409-07, <Add> by Einsn Liu
+#ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+				//send event to wpa_supplicant
+				{
+					union iwreq_data wrqu;
+					struct iw_michaelmicfailure ev;
+					int keyidx = pbyFrame[cbHeaderSize+3] >> 6; //top two-bits
+
+					memset(&ev, 0, sizeof(ev));
+					ev.flags = keyidx & IW_MICFAILURE_KEY_ID;
+					if ((pMgmt->eCurrMode == WMAC_MODE_ESS_STA) &&
+					    (pMgmt->eCurrState == WMAC_STATE_ASSOC) &&
+					    (*pbyRsr & (RSR_ADDRBROAD | RSR_ADDRMULTI)) == 0) {
+						ev.flags |= IW_MICFAILURE_PAIRWISE;
+					} else {
+						ev.flags |= IW_MICFAILURE_GROUP;
+					}
+
+					ev.src_addr.sa_family = ARPHRD_ETHER;
+					ether_addr_copy(ev.src_addr.sa_data,
+							pMACHeader->abyAddr2);
+					memset(&wrqu, 0, sizeof(wrqu));
+					wrqu.data.length = sizeof(ev);
+					wireless_send_event(pDevice->dev, IWEVMICHAELMICFAILURE, &wrqu, (char *)&ev);
+
+				}
+#endif
 
 	for (ii = 0; ii < sband->n_bitrates; ii++) {
 		if (sband->bitrates[ii].hw_value == r) {
