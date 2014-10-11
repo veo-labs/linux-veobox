@@ -272,6 +272,10 @@ struct vnt_private {
 	u8 rx_rate;
 	int                         multicast_limit;
 
+	pid_t			MLMEThr_pid;
+	struct completion	notify;
+	struct semaphore	mlme_semaphore;
+
 	u32                         rx_bytes;
 
 	/* Version control */
@@ -282,6 +286,9 @@ struct vnt_private {
 	unsigned char byZoneType;
 	bool bZoneRegExist;
 	unsigned char byOriginalZonetype;
+	unsigned char abyMacContext[MAC_MAX_CONTEXT_REG];
+	unsigned char abyCurrentNetAddr[ETH_ALEN];
+	bool bLinkPass;          // link status: OK or fail
 
 	unsigned char abyCurrentNetAddr[ETH_ALEN]; __aligned(2)
 	bool bLinkPass;          /* link status: OK or fail */

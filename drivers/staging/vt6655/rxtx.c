@@ -152,6 +152,160 @@ s_uFillDataHead(
 
 /*---------------------  Export Variables  --------------------------*/
 
+static
+void
+s_vFillTxKey(
+	struct vnt_private *pDevice,
+	unsigned char *pbyBuf,
+	unsigned char *pbyIVHead,
+	PSKeyItem  pTransmitKey,
+	unsigned char *pbyHdrBuf,
+	unsigned short wPayloadLen,
+	unsigned char *pMICHDR
+)
+{
+	struct vnt_mic_hdr *mic_hdr = (struct vnt_mic_hdr *)pMICHDR;
+	unsigned long *pdwIV = (unsigned long *)pbyIVHead;
+	unsigned long *pdwExtIV = (unsigned long *)((unsigned char *)pbyIVHead+4);
+	PS802_11Header  pMACHeader = (PS802_11Header)pbyHdrBuf;
+	unsigned long dwRevIVCounter;
+	unsigned char byKeyIndex = 0;
+
+	//Fill TXKEY
+	if (pTransmitKey == NULL)
+		return;
+
+	dwRevIVCounter = cpu_to_le32(pDevice->dwIVCounter);
+	*pdwIV = pDevice->dwIVCounter;
+	byKeyIndex = pTransmitKey->dwKeyIndex & 0xf;
+
+	if (pTransmitKey->byCipherSuite == KEY_CTL_WEP) {
+		if (pTransmitKey->uKeyLength == WLAN_WEP232_KEYLEN) {
+			memcpy(pDevice->abyPRNG, (unsigned char *)&(dwRevIVCounter), 3);
+			memcpy(pDevice->abyPRNG+3, pTransmitKey->abyKey, pTransmitKey->uKeyLength);
+		} else {
+			memcpy(pbyBuf, (unsigned char *)&(dwRevIVCounter), 3);
+			memcpy(pbyBuf+3, pTransmitKey->abyKey, pTransmitKey->uKeyLength);
+			if (pTransmitKey->uKeyLength == WLAN_WEP40_KEYLEN) {
+				memcpy(pbyBuf+8, (unsigned char *)&(dwRevIVCounter), 3);
+				memcpy(pbyBuf+11, pTransmitKey->abyKey, pTransmitKey->uKeyLength);
+			}
+			memcpy(pDevice->abyPRNG, pbyBuf, 16);
+		}
+		// Append IV after Mac Header
+		*pdwIV &= WEP_IV_MASK;//00000000 11111111 11111111 11111111
+		*pdwIV |= (unsigned long)byKeyIndex << 30;
+		*pdwIV = cpu_to_le32(*pdwIV);
+		pDevice->dwIVCounter++;
+		if (pDevice->dwIVCounter > WEP_IV_MASK)
+			pDevice->dwIVCounter = 0;
+
+	} else if (pTransmitKey->byCipherSuite == KEY_CTL_TKIP) {
+		pTransmitKey->wTSC15_0++;
+		if (pTransmitKey->wTSC15_0 == 0)
+			pTransmitKey->dwTSC47_16++;
+
+		TKIPvMixKey(pTransmitKey->abyKey, pDevice->abyCurrentNetAddr,
+			    pTransmitKey->wTSC15_0, pTransmitKey->dwTSC47_16, pDevice->abyPRNG);
+		memcpy(pbyBuf, pDevice->abyPRNG, 16);
+		// Make IV
+		memcpy(pdwIV, pDevice->abyPRNG, 3);
+
+		*(pbyIVHead+3) = (unsigned char)(((byKeyIndex << 6) & 0xc0) | 0x20); // 0x20 is ExtIV
+		// Append IV&ExtIV after Mac Header
+		*pdwExtIV = cpu_to_le32(pTransmitKey->dwTSC47_16);
+		pr_debug("vFillTxKey()---- pdwExtIV: %lx\n", *pdwExtIV);
+
+	} else if (pTransmitKey->byCipherSuite == KEY_CTL_CCMP) {
+		pTransmitKey->wTSC15_0++;
+		if (pTransmitKey->wTSC15_0 == 0)
+			pTransmitKey->dwTSC47_16++;
+
+		memcpy(pbyBuf, pTransmitKey->abyKey, 16);
+
+		// Make IV
+		*pdwIV = 0;
+		*(pbyIVHead+3) = (unsigned char)(((byKeyIndex << 6) & 0xc0) | 0x20); // 0x20 is ExtIV
+		*pdwIV |= cpu_to_le16((unsigned short)(pTransmitKey->wTSC15_0));
+		//Append IV&ExtIV after Mac Header
+		*pdwExtIV = cpu_to_le32(pTransmitKey->dwTSC47_16);
+
+		/* MICHDR0 */
+		mic_hdr->id = 0x59;
+		mic_hdr->tx_priority = 0;
+		ether_addr_copy(mic_hdr->mic_addr2, pMACHeader->abyAddr2);
+
+		/* ccmp pn big endian order */
+		mic_hdr->ccmp_pn[0] = (u8)(pTransmitKey->dwTSC47_16 >> 24);
+		mic_hdr->ccmp_pn[1] = (u8)(pTransmitKey->dwTSC47_16 >> 16);
+		mic_hdr->ccmp_pn[2] = (u8)(pTransmitKey->dwTSC47_16 >> 8);
+		mic_hdr->ccmp_pn[3] = (u8)pTransmitKey->dwTSC47_16;
+		mic_hdr->ccmp_pn[4] = (u8)(pTransmitKey->wTSC15_0 >> 8);
+		mic_hdr->ccmp_pn[5] = (u8)pTransmitKey->wTSC15_0;
+
+		/* MICHDR1 */
+		mic_hdr->payload_len = cpu_to_be16(wPayloadLen);
+
+		if (pDevice->bLongHeader)
+			mic_hdr->hlen = cpu_to_be16(28);
+		else
+			mic_hdr->hlen = cpu_to_be16(22);
+
+		ether_addr_copy(mic_hdr->addr1, pMACHeader->abyAddr1);
+		ether_addr_copy(mic_hdr->addr2, pMACHeader->abyAddr2);
+
+		/* MICHDR2 */
+		ether_addr_copy(mic_hdr->addr3, pMACHeader->abyAddr3);
+		mic_hdr->frame_control =
+				cpu_to_le16(pMACHeader->wFrameCtl & 0xc78f);
+		mic_hdr->seq_ctrl = cpu_to_le16(pMACHeader->wSeqCtl & 0xf);
+
+		if (pDevice->bLongHeader)
+			ether_addr_copy(mic_hdr->addr4, pMACHeader->abyAddr4);
+	}
+}
+
+static
+void
+s_vSWencryption(
+	struct vnt_private *pDevice,
+	PSKeyItem           pTransmitKey,
+	unsigned char *pbyPayloadHead,
+	unsigned short wPayloadSize
+)
+{
+	unsigned int cbICVlen = 4;
+	unsigned long dwICV = 0xFFFFFFFFL;
+	unsigned long *pdwICV;
+
+	if (pTransmitKey == NULL)
+		return;
+
+	if (pTransmitKey->byCipherSuite == KEY_CTL_WEP) {
+		//=======================================================================
+		// Append ICV after payload
+		dwICV = CRCdwGetCrc32Ex(pbyPayloadHead, wPayloadSize, dwICV);//ICV(Payload)
+		pdwICV = (unsigned long *)(pbyPayloadHead + wPayloadSize);
+		// finally, we must invert dwCRC to get the correct answer
+		*pdwICV = cpu_to_le32(~dwICV);
+		// RC4 encryption
+		rc4_init(&pDevice->SBox, pDevice->abyPRNG, pTransmitKey->uKeyLength + 3);
+		rc4_encrypt(&pDevice->SBox, pbyPayloadHead, pbyPayloadHead, wPayloadSize+cbICVlen);
+		//=======================================================================
+	} else if (pTransmitKey->byCipherSuite == KEY_CTL_TKIP) {
+		//=======================================================================
+		//Append ICV after payload
+		dwICV = CRCdwGetCrc32Ex(pbyPayloadHead, wPayloadSize, dwICV);//ICV(Payload)
+		pdwICV = (unsigned long *)(pbyPayloadHead + wPayloadSize);
+		// finally, we must invert dwCRC to get the correct answer
+		*pdwICV = cpu_to_le32(~dwICV);
+		// RC4 encryption
+		rc4_init(&pDevice->SBox, pDevice->abyPRNG, TKIP_KEY_LEN);
+		rc4_encrypt(&pDevice->SBox, pbyPayloadHead, pbyPayloadHead, wPayloadSize+cbICVlen);
+		//=======================================================================
+	}
+}
+
 static __le16 vnt_time_stamp_off(struct vnt_private *priv, u16 rate)
 {
 	return cpu_to_le16(wTimeStampOff[priv->byPreambleType % 2]
@@ -692,8 +846,22 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-			ether_addr_copy(buf->data.ra, hdr->addr1);
-			ether_addr_copy(buf->data.ta, hdr->addr2);
+
+			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
+			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
+				ether_addr_copy(buf->data.ra,
+						psEthHeader->abyDstAddr);
+			} else {
+				ether_addr_copy(buf->data.ra,
+						pDevice->abyBSSID);
+			}
+			if (pDevice->op_mode == NL80211_IFTYPE_AP)
+				ether_addr_copy(buf->data.ta,
+						pDevice->abyBSSID);
+			else
+				ether_addr_copy(buf->data.ta,
+						psEthHeader->abySrcAddr);
+
 		} else {
 			struct vnt_rts_g_fb *buf = pvRTS;
 			/* Get SignalField, ServiceField & Length */
@@ -746,8 +914,23 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-			ether_addr_copy(buf->data.ra, hdr->addr1);
-			ether_addr_copy(buf->data.ta, hdr->addr2);
+
+			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
+			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
+				ether_addr_copy(buf->data.ra,
+						psEthHeader->abyDstAddr);
+			} else {
+				ether_addr_copy(buf->data.ra,
+						pDevice->abyBSSID);
+			}
+
+			if (pDevice->op_mode == NL80211_IFTYPE_AP)
+				ether_addr_copy(buf->data.ta,
+						pDevice->abyBSSID);
+			else
+				ether_addr_copy(buf->data.ta,
+						psEthHeader->abySrcAddr);
+
 		} // if (byFBOption == AUTO_FB_NONE)
 	} else if (byPktType == PK_TYPE_11A) {
 		if (byFBOption == AUTO_FB_NONE) {
@@ -768,8 +951,23 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-			ether_addr_copy(buf->data.ra, hdr->addr1);
-			ether_addr_copy(buf->data.ta, hdr->addr2);
+
+			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
+			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
+				ether_addr_copy(buf->data.ra,
+						psEthHeader->abyDstAddr);
+			} else {
+				ether_addr_copy(buf->data.ra,
+						pDevice->abyBSSID);
+			}
+
+			if (pDevice->op_mode == NL80211_IFTYPE_AP)
+				ether_addr_copy(buf->data.ta,
+						pDevice->abyBSSID);
+			else
+				ether_addr_copy(buf->data.ta,
+						psEthHeader->abySrcAddr);
+
 		} else {
 			struct vnt_rts_a_fb *buf = pvRTS;
 			/* Get SignalField, ServiceField & Length */
@@ -798,8 +996,20 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-			ether_addr_copy(buf->data.ra, hdr->addr1);
-			ether_addr_copy(buf->data.ta, hdr->addr2);
+			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
+			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
+				ether_addr_copy(buf->data.ra,
+						psEthHeader->abyDstAddr);
+			} else {
+				ether_addr_copy(buf->data.ra,
+						pDevice->abyBSSID);
+			}
+			if (pDevice->op_mode == NL80211_IFTYPE_AP)
+				ether_addr_copy(buf->data.ta,
+						pDevice->abyBSSID);
+			else
+				ether_addr_copy(buf->data.ta,
+						psEthHeader->abySrcAddr);
 		}
 	} else if (byPktType == PK_TYPE_11B) {
 		struct vnt_rts_ab *buf = pvRTS;
@@ -818,8 +1028,19 @@ s_vFillRTSHead(
 		buf->data.frame_control =
 			cpu_to_le16(IEEE80211_FTYPE_CTL | IEEE80211_STYPE_RTS);
 
-		ether_addr_copy(buf->data.ra, hdr->addr1);
-		ether_addr_copy(buf->data.ta, hdr->addr2);
+		if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
+		    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
+			ether_addr_copy(buf->data.ra,
+					psEthHeader->abyDstAddr);
+		} else {
+			ether_addr_copy(buf->data.ra, pDevice->abyBSSID);
+		}
+
+		if (pDevice->op_mode == NL80211_IFTYPE_AP)
+			ether_addr_copy(buf->data.ta, pDevice->abyBSSID);
+		else
+			ether_addr_copy(buf->data.ta,
+					psEthHeader->abySrcAddr);
 	}
 }
 
@@ -1251,7 +1472,32 @@ static void vnt_fill_txkey(struct ieee80211_hdr *hdr, u8 *key_buffer,
 
 		ieee80211_get_key_tx_seq(tx_key, &seq);
 
-		memcpy(mic_hdr->ccmp_pn, seq.ccmp.pn, IEEE80211_CCMP_PN_LEN);
+	if (pDevice->op_mode == NL80211_IFTYPE_AP) {
+		ether_addr_copy(&(pMACHeader->abyAddr1[0]),
+				&(psEthHeader->abyDstAddr[0]));
+		ether_addr_copy(&(pMACHeader->abyAddr2[0]),
+				&(pDevice->abyBSSID[0]));
+		ether_addr_copy(&(pMACHeader->abyAddr3[0]),
+				&(psEthHeader->abySrcAddr[0]));
+		pMACHeader->wFrameCtl |= FC_FROMDS;
+	} else {
+		if (pDevice->op_mode == NL80211_IFTYPE_ADHOC) {
+			ether_addr_copy(&(pMACHeader->abyAddr1[0]),
+					&(psEthHeader->abyDstAddr[0]));
+			ether_addr_copy(&(pMACHeader->abyAddr2[0]),
+					&(psEthHeader->abySrcAddr[0]));
+			ether_addr_copy(&(pMACHeader->abyAddr3[0]),
+					&(pDevice->abyBSSID[0]));
+		} else {
+			ether_addr_copy(&(pMACHeader->abyAddr3[0]),
+					&(psEthHeader->abyDstAddr[0]));
+			ether_addr_copy(&(pMACHeader->abyAddr2[0]),
+					&(psEthHeader->abySrcAddr[0]));
+			ether_addr_copy(&(pMACHeader->abyAddr1[0]),
+					&(pDevice->abyBSSID[0]));
+			pMACHeader->wFrameCtl |= FC_TODS;
+		}
+	}
 
 		if (ieee80211_has_a4(hdr->frame_control))
 			mic_hdr->hlen = cpu_to_be16(28);
@@ -1392,7 +1638,84 @@ int vnt_generate_fifo_header(struct vnt_private *priv, u32 dma_idx,
 
 	}
 
-	tx_buffer_head->frag_ctl |= cpu_to_le16(FRAGCTL_NONFRAG);
+	memset((void *)(pbyTxBufferAddr + wTxBufSize), 0, (cbHeaderSize - wTxBufSize));
+
+	ether_addr_copy(&(sEthHeader.abyDstAddr[0]),
+			&(pPacket->p80211Header->sA3.abyAddr1[0]));
+	ether_addr_copy(&(sEthHeader.abySrcAddr[0]),
+			&(pPacket->p80211Header->sA3.abyAddr2[0]));
+	//=========================
+	//    No Fragmentation
+	//=========================
+	pTxBufHead->wFragCtl |= (unsigned short)FRAGCTL_NONFRAG;
+
+	//Fill FIFO,RrvTime,RTS,and CTS
+	s_vGenerateTxParameter(pDevice, byPktType, pbyTxBufferAddr, pvRrvTime, pvRTS, pCTS,
+			       cbFrameSize, bNeedACK, TYPE_TXDMA0, &sEthHeader, wCurrentRate);
+
+	//Fill DataHead
+	uDuration = s_uFillDataHead(pDevice, byPktType, pvTxDataHd, cbFrameSize, TYPE_TXDMA0, bNeedACK,
+				    0, 0, 1, AUTO_FB_NONE, wCurrentRate);
+
+	pMACHeader = (PS802_11Header) (pbyTxBufferAddr + cbHeaderSize);
+
+	cbReqCount = cbHeaderSize + cbMacHdLen + uPadding + cbIVlen + cbFrameBodySize;
+
+	if (WLAN_GET_FC_ISWEP(pPacket->p80211Header->sA4.wFrameCtl) != 0) {
+		unsigned char *pbyIVHead;
+		unsigned char *pbyPayloadHead;
+		unsigned char *pbyBSSID;
+		PSKeyItem       pTransmitKey = NULL;
+
+		pbyIVHead = (unsigned char *)(pbyTxBufferAddr + cbHeaderSize + cbMacHdLen + uPadding);
+		pbyPayloadHead = (unsigned char *)(pbyTxBufferAddr + cbHeaderSize + cbMacHdLen + uPadding + cbIVlen);
+
+		//Fill TXKEY
+		//Kyle: Need fix: TKIP and AES did't encrypt Mnt Packet.
+		//s_vFillTxKey(pDevice, (unsigned char *)pTxBufHead->adwTxKey, NULL);
+
+		//Fill IV(ExtIV,RSNHDR)
+		//s_vFillPrePayload(pDevice, pbyIVHead, NULL);
+		//---------------------------
+		// S/W or H/W Encryption
+		//---------------------------
+		do {
+			if ((pDevice->op_mode == NL80211_IFTYPE_STATION) &&
+			    (pDevice->bLinkPass == true)) {
+				pbyBSSID = pDevice->abyBSSID;
+				// get pairwise key
+				if (KeybGetTransmitKey(&(pDevice->sKey), pbyBSSID, PAIRWISE_KEY, &pTransmitKey) == false) {
+					// get group key
+					if (KeybGetTransmitKey(&(pDevice->sKey), pbyBSSID, GROUP_KEY, &pTransmitKey) == true) {
+						pr_debug("Get GTK\n");
+						break;
+					}
+				} else {
+					pr_debug("Get PTK\n");
+					break;
+				}
+			}
+			// get group key
+			pbyBSSID = pDevice->abyBroadcastAddr;
+			if (KeybGetTransmitKey(&(pDevice->sKey), pbyBSSID, GROUP_KEY, &pTransmitKey) == false) {
+				pTransmitKey = NULL;
+				pr_debug("KEY is NULL. OP Mode[%d]\n",
+					 pDevice->op_mode);
+			} else {
+				pr_debug("Get GTK\n");
+			}
+		} while (false);
+		//Fill TXKEY
+		s_vFillTxKey(pDevice, (unsigned char *)(pTxBufHead->adwTxKey), pbyIVHead, pTransmitKey,
+			     (unsigned char *)pMACHeader, (unsigned short)cbFrameBodySize, NULL);
+
+		memcpy(pMACHeader, pPacket->p80211Header, cbMacHdLen);
+		memcpy(pbyPayloadHead, ((unsigned char *)(pPacket->p80211Header) + cbMacHdLen),
+		       cbFrameBodySize);
+	} else {
+		// Copy the Packet into a tx Buffer
+		memcpy(pMACHeader, pPacket->p80211Header, pPacket->cbMPDULen);
+	}
 
 	s_cbFillTxBufHead(priv, pkt_type, (u8 *)tx_buffer_head,
 			  dma_idx, head_td, is_pspoll);
@@ -1469,9 +1792,19 @@ static int vnt_beacon_xmit(struct vnt_private *priv,
 		hdr->seq_ctrl = cpu_to_le16(priv->wSeqCounter << 4);
 	}
 
-	priv->wSeqCounter++;
-	if (priv->wSeqCounter > 0x0fff)
-		priv->wSeqCounter = 0;
+	memset((void *)(pbyTxBufferAddr + wTxBufSize), 0, (cbHeaderSize - wTxBufSize));
+	ether_addr_copy(&(sEthHeader.abyDstAddr[0]),
+			&(p80211Header->sA3.abyAddr1[0]));
+	ether_addr_copy(&(sEthHeader.abySrcAddr[0]),
+			&(p80211Header->sA3.abyAddr2[0]));
+	//=========================
+	//    No Fragmentation
+	//=========================
+	pTxBufHead->wFragCtl |= (unsigned short)FRAGCTL_NONFRAG;
+
+	//Fill FIFO,RrvTime,RTS,and CTS
+	s_vGenerateTxParameter(pDevice, byPktType, pbyTxBufferAddr, pvRrvTime, pvRTS, pvCTS,
+			       cbFrameSize, bNeedACK, TYPE_TXDMA0, &sEthHeader, wCurrentRate);
 
 	priv->wBCNBufLen = sizeof(*short_head) + skb->len;
 
