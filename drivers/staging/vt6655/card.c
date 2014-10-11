@@ -504,6 +504,487 @@ bool CARDbRadioPowerOn(struct vnt_private *pDevice)
 	return bResult;
 }
 
+bool CARDbRemoveKey(struct vnt_private *pDevice, unsigned char *pbyBSSID)
+{
+
+	KeybRemoveAllKey(&(pDevice->sKey), pbyBSSID, pDevice->PortOffset);
+	return true;
+}
+
+/*
+ *
+ * Description:
+ *    Add BSSID in PMKID Candidate list.
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *      pbyBSSID - BSSID address for adding
+ *      wRSNCap - BSS's RSN capability
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+bool
+CARDbAdd_PMKID_Candidate(
+	struct vnt_private *pDevice,
+	unsigned char *pbyBSSID,
+	bool bRSNCapExist,
+	unsigned short wRSNCap
+)
+{
+	struct pmkid_candidate *pCandidateList;
+	unsigned int ii = 0;
+
+	pr_debug("bAdd_PMKID_Candidate START: (%d)\n",
+		 (int)pDevice->gsPMKIDCandidate.NumCandidates);
+
+	if (pDevice->gsPMKIDCandidate.NumCandidates >= MAX_PMKIDLIST) {
+		pr_debug("vFlush_PMKID_Candidate: 3\n");
+		memset(&pDevice->gsPMKIDCandidate, 0, sizeof(SPMKIDCandidateEvent));
+	}
+
+	for (ii = 0; ii < 6; ii++)
+		pr_debug("%02X ", *(pbyBSSID + ii));
+
+	pr_debug("\n");
+
+	// Update Old Candidate
+	for (ii = 0; ii < pDevice->gsPMKIDCandidate.NumCandidates; ii++) {
+		pCandidateList = &pDevice->gsPMKIDCandidate.CandidateList[ii];
+		if (!memcmp(pCandidateList->BSSID, pbyBSSID, ETH_ALEN)) {
+			if (bRSNCapExist && (wRSNCap & BIT0))
+				pCandidateList->Flags |= NDIS_802_11_PMKID_CANDIDATE_PREAUTH_ENABLED;
+			else
+				pCandidateList->Flags &= ~(NDIS_802_11_PMKID_CANDIDATE_PREAUTH_ENABLED);
+
+			return true;
+		}
+	}
+
+	// New Candidate
+	pCandidateList = &pDevice->gsPMKIDCandidate.CandidateList[pDevice->gsPMKIDCandidate.NumCandidates];
+	if (bRSNCapExist && (wRSNCap & BIT0))
+		pCandidateList->Flags |= NDIS_802_11_PMKID_CANDIDATE_PREAUTH_ENABLED;
+	else
+		pCandidateList->Flags &= ~(NDIS_802_11_PMKID_CANDIDATE_PREAUTH_ENABLED);
+
+	ether_addr_copy(pCandidateList->BSSID, pbyBSSID);
+	pDevice->gsPMKIDCandidate.NumCandidates++;
+	pr_debug("NumCandidates:%d\n",
+		 (int)pDevice->gsPMKIDCandidate.NumCandidates);
+	return true;
+}
+
+void *
+CARDpGetCurrentAddress(
+	struct vnt_private *pDevice
+)
+{
+
+	return pDevice->abyCurrentNetAddr;
+}
+
+/*
+ *
+ * Description:
+ *    Start Spectrum Measure defined in 802.11h
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+bool
+CARDbStartMeasure(
+	struct vnt_private *pDevice,
+	void *pvMeasureEIDs,
+	unsigned int uNumOfMeasureEIDs
+)
+{
+	PWLAN_IE_MEASURE_REQ    pEID = (PWLAN_IE_MEASURE_REQ) pvMeasureEIDs;
+	u64 qwCurrTSF;
+	u64 qwStartTSF;
+	bool bExpired = true;
+	unsigned short wDuration = 0;
+
+	if ((pEID == NULL) ||
+	    (uNumOfMeasureEIDs == 0)) {
+		return true;
+	}
+	CARDbGetCurrentTSF(pDevice->PortOffset, &qwCurrTSF);
+	if (pDevice->bMeasureInProgress == true) {
+		pDevice->bMeasureInProgress = false;
+		VNSvOutPortB(pDevice->PortOffset + MAC_REG_RCR, pDevice->byOrgRCR);
+		MACvSelectPage1(pDevice->PortOffset);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MAR0, pDevice->dwOrgMAR0);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MAR4, pDevice->dwOrgMAR4);
+		// clear measure control
+		MACvRegBitsOff(pDevice->PortOffset, MAC_REG_MSRCTL, MSRCTL_EN);
+		MACvSelectPage0(pDevice->PortOffset);
+		set_channel(pDevice, pDevice->byOrgChannel);
+		MACvSelectPage1(pDevice->PortOffset);
+		MACvRegBitsOn(pDevice->PortOffset, MAC_REG_MSRCTL+1, MSRCTL1_TXPAUSE);
+		MACvSelectPage0(pDevice->PortOffset);
+	}
+	pDevice->uNumOfMeasureEIDs = uNumOfMeasureEIDs;
+
+	do {
+		pDevice->pCurrMeasureEID = pEID;
+		pEID++;
+		pDevice->uNumOfMeasureEIDs--;
+
+		if (pDevice->byLocalID > REV_ID_VT3253_B1) {
+			qwStartTSF = *((u64 *)(pDevice->pCurrMeasureEID->sReq.abyStartTime));
+			wDuration = *((unsigned short *)(pDevice->pCurrMeasureEID->sReq.abyDuration));
+			wDuration += 1; // 1 TU for channel switching
+
+			if (qwStartTSF == 0) {
+				// start immediately by setting start TSF == current TSF + 2 TU
+				qwStartTSF = qwCurrTSF + 2048;
+
+				bExpired = false;
+				break;
+			} else {
+				// start at setting start TSF - 1TU(for channel switching)
+				qwStartTSF -= 1024;
+			}
+
+			if (qwCurrTSF < qwStartTSF) {
+				bExpired = false;
+				break;
+			}
+			VNTWIFIbMeasureReport(pDevice->pMgmt,
+					      false,
+					      pDevice->pCurrMeasureEID,
+					      MEASURE_MODE_LATE,
+					      pDevice->byBasicMap,
+					      pDevice->byCCAFraction,
+					      pDevice->abyRPIs
+				);
+		} else {
+			// hardware do not support measure
+			VNTWIFIbMeasureReport(pDevice->pMgmt,
+					      false,
+					      pDevice->pCurrMeasureEID,
+					      MEASURE_MODE_INCAPABLE,
+					      pDevice->byBasicMap,
+					      pDevice->byCCAFraction,
+					      pDevice->abyRPIs
+				);
+		}
+	} while (pDevice->uNumOfMeasureEIDs != 0);
+
+	if (!bExpired) {
+		MACvSelectPage1(pDevice->PortOffset);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MSRSTART, (u32)qwStartTSF);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MSRSTART + 4, (u32)(qwStartTSF >> 32));
+		VNSvOutPortW(pDevice->PortOffset + MAC_REG_MSRDURATION, wDuration);
+		MACvRegBitsOn(pDevice->PortOffset, MAC_REG_MSRCTL, MSRCTL_EN);
+		MACvSelectPage0(pDevice->PortOffset);
+	} else {
+		// all measure start time expired we should complete action
+		VNTWIFIbMeasureReport(pDevice->pMgmt,
+				      true,
+				      NULL,
+				      0,
+				      pDevice->byBasicMap,
+				      pDevice->byCCAFraction,
+				      pDevice->abyRPIs
+			);
+	}
+	return true;
+}
+
+/*
+ *
+ * Description:
+ *    Do Channel Switch defined in 802.11h
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+bool
+CARDbChannelSwitch(
+	struct vnt_private *pDevice,
+	unsigned char byMode,
+	unsigned char byNewChannel,
+	unsigned char byCount
+)
+{
+	bool bResult = true;
+
+	if (byCount == 0) {
+		bResult = set_channel(pDevice, byNewChannel);
+		VNTWIFIbChannelSwitch(pDevice->pMgmt, byNewChannel);
+		MACvSelectPage1(pDevice->PortOffset);
+		MACvRegBitsOn(pDevice->PortOffset, MAC_REG_MSRCTL+1, MSRCTL1_TXPAUSE);
+		MACvSelectPage0(pDevice->PortOffset);
+		return bResult;
+	}
+	pDevice->byChannelSwitchCount = byCount;
+	pDevice->byNewChannel = byNewChannel;
+	pDevice->bChannelSwitch = true;
+	if (byMode == 1)
+		bResult = CARDbStopTxPacket(pDevice, PKT_TYPE_802_11_ALL);
+
+	return bResult;
+}
+
+/*
+ *
+ * Description:
+ *    Handle Quiet EID defined in 802.11h
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+bool
+CARDbSetQuiet(
+	struct vnt_private *pDevice,
+	bool bResetQuiet,
+	unsigned char byQuietCount,
+	unsigned char byQuietPeriod,
+	unsigned short wQuietDuration,
+	unsigned short wQuietOffset
+)
+{
+	unsigned int ii = 0;
+
+	if (bResetQuiet) {
+		MACvRegBitsOff(pDevice->PortOffset, MAC_REG_MSRCTL, (MSRCTL_QUIETTXCHK | MSRCTL_QUIETEN));
+		for (ii = 0; ii < MAX_QUIET_COUNT; ii++)
+			pDevice->sQuiet[ii].bEnable = false;
+
+		pDevice->uQuietEnqueue = 0;
+		pDevice->bEnableFirstQuiet = false;
+		pDevice->bQuietEnable = false;
+		pDevice->byQuietStartCount = byQuietCount;
+	}
+	if (pDevice->sQuiet[pDevice->uQuietEnqueue].bEnable == false) {
+		pDevice->sQuiet[pDevice->uQuietEnqueue].bEnable = true;
+		pDevice->sQuiet[pDevice->uQuietEnqueue].byPeriod = byQuietPeriod;
+		pDevice->sQuiet[pDevice->uQuietEnqueue].wDuration = wQuietDuration;
+		pDevice->sQuiet[pDevice->uQuietEnqueue].dwStartTime = (unsigned long) byQuietCount;
+		pDevice->sQuiet[pDevice->uQuietEnqueue].dwStartTime *= pDevice->wBeaconInterval;
+		pDevice->sQuiet[pDevice->uQuietEnqueue].dwStartTime += wQuietOffset;
+		pDevice->uQuietEnqueue++;
+		pDevice->uQuietEnqueue %= MAX_QUIET_COUNT;
+		if (pDevice->byQuietStartCount < byQuietCount)
+			pDevice->byQuietStartCount = byQuietCount;
+	}
+	return true;
+}
+
+/*
+ *
+ * Description:
+ *    Do Quiet, It will be called by either ISR(after start)
+ *    or VNTWIFI(before start) so we do not need a SPINLOCK
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+bool
+CARDbStartQuiet(
+	struct vnt_private *pDevice
+)
+{
+	unsigned int ii = 0;
+	unsigned long dwStartTime = 0xFFFFFFFF;
+	unsigned int uCurrentQuietIndex = 0;
+	unsigned long dwNextTime = 0;
+	unsigned long dwGap = 0;
+	unsigned long dwDuration = 0;
+
+	for (ii = 0; ii < MAX_QUIET_COUNT; ii++) {
+		if ((pDevice->sQuiet[ii].bEnable == true) &&
+		    (dwStartTime > pDevice->sQuiet[ii].dwStartTime)) {
+			dwStartTime = pDevice->sQuiet[ii].dwStartTime;
+			uCurrentQuietIndex = ii;
+		}
+	}
+	if (dwStartTime == 0xFFFFFFFF) {
+		// no more quiet
+		pDevice->bQuietEnable = false;
+		MACvRegBitsOff(pDevice->PortOffset, MAC_REG_MSRCTL, (MSRCTL_QUIETTXCHK | MSRCTL_QUIETEN));
+	} else {
+		if (pDevice->bQuietEnable == false) {
+			// first quiet
+			pDevice->byQuietStartCount--;
+			dwNextTime = pDevice->sQuiet[uCurrentQuietIndex].dwStartTime;
+			dwNextTime %= pDevice->wBeaconInterval;
+			MACvSelectPage1(pDevice->PortOffset);
+			VNSvOutPortW(pDevice->PortOffset + MAC_REG_QUIETINIT, (unsigned short) dwNextTime);
+			VNSvOutPortW(pDevice->PortOffset + MAC_REG_QUIETDUR, (unsigned short) pDevice->sQuiet[uCurrentQuietIndex].wDuration);
+			if (pDevice->byQuietStartCount == 0) {
+				pDevice->bEnableFirstQuiet = false;
+				MACvRegBitsOn(pDevice->PortOffset, MAC_REG_MSRCTL, (MSRCTL_QUIETTXCHK | MSRCTL_QUIETEN));
+			} else {
+				pDevice->bEnableFirstQuiet = true;
+			}
+			MACvSelectPage0(pDevice->PortOffset);
+		} else {
+			if (pDevice->dwCurrentQuietEndTime > pDevice->sQuiet[uCurrentQuietIndex].dwStartTime) {
+				// overlap with previous Quiet
+				dwGap =  pDevice->dwCurrentQuietEndTime - pDevice->sQuiet[uCurrentQuietIndex].dwStartTime;
+				if (dwGap >= pDevice->sQuiet[uCurrentQuietIndex].wDuration) {
+					// return false to indicate next quiet expired, should call this function again
+					return false;
+				}
+				dwDuration = pDevice->sQuiet[uCurrentQuietIndex].wDuration - dwGap;
+				dwGap = 0;
+			} else {
+				dwGap = pDevice->sQuiet[uCurrentQuietIndex].dwStartTime - pDevice->dwCurrentQuietEndTime;
+				dwDuration = pDevice->sQuiet[uCurrentQuietIndex].wDuration;
+			}
+			// set GAP and Next duration
+			MACvSelectPage1(pDevice->PortOffset);
+			VNSvOutPortW(pDevice->PortOffset + MAC_REG_QUIETGAP, (unsigned short) dwGap);
+			VNSvOutPortW(pDevice->PortOffset + MAC_REG_QUIETDUR, (unsigned short) dwDuration);
+			MACvRegBitsOn(pDevice->PortOffset, MAC_REG_MSRCTL, MSRCTL_QUIETRPT);
+			MACvSelectPage0(pDevice->PortOffset);
+		}
+		pDevice->bQuietEnable = true;
+		pDevice->dwCurrentQuietEndTime = pDevice->sQuiet[uCurrentQuietIndex].dwStartTime;
+		pDevice->dwCurrentQuietEndTime += pDevice->sQuiet[uCurrentQuietIndex].wDuration;
+		if (pDevice->sQuiet[uCurrentQuietIndex].byPeriod == 0) {
+			// not period disable current quiet element
+			pDevice->sQuiet[uCurrentQuietIndex].bEnable = false;
+		} else {
+			// set next period start time
+			dwNextTime = (unsigned long) pDevice->sQuiet[uCurrentQuietIndex].byPeriod;
+			dwNextTime *= pDevice->wBeaconInterval;
+			pDevice->sQuiet[uCurrentQuietIndex].dwStartTime = dwNextTime;
+		}
+		if (pDevice->dwCurrentQuietEndTime > 0x80010000) {
+			// decreament all time to avoid wrap around
+			for (ii = 0; ii < MAX_QUIET_COUNT; ii++) {
+				if (pDevice->sQuiet[ii].bEnable == true)
+					pDevice->sQuiet[ii].dwStartTime -= 0x80000000;
+
+			}
+			pDevice->dwCurrentQuietEndTime -= 0x80000000;
+		}
+	}
+	return true;
+}
+
+/*
+ *
+ * Description:
+ *    Set Local Power Constraint
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+void
+CARDvSetPowerConstraint(
+	struct vnt_private *pDevice,
+	unsigned char byChannel,
+	char byPower
+)
+{
+
+	if (byChannel > CB_MAX_CHANNEL_24G) {
+		if (pDevice->bCountryInfo5G == true)
+			pDevice->abyLocalPwr[byChannel] = pDevice->abyRegPwr[byChannel] - byPower;
+
+	} else {
+		if (pDevice->bCountryInfo24G == true)
+			pDevice->abyLocalPwr[byChannel] = pDevice->abyRegPwr[byChannel] - byPower;
+
+	}
+}
+
+/*
+ *
+ * Description:
+ *    Set Local Power Constraint
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ -*/
+void
+CARDvGetPowerCapability(
+	struct vnt_private *pDevice,
+	unsigned char *pbyMinPower,
+	unsigned char *pbyMaxPower
+)
+{
+	unsigned char byDec = 0;
+
+	*pbyMaxPower = pDevice->abyOFDMDefaultPwr[pDevice->byCurrentCh];
+	byDec = pDevice->abyOFDMPwrTbl[pDevice->byCurrentCh];
+	if (pDevice->byRFType == RF_UW2452) {
+		byDec *= 3;
+		byDec >>= 1;
+	} else {
+		byDec <<= 1;
+	}
+	*pbyMinPower = pDevice->abyOFDMDefaultPwr[pDevice->byCurrentCh] - byDec;
+}
+
+/*
+ *
+ * Description:
+ *    Get Current Tx Power
+ *
+ * Parameters:
+ *  In:
+ *      hDeviceContext - device structure point
+ *  Out:
+ *      none
+ *
+ * Return Value: none.
+ *
+ */
+char
+CARDbyGetTransmitPower(
+	struct vnt_private *pDevice
+)
+{
+
+	return pDevice->byCurPwrdBm;
+}
+
+//xxx
 void
 CARDvSafeResetTx(
 	struct vnt_private *pDevice
