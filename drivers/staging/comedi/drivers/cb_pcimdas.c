@@ -1,6 +1,6 @@
 /*
  * comedi/drivers/cb_pcimdas.c
- * Comedi driver for Computer Boards PCIM-DAS1602/16
+ * Comedi driver for Computer Boards PCIM-DAS1602/16 and PCIe-DAS1602/16
  *
  * COMEDI - Linux Control and Measurement Device Interface
  * Copyright (C) 2000 David A. Schleef <ds@schleef.org>
@@ -19,24 +19,26 @@
 /*
  * Driver: cb_pcimdas
  * Description: Measurement Computing PCI Migration series boards
- * Devices: [ComputerBoards] PCIM-DAS1602/16 (cb_pcimdas)
+ * Devices: [ComputerBoards] PCIM-DAS1602/16 (cb_pcimdas), PCIe-DAS1602/16
  * Author: Richard Bytheway
- * Updated: Wed, 13 Nov 2002 12:34:56 +0000
+ * Updated: Mon, 13 Oct 2014 11:57:39 +0000
  * Status: experimental
  *
- * Written to support the PCIM-DAS1602/16 on a 2.4 series kernel.
+ * Written to support the PCIM-DAS1602/16 and PCIe-DAS1602/16.
  *
  * Configuration Options:
  *   none
  *
- * Manual configuration of PCI cards is not supported; they are configured
+ * Manual configuration of PCI(e) cards is not supported; they are configured
  * automatically.
  *
  * Developed from cb_pcidas and skel by Richard Bytheway (mocelet@sucs.org).
  * Only supports DIO, AO and simple AI in it's present form.
  * No interrupts, multi channel or FIFO AI,
  * although the card looks like it could support this.
- * See http://www.mccdaq.com/PDFs/Manuals/pcim-das1602-16.pdf for more details.
+ *
+ * http://www.mccdaq.com/PDFs/Manuals/pcim-das1602-16.pdf
+ * http://www.mccdaq.com/PDFs/Manuals/pcie-das1602-16.pdf
  */
 
 #include <linux/module.h>
