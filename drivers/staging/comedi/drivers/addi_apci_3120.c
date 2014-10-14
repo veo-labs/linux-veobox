@@ -23,102 +23,12 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 
 #include "../comedidev.h"
 #include "comedi_fc.h"
 #include "amcc_s5933.h"
-
-/*
- * PCI BAR 0 register map (devpriv->amcc)
- * see amcc_s5933.h for register and bit defines
- */
-#define APCI3120_FIFO_ADVANCE_ON_BYTE_2		(1 << 29)
-
-/*
- * PCI BAR 1 register map (dev->iobase)
- */
-#define APCI3120_AI_FIFO_REG			0x00
-#define APCI3120_CTRL_REG			0x00
-#define APCI3120_CTRL_EXT_TRIG			(1 << 15)
-#define APCI3120_CTRL_GATE(x)			(1 << (12 + (x)))
-#define APCI3120_CTRL_PR(x)			(((x) & 0xf) << 8)
-#define APCI3120_CTRL_PA(x)			(((x) & 0xf) << 0)
-#define APCI3120_AI_SOFTTRIG_REG		0x02
-#define APCI3120_STATUS_REG			0x02
-#define APCI3120_STATUS_EOC_INT			(1 << 15)
-#define APCI3120_STATUS_AMCC_INT		(1 << 14)
-#define APCI3120_STATUS_EOS_INT			(1 << 13)
-#define APCI3120_STATUS_TIMER2_INT		(1 << 12)
-#define APCI3120_STATUS_INT_MASK		(0xf << 12)
-#define APCI3120_STATUS_TO_DI_BITS(x)		(((x) >> 8) & 0xf)
-#define APCI3120_STATUS_TO_VERSION(x)		(((x) >> 4) & 0xf)
-#define APCI3120_STATUS_FIFO_FULL		(1 << 2)
-#define APCI3120_STATUS_FIFO_EMPTY		(1 << 1)
-#define APCI3120_STATUS_DA_READY		(1 << 0)
-#define APCI3120_TIMER_REG			0x04
-#define APCI3120_CHANLIST_REG			0x06
-#define APCI3120_CHANLIST_INDEX(x)		(((x) & 0xf) << 8)
-#define APCI3120_CHANLIST_UNIPOLAR		(1 << 7)
-#define APCI3120_CHANLIST_GAIN(x)		(((x) & 0x3) << 4)
-#define APCI3120_CHANLIST_MUX(x)		(((x) & 0xf) << 0)
-#define APCI3120_AO_REG(x)			(0x08 + (((x) / 4) * 2))
-#define APCI3120_AO_MUX(x)			(((x) & 0x3) << 14)
-#define APCI3120_AO_DATA(x)			((x) << 0)
-#define APCI3120_TIMER_MODE_REG			0x0c
-#define APCI3120_TIMER_MODE(_t, _m)		((_m) << ((_t) * 2))
-#define APCI3120_TIMER_MODE0			0  /* I8254_MODE0 */
-#define APCI3120_TIMER_MODE2			1  /* I8254_MODE2 */
-#define APCI3120_TIMER_MODE4			2  /* I8254_MODE4 */
-#define APCI3120_TIMER_MODE5			3  /* I8254_MODE5 */
-#define APCI3120_TIMER_MODE_MASK(_t)		(3 << ((_t) * 2))
-#define APCI3120_CTR0_REG			0x0d
-#define APCI3120_CTR0_DO_BITS(x)		((x) << 4)
-#define APCI3120_CTR0_TIMER_SEL(x)		((x) << 0)
-#define APCI3120_MODE_REG			0x0e
-#define APCI3120_MODE_TIMER2_CLK_OSC		(0 << 6)
-#define APCI3120_MODE_TIMER2_CLK_OUT1		(1 << 6)
-#define APCI3120_MODE_TIMER2_CLK_EOC		(2 << 6)
-#define APCI3120_MODE_TIMER2_CLK_EOS		(3 << 6)
-#define APCI3120_MODE_TIMER2_CLK_MASK		(3 << 6)
-#define APCI3120_MODE_TIMER2_AS_TIMER		(0 << 4)
-#define APCI3120_MODE_TIMER2_AS_COUNTER		(1 << 4)
-#define APCI3120_MODE_TIMER2_AS_WDOG		(2 << 4)
-#define APCI3120_MODE_TIMER2_AS_MASK		(3 << 4)  /* sets AS_TIMER */
-#define APCI3120_MODE_SCAN_ENA			(1 << 3)
-#define APCI3120_MODE_TIMER2_IRQ_ENA		(1 << 2)
-#define APCI3120_MODE_EOS_IRQ_ENA		(1 << 1)
-#define APCI3120_MODE_EOC_IRQ_ENA		(1 << 0)
-
-/*
- * PCI BAR 2 register map (devpriv->addon)
- */
-#define APCI3120_ADDON_ADDR_REG			0x00
-#define APCI3120_ADDON_DATA_REG			0x02
-#define APCI3120_ADDON_CTRL_REG			0x04
-#define APCI3120_ADDON_CTRL_AMWEN_ENA		(1 << 1)
-#define APCI3120_ADDON_CTRL_A2P_FIFO_ENA	(1 << 0)
-
-/*
- * Board revisions
- */
-#define APCI3120_REVA				0xa
-#define APCI3120_REVB				0xb
-#define APCI3120_REVA_OSC_BASE			70	/* 70ns = 14.29MHz */
-#define APCI3120_REVB_OSC_BASE			50	/* 50ns = 20MHz */
-
-static const struct comedi_lrange apci3120_ai_range = {
-	8, {
-		BIP_RANGE(10),
-		BIP_RANGE(5),
-		BIP_RANGE(2),
-		BIP_RANGE(1),
-		UNI_RANGE(10),
-		UNI_RANGE(5),
-		UNI_RANGE(2),
-		UNI_RANGE(1)
-	}
-};
 
 enum apci3120_boardid {
 	BOARD_APCI3120,
@@ -142,12 +52,44 @@ static const struct apci3120_board apci3120_boardtypes[] = {
 	},
 };
 
+struct apci3120_private {
+	int iobase;
+	int i_IobaseAmcc;
+	int i_IobaseAddon;
+	int i_IobaseReserved;
+	unsigned int ui_AiActualScan;
+	unsigned int ui_AiNbrofChannels;
+	unsigned int ui_AiChannelList[32];
+	unsigned int ui_AiReadData[32];
+	unsigned short us_UseDma;
+	unsigned char b_DmaDoubleBuffer;
+	unsigned int ui_DmaActualBuffer;
+	unsigned short *ul_DmaBufferVirtual[2];
+	dma_addr_t ul_DmaBufferHw[2];
+	unsigned int ui_DmaBufferSize[2];
+	unsigned int ui_DmaBufferUsesize[2];
+	unsigned char b_DigitalOutputRegister;
+	unsigned char b_TimerSelectMode;
+	unsigned char b_ModeSelectRegister;
+	unsigned short us_OutputRegister;
+	unsigned char b_Timer2Mode;
+	unsigned char b_Timer2Interrupt;
+	unsigned int ai_running:1;
+	unsigned char b_InterruptMode;
+	unsigned char b_EocEosInterrupt;
+	unsigned int ui_EocEosConversionTime;
+	unsigned char b_ExttrigEnable;
+	struct task_struct *tsk_Current;
+};
+
+#include "addi-data/hwdrv_apci3120.c"
+
 static int apci3120_auto_attach(struct comedi_device *dev,
 				unsigned long context)
 {
 	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
 	const struct apci3120_board *this_board = NULL;
-	struct addi_private *devpriv;
+	struct apci3120_private *devpriv;
 	struct comedi_subdevice *s;
 	unsigned int status;
 	int ret;
@@ -259,6 +201,10 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 
 static void apci3120_detach(struct comedi_device *dev)
 {
+	struct apci3120_private *devpriv = dev->private;
+
+	if (dev->iobase)
+		apci3120_reset(dev);
 	comedi_pci_detach(dev);
 	apci3120_dma_free(dev);
 }
