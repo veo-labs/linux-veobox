@@ -847,6 +847,13 @@ static void apci1500_detach(struct comedi_device *dev)
 	comedi_pci_detach(dev);
 }
 
+static void apci1500_detach(struct comedi_device *dev)
+{
+	if (dev->iobase)
+		i_ADDI_Reset(dev);
+	comedi_pci_detach(dev);
+}
+
 static struct comedi_driver apci1500_driver = {
 	.driver_name	= "addi_apci_1500",
 	.module		= THIS_MODULE,
