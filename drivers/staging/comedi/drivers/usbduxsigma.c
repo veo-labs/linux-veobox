@@ -346,10 +346,12 @@ static void usbduxsigma_ao_handle_urb(struct comedi_device *dev,
 	if (devpriv->ao_counter == 0) {
 		devpriv->ao_counter = devpriv->ao_timer;
 
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg) {
-			async->events |= COMEDI_CB_EOA;
-			return;
+		if (cmd->stop_src == TRIG_COUNT) {
+			devpriv->ao_sample_count--;
+			if (devpriv->ao_sample_count < 0) {
+				async->events |= COMEDI_CB_EOA;
+				return;
+			}
 		}
 
 		/* transmit data to the USB bus */
@@ -359,7 +361,7 @@ static void usbduxsigma_ao_handle_urb(struct comedi_device *dev,
 			unsigned int chan = CR_CHAN(cmd->chanlist[i]);
 			unsigned short val;
 
-			if (!comedi_buf_read_samples(s, &val, 1)) {
+			if (!comedi_buf_get(s, &val)) {
 				dev_err(dev->class_dev, "buffer underflow\n");
 				async->events |= COMEDI_CB_OVERFLOW;
 				return;
@@ -369,6 +371,7 @@ static void usbduxsigma_ao_handle_urb(struct comedi_device *dev,
 			*datap++ = chan;
 			s->readback[chan] = val;
 		}
+		async->events |= COMEDI_CB_BLOCK;
 	}
 
 	/* if command is still running, resubmit urb */
@@ -395,6 +398,48 @@ static void usbduxsigma_ao_handle_urb(struct comedi_device *dev,
 			async->events |= COMEDI_CB_ERROR;
 		}
 	}
+}
+
+static void usbduxsigma_ao_urb_complete(struct urb *urb)
+{
+	struct comedi_device *dev = urb->context;
+	struct usbduxsigma_private *devpriv = dev->private;
+	struct comedi_subdevice *s = dev->write_subdev;
+	struct comedi_async *async = s->async;
+
+	/* exit if not running a command, do not resubmit urb */
+	if (!devpriv->ao_cmd_running)
+		return;
+
+	switch (urb->status) {
+	case 0:
+		usbduxsigma_ao_handle_urb(dev, s, urb);
+		break;
+
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+	case -ECONNABORTED:
+		/* happens after an unlink command */
+		async->events |= COMEDI_CB_ERROR;
+		break;
+
+	default:
+		/* a real error */
+		dev_err(dev->class_dev, "%s: non-zero urb status (%d)\n",
+			__func__, urb->status);
+		async->events |= COMEDI_CB_ERROR;
+		break;
+	}
+
+	/*
+	 * comedi_handle_events() cannot be used in this driver. The (*cancel)
+	 * operation would unlink the urb.
+	 */
+	if (async->events & COMEDI_CB_CANCEL_MASK)
+		usbduxsigma_ao_stop(dev, 0);
+
+	comedi_event(dev, s);
 }
 
 static void usbduxsigma_ao_urb_complete(struct urb *urb)
