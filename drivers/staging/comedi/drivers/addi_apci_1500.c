@@ -69,7 +69,7 @@ static int apci1500_auto_attach(struct comedi_device *dev,
 				unsigned long context)
 {
 	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
-	struct addi_private *devpriv;
+	struct apci1500_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret;
 
