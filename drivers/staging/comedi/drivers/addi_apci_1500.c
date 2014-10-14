@@ -68,7 +68,6 @@ struct apci1500_private {
 static const struct addi_board apci1500_boardtypes[] = {
 	{
 		.name			= "apci1500",
-		.i_IorangeBase1		= APCI1500_ADDRESS_RANGE,
 		.i_PCIEeprom		= 0,
 		.i_NbrDiChannel		= 16,
 		.i_NbrDoChannel		= 16,
@@ -115,11 +114,7 @@ static int apci1500_auto_attach(struct comedi_device *dev,
 	if (ret)
 		return ret;
 
-	if (this_board->i_IorangeBase1)
-		dev->iobase = pci_resource_start(pcidev, 1);
-	else
-		dev->iobase = pci_resource_start(pcidev, 0);
-
+	dev->iobase = pci_resource_start(pcidev, 1);
 	devpriv->iobase = dev->iobase;
 	devpriv->i_IobaseAmcc = pci_resource_start(pcidev, 0);
 	devpriv->i_IobaseAddon = pci_resource_start(pcidev, 2);
