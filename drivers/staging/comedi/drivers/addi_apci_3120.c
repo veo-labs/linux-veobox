@@ -127,8 +127,6 @@ enum apci3120_boardid {
 
 struct apci3120_board {
 	const char *name;
-	int i_NbrAiChannel;
-	int i_NbrAiChannelDiff;
 	int i_AiChannelList;
 	int i_NbrAoChannel;
 	int i_AiMaxdata;
@@ -138,8 +136,6 @@ struct apci3120_board {
 static const struct apci3120_board apci3120_boardtypes[] = {
 	[BOARD_APCI3120] = {
 		.name			= "apci3120",
-		.i_NbrAiChannel		= 16,
-		.i_NbrAiChannelDiff	= 8,
 		.i_AiChannelList	= 16,
 		.i_NbrAoChannel		= 8,
 		.i_AiMaxdata		= 0xffff,
@@ -147,8 +143,6 @@ static const struct apci3120_board apci3120_boardtypes[] = {
 	},
 	[BOARD_APCI3001] = {
 		.name			= "apci3001",
-		.i_NbrAiChannel		= 16,
-		.i_NbrAiChannelDiff	= 8,
 		.i_AiChannelList	= 16,
 		.i_AiMaxdata		= 0xfff,
 	},
@@ -209,22 +203,23 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 
 	/* Analog Input subdevice */
 	s = &dev->subdevices[0];
-	s->type		= COMEDI_SUBD_AI;
-	s->subdev_flags	= SDF_READABLE | SDF_COMMON | SDF_GROUND | SDF_DIFF;
-	s->n_chan	= 16;
-	s->maxdata	= this_board->ai_is_16bit ? 0xffff : 0x0fff;
-	s->range_table	= &apci3120_ai_range;
-	s->insn_read	= apci3120_ai_insn_read;
-	if (dev->irq) {
-		dev->read_subdev = s;
-		s->subdev_flags	|= SDF_CMD_READ;
-		s->len_chanlist	= s->n_chan;
-		s->do_cmdtest	= apci3120_ai_cmdtest;
-		s->do_cmd	= apci3120_ai_cmd;
-		s->cancel	= apci3120_cancel;
-	}
+	dev->read_subdev = s;
+	s->type = COMEDI_SUBD_AI;
+	s->subdev_flags =
+		SDF_READABLE | SDF_COMMON | SDF_GROUND
+		| SDF_DIFF;
+	s->n_chan = 16;
+	s->maxdata = this_board->i_AiMaxdata;
+	s->len_chanlist = this_board->i_AiChannelList;
+	s->range_table = &range_apci3120_ai;
 
-	/* Analog Output subdevice */
+	s->insn_config = apci3120_ai_insn_config;
+	s->insn_read = apci3120_ai_insn_read;
+	s->do_cmdtest = apci3120_ai_cmdtest;
+	s->do_cmd = apci3120_ai_cmd;
+	s->cancel = apci3120_cancel;
+
+	/*  Allocate and Initialise AO Subdevice Structures */
 	s = &dev->subdevices[1];
 	if (this_board->has_ao) {
 		s->type		= COMEDI_SUBD_AO;
