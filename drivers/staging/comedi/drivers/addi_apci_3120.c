@@ -135,7 +135,6 @@ struct apci3120_board {
 	int i_AoMaxdata;
 	int i_NbrDiChannel;
 	int i_NbrDoChannel;
-	int i_DoMaxdata;
 };
 
 static const struct apci3120_board apci3120_boardtypes[] = {
@@ -149,7 +148,6 @@ static const struct apci3120_board apci3120_boardtypes[] = {
 		.i_AoMaxdata		= 0x3fff,
 		.i_NbrDiChannel		= 4,
 		.i_NbrDoChannel		= 4,
-		.i_DoMaxdata		= 0x0f,
 	},
 	[BOARD_APCI3001] = {
 		.name			= "apci3001",
@@ -159,7 +157,6 @@ static const struct apci3120_board apci3120_boardtypes[] = {
 		.i_AiMaxdata		= 0xfff,
 		.i_NbrDiChannel		= 4,
 		.i_NbrDoChannel		= 4,
-		.i_DoMaxdata		= 0x0f,
 	},
 };
 
@@ -261,14 +258,16 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 
 	/* Digital Output subdevice */
 	s = &dev->subdevices[3];
-	s->type		= COMEDI_SUBD_DO;
-	s->subdev_flags	= SDF_WRITABLE;
-	s->n_chan	= 4;
-	s->maxdata	= 1;
-	s->range_table	= &range_digital;
-	s->insn_bits	= apci3120_do_insn_bits;
+	s->type = COMEDI_SUBD_DO;
+	s->subdev_flags =
+		SDF_READABLE | SDF_WRITEABLE | SDF_GROUND | SDF_COMMON;
+	s->n_chan = this_board->i_NbrDoChannel;
+	s->maxdata = 1;
+	s->len_chanlist = this_board->i_NbrDoChannel;
+	s->range_table = &range_digital;
+	s->insn_bits = apci3120_do_insn_bits;
 
-	/* Timer subdevice */
+	/*  Allocate and Initialise Timer Subdevice Structures */
 	s = &dev->subdevices[4];
 	s->type		= COMEDI_SUBD_TIMER;
 	s->subdev_flags	= SDF_READABLE;
