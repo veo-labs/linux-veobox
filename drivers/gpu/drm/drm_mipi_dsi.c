@@ -637,50 +637,6 @@ ssize_t mipi_dsi_dcs_write_buffer(struct mipi_dsi_device *dsi,
 
 	return mipi_dsi_device_transfer(dsi, &msg);
 }
-EXPORT_SYMBOL(mipi_dsi_dcs_write_buffer);
-
-/**
- * mipi_dsi_dcs_write() - send DCS write command
- * @dsi: DSI peripheral device
- * @cmd: DCS command
- * @data: buffer containing the command payload
- * @len: command payload length
- *
- * This function will automatically choose the right data type depending on
- * the command payload length.
- *
- * Return: The number of bytes successfully transmitted or a negative error
- * code on failure.
- */
-ssize_t mipi_dsi_dcs_write(struct mipi_dsi_device *dsi, u8 cmd,
-			   const void *data, size_t len)
-{
-	ssize_t err;
-	size_t size;
-	u8 *tx;
-
-	if (len > 0) {
-		size = 1 + len;
-
-		tx = kmalloc(size, GFP_KERNEL);
-		if (!tx)
-			return -ENOMEM;
-
-		/* concatenate the DCS command byte and the payload */
-		tx[0] = cmd;
-		memcpy(&tx[1], data, len);
-	} else {
-		tx = &cmd;
-		size = 1;
-	}
-
-	err = mipi_dsi_dcs_write_buffer(dsi, tx, size);
-
-	if (len > 0)
-		kfree(tx);
-
-	return err;
-}
 EXPORT_SYMBOL(mipi_dsi_dcs_write);
 
 /**
@@ -705,24 +661,6 @@ ssize_t mipi_dsi_dcs_read(struct mipi_dsi_device *dsi, u8 cmd, void *data,
 	};
 
 	return mipi_dsi_device_transfer(dsi, &msg);
-}
-EXPORT_SYMBOL(mipi_dsi_dcs_read);
-
-/**
- * mipi_dsi_dcs_nop() - send DCS nop packet
- * @dsi: DSI peripheral device
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int mipi_dsi_dcs_nop(struct mipi_dsi_device *dsi)
-{
-	ssize_t err;
-
-	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_NOP, NULL, 0);
-	if (err < 0)
-		return err;
-
-	return 0;
 }
 EXPORT_SYMBOL(mipi_dsi_dcs_nop);
 
