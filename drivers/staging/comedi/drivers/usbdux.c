@@ -261,6 +261,14 @@ static void usbduxsub_ai_handle_urb(struct comedi_device *dev,
 	if (devpriv->ai_counter == 0) {
 		devpriv->ai_counter = devpriv->ai_timer;
 
+		if (cmd->stop_src == TRIG_COUNT) {
+			devpriv->ai_sample_count--;
+			if (devpriv->ai_sample_count < 0) {
+				async->events |= COMEDI_CB_EOA;
+				return;
+			}
+		}
+
 		/* get the data from the USB bus and hand it over to comedi */
 		for (i = 0; i < cmd->chanlist_len; i++) {
 			unsigned int range = CR_RANGE(cmd->chanlist[i]);
@@ -271,13 +279,10 @@ static void usbduxsub_ai_handle_urb(struct comedi_device *dev,
 				val ^= ((s->maxdata + 1) >> 1);
 
 			/* transfer data */
-			if (!comedi_buf_write_samples(s, &val, 1))
+			if (!comedi_buf_put(s, val))
 				return;
 		}
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg)
-			async->events |= COMEDI_CB_EOA;
+		async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
 	}
 
 	/* if command is still running, resubmit urb */
