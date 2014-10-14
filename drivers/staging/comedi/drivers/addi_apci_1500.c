@@ -75,7 +75,6 @@ static const struct addi_board apci1500_boardtypes[] = {
 		.i_NbrDoChannel		= 16,
 		.i_DoMaxdata		= 0xffff,
 		.i_Timer		= 1,
-		.interrupt		= apci1500_interrupt,
 		.di_config		= apci1500_di_config,
 		.di_read		= apci1500_di_read,
 		.di_write		= apci1500_di_write,
@@ -138,7 +137,7 @@ static int apci1500_auto_attach(struct comedi_device *dev,
 	/* ## */
 
 	if (pcidev->irq > 0) {
-		ret = request_irq(pcidev->irq, v_ADDI_Interrupt, IRQF_SHARED,
+		ret = request_irq(pcidev->irq, apci1500_interrupt, IRQF_SHARED,
 				  dev->board_name, dev);
 		if (ret == 0)
 			dev->irq = pcidev->irq;
