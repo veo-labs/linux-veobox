@@ -133,7 +133,7 @@ struct apci3120_board {
 
 static const struct apci3120_board apci3120_boardtypes[] = {
 	[BOARD_APCI3120] = {
-		.pc_DriverName		= "apci3120",
+		.name			= "apci3120",
 		.i_NbrAiChannel		= 16,
 		.i_NbrAiChannelDiff	= 8,
 		.i_AiChannelList	= 16,
@@ -145,7 +145,7 @@ static const struct apci3120_board apci3120_boardtypes[] = {
 		.i_DoMaxdata		= 0x0f,
 	},
 	[BOARD_APCI3001] = {
-		.pc_DriverName		= "apci3001",
+		.name			= "apci3001",
 		.i_NbrAiChannel		= 16,
 		.i_NbrAiChannelDiff	= 8,
 		.i_AiChannelList	= 16,
