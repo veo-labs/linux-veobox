@@ -390,10 +390,12 @@ static void usbduxsub_ao_handle_urb(struct comedi_device *dev,
 	if (devpriv->ao_counter == 0) {
 		devpriv->ao_counter = devpriv->ao_timer;
 
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg) {
-			async->events |= COMEDI_CB_EOA;
-			return;
+		if (cmd->stop_src == TRIG_COUNT) {
+			devpriv->ao_sample_count--;
+			if (devpriv->ao_sample_count < 0) {
+				async->events |= COMEDI_CB_EOA;
+				return;
+			}
 		}
 
 		/* transmit data to the USB bus */
@@ -403,7 +405,7 @@ static void usbduxsub_ao_handle_urb(struct comedi_device *dev,
 			unsigned int chan = CR_CHAN(cmd->chanlist[i]);
 			unsigned short val;
 
-			if (!comedi_buf_read_samples(s, &val, 1)) {
+			if (!comedi_buf_get(s, &val)) {
 				dev_err(dev->class_dev, "buffer underflow\n");
 				async->events |= COMEDI_CB_OVERFLOW;
 				return;
@@ -415,6 +417,7 @@ static void usbduxsub_ao_handle_urb(struct comedi_device *dev,
 			*datap++ = chan << 6;
 			s->readback[chan] = val;
 		}
+		async->events |= COMEDI_CB_BLOCK;
 	}
 
 	/* if command is still running, resubmit urb for BULK transfer */
