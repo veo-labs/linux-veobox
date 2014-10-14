@@ -222,6 +222,17 @@ static void usbduxsigma_ai_handle_urb(struct comedi_device *dev,
 	if (devpriv->ai_counter == 0) {
 		devpriv->ai_counter = devpriv->ai_timer;
 
+		if (cmd->stop_src == TRIG_COUNT) {
+			devpriv->ai_sample_count--;
+			if (devpriv->ai_sample_count < 0) {
+				async->events |= COMEDI_CB_EOA;
+				return;
+			}
+		}
+
+		/* get the state of the dio pins to allow external trigger */
+		dio_state = be32_to_cpu(devpriv->in_buf[0]);
+
 		/* get the data from the USB bus and hand it over to comedi */
 		for (i = 0; i < cmd->chanlist_len; i++) {
 			/* transfer data, note first byte is the DIO state */
@@ -229,13 +240,10 @@ static void usbduxsigma_ai_handle_urb(struct comedi_device *dev,
 			val &= 0x00ffffff;	/* strip status byte */
 			val ^= 0x00800000;	/* convert to unsigned */
 
-			if (!comedi_buf_write_samples(s, &val, 1))
+			if (!cfc_write_array_to_buffer(s, &val,
+						       sizeof(uint32_t)))
 				return;
 		}
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg)
-			async->events |= COMEDI_CB_EOA;
 	}
 
 	/* if command is still running, resubmit urb */
