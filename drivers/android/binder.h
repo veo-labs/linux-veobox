@@ -1,6 +1,10 @@
 /*
- * Copyright (C) Fuzhou Rockchip Electronics Co.Ltd
- * Author:Mark Yao <mark.yao@rock-chips.com>
+ * Copyright (C) 2008 Google, Inc.
+ *
+ * Based on, but no longer compatible with, the original
+ * OpenBinder.org binder driver interface, which is:
+ *
+ * Copyright (c) 2005 Palmsource, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -10,12 +14,17 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
  */
 
-#ifndef _ROCKCHIP_DRM_FBDEV_H
-#define _ROCKCHIP_DRM_FBDEV_H
+#ifndef _LINUX_BINDER_H
+#define _LINUX_BINDER_H
 
-int rockchip_drm_fbdev_init(struct drm_device *dev);
-void rockchip_drm_fbdev_fini(struct drm_device *dev);
+#ifdef CONFIG_ANDROID_BINDER_IPC_32BIT
+#define BINDER_IPC_32BIT 1
+#endif
 
-#endif /* _ROCKCHIP_DRM_FBDEV_H */
+#include <uapi/linux/android/binder.h>
+
+#endif /* _LINUX_BINDER_H */
+
