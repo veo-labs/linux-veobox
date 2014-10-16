@@ -115,6 +115,8 @@ static void intel_dp_link_down(struct intel_dp *intel_dp);
 static bool edp_panel_vdd_on(struct intel_dp *intel_dp);
 static void edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync);
 static void vlv_init_panel_power_sequencer(struct intel_dp *intel_dp);
+static void vlv_steal_power_sequencer(struct drm_device *dev,
+				      enum pipe pipe);
 
 int
 intel_dp_max_link_bw(struct intel_dp *intel_dp)
@@ -375,6 +377,7 @@ vlv_power_sequencer_pipe(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_encoder *encoder;
 	unsigned int pipes = (1 << PIPE_A) | (1 << PIPE_B);
+	enum pipe pipe;
 
 	lockdep_assert_held(&dev_priv->pps_mutex);
 
