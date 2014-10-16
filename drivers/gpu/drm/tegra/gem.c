@@ -92,6 +92,59 @@ static const struct host1x_bo_ops tegra_bo_ops = {
 	.kunmap = tegra_bo_kunmap,
 };
 
+static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
+					      size_t size)
+{
+	struct tegra_bo *bo;
+	int err;
+
+	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
+	if (!bo)
+		return ERR_PTR(-ENOMEM);
+
+	host1x_bo_init(&bo->base, &tegra_bo_ops);
+	size = round_up(size, PAGE_SIZE);
+
+	err = drm_gem_object_init(drm, &bo->gem, size);
+	if (err < 0)
+		goto free;
+
+	err = drm_gem_create_mmap_offset(&bo->gem);
+	if (err < 0)
+		goto release;
+
+	return bo;
+
+release:
+	drm_gem_object_release(&bo->gem);
+free:
+	kfree(bo);
+	return ERR_PTR(err);
+}
+
+static void tegra_bo_destroy(struct drm_device *drm, struct tegra_bo *bo)
+{
+	struct scatterlist *s;
+	size_t offset = 0;
+	unsigned int i;
+	int err;
+
+	for_each_sg(sg, s, nents, i) {
+		phys_addr_t phys = page_to_phys(sg_page(s));
+		size_t length = s->offset + s->length;
+
+		err = iommu_map(domain, iova + offset, phys, length, prot);
+		if (err < 0) {
+			iommu_unmap(domain, iova, offset);
+			return err;
+		}
+
+		offset += length;
+	}
+
+	return offset;
+}
+
 static int tegra_bo_iommu_map(struct tegra_drm *tegra, struct tegra_bo *bo)
 {
 	int prot = IOMMU_READ | IOMMU_WRITE;
@@ -150,130 +203,18 @@ static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
 	struct tegra_bo *bo;
 	int err;
 
-	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
-	if (!bo)
-		return ERR_PTR(-ENOMEM);
-
-	host1x_bo_init(&bo->base, &tegra_bo_ops);
-	size = round_up(size, PAGE_SIZE);
-
-	err = drm_gem_object_init(drm, &bo->gem, size);
-	if (err < 0)
-		goto free;
-
-	err = drm_gem_create_mmap_offset(&bo->gem);
-	if (err < 0)
-		goto release;
-
-	return bo;
-
-release:
-	drm_gem_object_release(&bo->gem);
-free:
-	kfree(bo);
-	return ERR_PTR(err);
-}
-
-static void tegra_bo_free(struct drm_device *drm, struct tegra_bo *bo)
-{
-	if (bo->pages) {
-		drm_gem_put_pages(&bo->gem, bo->pages, true, true);
-		sg_free_table(bo->sgt);
-		kfree(bo->sgt);
-	} else if (bo->vaddr) {
-		dma_free_writecombine(drm->dev, bo->gem.size, bo->vaddr,
-				      bo->paddr);
-	}
-}
-
-static int tegra_bo_get_pages(struct drm_device *drm, struct tegra_bo *bo)
-{
-	struct scatterlist *s;
-	struct sg_table *sgt;
-	unsigned int i;
-
-	bo->pages = drm_gem_get_pages(&bo->gem);
-	if (IS_ERR(bo->pages))
-		return PTR_ERR(bo->pages);
-
-	bo->num_pages = bo->gem.size >> PAGE_SHIFT;
-
-	sgt = drm_prime_pages_to_sg(bo->pages, bo->num_pages);
-	if (IS_ERR(sgt))
-		goto put_pages;
-
-	/*
-	 * Fake up the SG table so that dma_map_sg() can be used to flush the
-	 * pages associated with it. Note that this relies on the fact that
-	 * the DMA API doesn't hook into IOMMU on Tegra, therefore mapping is
-	 * only cache maintenance.
-	 *
-	 * TODO: Replace this by drm_clflash_sg() once it can be implemented
-	 * without relying on symbols that are not exported.
-	 */
-	for_each_sg(sgt->sgl, s, sgt->nents, i)
-		sg_dma_address(s) = sg_phys(s);
-
-	if (dma_map_sg(drm->dev, sgt->sgl, sgt->nents, DMA_TO_DEVICE) == 0)
-		goto release_sgt;
-
-	bo->sgt = sgt;
-
-	return 0;
-
-release_sgt:
-	sg_free_table(sgt);
-	kfree(sgt);
-	sgt = ERR_PTR(-ENOMEM);
-put_pages:
-	drm_gem_put_pages(&bo->gem, bo->pages, false, false);
-	return PTR_ERR(sgt);
-}
-
-static int tegra_bo_alloc(struct drm_device *drm, struct tegra_bo *bo)
-{
-	struct tegra_drm *tegra = drm->dev_private;
-	int err;
-
-	if (tegra->domain) {
-		err = tegra_bo_get_pages(drm, bo);
-		if (err < 0)
-			return err;
-
-		err = tegra_bo_iommu_map(tegra, bo);
-		if (err < 0) {
-			tegra_bo_free(drm, bo);
-			return err;
-		}
-	} else {
-		size_t size = bo->gem.size;
-
-		bo->vaddr = dma_alloc_writecombine(drm->dev, size, &bo->paddr,
-						   GFP_KERNEL | __GFP_NOWARN);
-		if (!bo->vaddr) {
-			dev_err(drm->dev,
-				"failed to allocate buffer of size %zu\n",
-				size);
-			return -ENOMEM;
-		}
-	}
-
-	return 0;
-}
-
-struct tegra_bo *tegra_bo_create(struct drm_device *drm, size_t size,
-				 unsigned long flags)
-{
-	struct tegra_bo *bo;
-	int err;
-
 	bo = tegra_bo_alloc_object(drm, size);
 	if (IS_ERR(bo))
 		return bo;
 
-	err = tegra_bo_alloc(drm, bo);
-	if (err < 0)
-		goto release;
+	bo->vaddr = dma_alloc_writecombine(drm->dev, size, &bo->paddr,
+					   GFP_KERNEL | __GFP_NOWARN);
+	if (!bo->vaddr) {
+		dev_err(drm->dev, "failed to allocate buffer with size %u\n",
+			size);
+		err = -ENOMEM;
+		goto err_dma;
+	}
 
 	if (flags & DRM_TEGRA_GEM_CREATE_TILED)
 		bo->tiling.mode = TEGRA_BO_TILING_MODE_TILED;
@@ -283,8 +224,7 @@ struct tegra_bo *tegra_bo_create(struct drm_device *drm, size_t size,
 
 	return bo;
 
-release:
-	drm_gem_object_release(&bo->gem);
+err_dma:
 	kfree(bo);
 	return ERR_PTR(err);
 }
