@@ -391,7 +391,6 @@ vlv_power_sequencer_pipe(struct intel_dp *intel_dp)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_encoder *encoder;
 	unsigned int pipes = (1 << PIPE_A) | (1 << PIPE_B);
-	enum pipe pipe;
 
 	lockdep_assert_held(&dev_priv->pps_mutex);
 
@@ -437,12 +436,6 @@ vlv_power_sequencer_pipe(struct intel_dp *intel_dp)
 	/* init power sequencer on this pipe and port */
 	intel_dp_init_panel_power_sequencer(dev, intel_dp);
 	intel_dp_init_panel_power_sequencer_registers(dev, intel_dp);
-
-	/*
-	 * Even vdd force doesn't work until we've made
-	 * the power sequencer lock in on the port.
-	 */
-	vlv_power_sequencer_kick(intel_dp);
 
 	return intel_dp->pps_pipe;
 }
@@ -5575,8 +5568,10 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 		intel_dp_init_panel_power_timestamps(intel_dp);
 		if (IS_VALLEYVIEW(dev))
 			vlv_initial_power_sequencer_setup(intel_dp);
-		else
+		} else {
+			intel_dp_init_panel_power_timestamps(intel_dp);
 			intel_dp_init_panel_power_sequencer(dev, intel_dp);
+		}
 		pps_unlock(intel_dp);
 	}
 
