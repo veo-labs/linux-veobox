@@ -1651,6 +1651,22 @@ static void edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
 		edp_panel_vdd_schedule_off(intel_dp);
 }
 
+/*
+ * Must be paired with intel_edp_panel_vdd_on().
+ * Nested calls to these functions are not allowed since
+ * we drop the lock. Caller must use some higher level
+ * locking to prevent nested calls from other threads.
+ */
+static void intel_edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
+{
+	if (!is_edp(intel_dp))
+		return;
+
+	pps_lock(intel_dp);
+	edp_panel_vdd_off(intel_dp, sync);
+	pps_unlock(intel_dp);
+}
+
 static void edp_panel_on(struct intel_dp *intel_dp)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
@@ -1663,13 +1679,12 @@ static void edp_panel_on(struct intel_dp *intel_dp)
 	if (!is_edp(intel_dp))
 		return;
 
-	DRM_DEBUG_KMS("Turn eDP port %c panel power on\n",
-		      port_name(dp_to_dig_port(intel_dp)->port));
+	DRM_DEBUG_KMS("Turn eDP power on\n");
 
-	if (WARN(edp_have_panel_power(intel_dp),
-		 "eDP port %c panel power already on\n",
-		 port_name(dp_to_dig_port(intel_dp)->port)))
+	if (edp_have_panel_power(intel_dp)) {
+		DRM_DEBUG_KMS("eDP power already on\n");
 		return;
+	}
 
 	wait_panel_power_cycle(intel_dp);
 
@@ -1725,11 +1740,9 @@ static void edp_panel_off(struct intel_dp *intel_dp)
 	if (!is_edp(intel_dp))
 		return;
 
-	DRM_DEBUG_KMS("Turn eDP port %c panel power off\n",
-		      port_name(dp_to_dig_port(intel_dp)->port));
+	DRM_DEBUG_KMS("Turn eDP power off\n");
 
-	WARN(!intel_dp->want_panel_vdd, "Need eDP port %c VDD to turn off panel\n",
-	     port_name(dp_to_dig_port(intel_dp)->port));
+	WARN(!intel_dp->want_panel_vdd, "Need VDD to turn off panel\n");
 
 	pp = ironlake_get_pp_control(intel_dp);
 	/* We need to switch off panel power _and_ force vdd, for otherwise some
