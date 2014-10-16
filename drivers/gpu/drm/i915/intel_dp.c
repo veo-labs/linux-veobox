@@ -115,8 +115,6 @@ static void intel_dp_link_down(struct intel_dp *intel_dp);
 static bool edp_panel_vdd_on(struct intel_dp *intel_dp);
 static void edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync);
 static void vlv_init_panel_power_sequencer(struct intel_dp *intel_dp);
-static void vlv_steal_power_sequencer(struct drm_device *dev,
-				      enum pipe pipe);
 
 int
 intel_dp_max_link_bw(struct intel_dp *intel_dp)
@@ -1651,22 +1649,6 @@ static void edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
 		edp_panel_vdd_schedule_off(intel_dp);
 }
 
-/*
- * Must be paired with intel_edp_panel_vdd_on().
- * Nested calls to these functions are not allowed since
- * we drop the lock. Caller must use some higher level
- * locking to prevent nested calls from other threads.
- */
-static void intel_edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
-{
-	if (!is_edp(intel_dp))
-		return;
-
-	pps_lock(intel_dp);
-	edp_panel_vdd_off(intel_dp, sync);
-	pps_unlock(intel_dp);
-}
-
 static void edp_panel_on(struct intel_dp *intel_dp)
 {
 	struct drm_device *dev = intel_dp_to_dev(intel_dp);
@@ -2693,9 +2675,6 @@ static void intel_enable_dp(struct intel_encoder *encoder)
 	edp_panel_vdd_off(intel_dp, true);
 
 	pps_unlock(intel_dp);
-
-	if (IS_VALLEYVIEW(dev))
-		vlv_wait_port_ready(dev_priv, dp_to_dig_port(intel_dp));
 
 	intel_dp_sink_dpms(intel_dp, DRM_MODE_DPMS_ON);
 	intel_dp_start_link_train(intel_dp);
