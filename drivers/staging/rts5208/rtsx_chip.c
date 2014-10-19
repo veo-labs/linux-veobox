@@ -263,51 +263,6 @@ static int rtsx_reset_aspm(struct rtsx_chip *chip)
 	return STATUS_SUCCESS;
 }
 
-static int rtsx_enable_pcie_intr(struct rtsx_chip *chip)
-{
-	int ret;
-
-	if (!chip->asic_code || !CHECK_PID(chip, 0x5208)) {
-		rtsx_enable_bus_int(chip);
-		return STATUS_SUCCESS;
-	}
-
-	if (chip->phy_debug_mode) {
-		RTSX_WRITE_REG(chip, CDRESUMECTL, 0x77, 0);
-		rtsx_disable_bus_int(chip);
-	} else {
-		rtsx_enable_bus_int(chip);
-	}
-
-	if (chip->ic_version >= IC_VER_D) {
-		u16 reg;
-
-		ret = rtsx_read_phy_register(chip, 0x00, &reg);
-		if (ret != STATUS_SUCCESS)
-			TRACE_RET(chip, STATUS_FAIL);
-
-		reg &= 0xFE7F;
-		reg |= 0x80;
-		ret = rtsx_write_phy_register(chip, 0x00, reg);
-		if (ret != STATUS_SUCCESS)
-			TRACE_RET(chip, STATUS_FAIL);
-
-		ret = rtsx_read_phy_register(chip, 0x1C, &reg);
-		if (ret != STATUS_SUCCESS)
-			TRACE_RET(chip, STATUS_FAIL);
-
-		reg &= 0xFFF7;
-		ret = rtsx_write_phy_register(chip, 0x1C, reg);
-		if (ret != STATUS_SUCCESS)
-			TRACE_RET(chip, STATUS_FAIL);
-	}
-
-	if (chip->driver_first_load && (chip->ic_version < IC_VER_C))
-		rtsx_calibration(chip);
-
-	return STATUS_SUCCESS;
-}
-
 int rtsx_reset_chip(struct rtsx_chip *chip)
 {
 	int retval;
@@ -370,37 +325,9 @@ int rtsx_reset_chip(struct rtsx_chip *chip)
 
 	/* Enable ASPM */
 	if (chip->aspm_l0s_l1_en) {
-		if (chip->dynamic_aspm) {
-			if (CHK_SDIO_EXIST(chip) && CHECK_PID(chip, 0x5288)) {
-				retval = rtsx_write_cfg_dw(chip, 2, 0xC0, 0xFF,
-						chip->aspm_l0s_l1_en);
-				if (retval != STATUS_SUCCESS)
-					TRACE_RET(chip, STATUS_FAIL);
-			}
-		} else {
-			if (CHECK_PID(chip, 0x5208))
-				RTSX_WRITE_REG(chip, ASPM_FORCE_CTL,
-					       0xFF, 0x3F);
-
-			retval = rtsx_write_config_byte(chip, LCTLR,
-							chip->aspm_l0s_l1_en);
-			if (retval != STATUS_SUCCESS)
-				TRACE_RET(chip, STATUS_FAIL);
-
-			chip->aspm_level[0] = chip->aspm_l0s_l1_en;
-			if (CHK_SDIO_EXIST(chip)) {
-				chip->aspm_level[1] = chip->aspm_l0s_l1_en;
-				retval = rtsx_write_cfg_dw(chip,
-						CHECK_PID(chip, 0x5288) ? 2 : 1,
-						0xC0, 0xFF,
-						chip->aspm_l0s_l1_en);
-
-				if (retval != STATUS_SUCCESS)
-					TRACE_RET(chip, STATUS_FAIL);
-			}
-
-			chip->aspm_enabled = 1;
-		}
+		retval = rtsx_reset_aspm(chip);
+		if (retval != STATUS_SUCCESS)
+			TRACE_RET(chip, STATUS_FAIL);
 	} else {
 		if (chip->asic_code && CHECK_PID(chip, 0x5208)) {
 			retval = rtsx_write_phy_register(chip, 0x07, 0x0129);
