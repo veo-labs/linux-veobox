@@ -1270,6 +1270,7 @@ extern void drm_mode_config_cleanup(struct drm_device *dev);
 
 extern int drm_mode_connector_set_path_property(struct drm_connector *connector,
 						const char *path);
+int drm_mode_connector_set_tile_property(struct drm_connector *connector);
 extern int drm_mode_connector_update_edid_property(struct drm_connector *connector,
 						   const struct edid *edid);
 
