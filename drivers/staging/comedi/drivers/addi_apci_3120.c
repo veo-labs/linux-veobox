@@ -84,6 +84,51 @@ struct apci3120_private {
 
 #include "addi-data/hwdrv_apci3120.c"
 
+static void apci3120_dma_alloc(struct comedi_device *dev)
+{
+	struct apci3120_private *devpriv = dev->private;
+	int order;
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		for (order = 2; order >= 0; order--) {
+			devpriv->ul_DmaBufferVirtual[i] =
+			    dma_alloc_coherent(dev->hw_dev, PAGE_SIZE << order,
+					       &devpriv->ul_DmaBufferHw[i],
+					       GFP_KERNEL);
+
+			if (devpriv->ul_DmaBufferVirtual[i])
+				break;
+		}
+		if (!devpriv->ul_DmaBufferVirtual[i])
+			break;
+		devpriv->ui_DmaBufferSize[i] = PAGE_SIZE << order;
+
+		if (i == 0)
+			devpriv->us_UseDma = 1;
+		if (i == 1)
+			devpriv->b_DmaDoubleBuffer = 1;
+	}
+}
+
+static void apci3120_dma_free(struct comedi_device *dev)
+{
+	struct apci3120_private *devpriv = dev->private;
+	int i;
+
+	if (!devpriv)
+		return;
+
+	for (i = 0; i < 2; i++) {
+		if (devpriv->ul_DmaBufferVirtual[i]) {
+			dma_free_coherent(dev->hw_dev,
+					  devpriv->ui_DmaBufferSize[i],
+					  devpriv->ul_DmaBufferVirtual[i],
+					  devpriv->ul_DmaBufferHw[i]);
+		}
+	}
+}
+
 static int apci3120_auto_attach(struct comedi_device *dev,
 				unsigned long context)
 {
@@ -91,7 +136,6 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 	const struct apci3120_board *this_board = NULL;
 	struct apci3120_private *devpriv;
 	struct comedi_subdevice *s;
-	unsigned int status;
 	int ret;
 
 	if (context < ARRAY_SIZE(apci3120_boardtypes))
@@ -125,13 +169,6 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 			apci3120_dma_alloc(dev);
 		}
 	}
-
-	status = inw(dev->iobase + APCI3120_STATUS_REG);
-	if (APCI3120_STATUS_TO_VERSION(status) == APCI3120_REVB ||
-	    context == BOARD_APCI3001)
-		devpriv->osc_base = APCI3120_REVB_OSC_BASE;
-	else
-		devpriv->osc_base = APCI3120_REVA_OSC_BASE;
 
 	ret = comedi_alloc_subdevices(dev, 5);
 	if (ret)
@@ -201,8 +238,6 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 
 static void apci3120_detach(struct comedi_device *dev)
 {
-	struct apci3120_private *devpriv = dev->private;
-
 	if (dev->iobase)
 		apci3120_reset(dev);
 	comedi_pci_detach(dev);
