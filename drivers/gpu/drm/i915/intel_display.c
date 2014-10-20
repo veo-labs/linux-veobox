@@ -6495,8 +6495,9 @@ static void i9xx_set_pipeconf(struct intel_crtc *intel_crtc)
 	POSTING_READ(PIPECONF(intel_crtc->pipe));
 }
 
-static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
-				   struct intel_crtc_state *crtc_state)
+static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
+			      int x, int y,
+			      struct drm_framebuffer *fb)
 {
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -6507,10 +6508,7 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 	struct intel_encoder *encoder;
 	const intel_limit_t *limit;
 
-	for_each_intel_encoder(dev, encoder) {
-		if (encoder->new_crtc != crtc)
-			continue;
-
+	for_each_encoder_on_crtc(dev, &crtc->base, encoder) {
 		switch (encoder->type) {
 		case INTEL_OUTPUT_LVDS:
 			is_lvds = true;
@@ -6528,8 +6526,8 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 	if (is_dsi)
 		return 0;
 
-	if (!crtc_state->clock_set) {
-		refclk = i9xx_get_refclk(crtc, num_connectors);
+	if (!crtc->config.clock_set) {
+		refclk = i9xx_get_refclk(&crtc->base, num_connectors);
 
 		/*
 		 * Returns a set of divisors for the desired target clock with
@@ -6537,9 +6535,9 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 		 * the clock equation: reflck * (5 * (m1 + 2) + (m2 + 2)) / (n +
 		 * 2) / p1 / p2.
 		 */
-		limit = intel_limit(crtc, refclk);
-		ok = dev_priv->display.find_dpll(limit, intel_crtc,
-						 intel_crtc->config.port_clock,
+		limit = intel_limit(&crtc->base, refclk);
+		ok = dev_priv->display.find_dpll(limit, crtc,
+						 crtc->config.port_clock,
 						 refclk, NULL, &clock);
 		if (!ok) {
 			DRM_ERROR("Couldn't find PLL settings for mode!\n");
@@ -6554,17 +6552,17 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 			 * we will disable the LVDS downclock feature.
 			 */
 			has_reduced_clock =
-				dev_priv->display.find_dpll(limit, intel_crtc,
+				dev_priv->display.find_dpll(limit, crtc,
 							    dev_priv->lvds_downclock,
 							    refclk, &clock,
 							    &reduced_clock);
 		}
 		/* Compat-code for transition, will disappear. */
-		crtc_state->dpll.n = clock.n;
-		crtc_state->dpll.m1 = clock.m1;
-		crtc_state->dpll.m2 = clock.m2;
-		crtc_state->dpll.p1 = clock.p1;
-		crtc_state->dpll.p2 = clock.p2;
+		crtc->config.dpll.n = clock.n;
+		crtc->config.dpll.m1 = clock.m1;
+		crtc->config.dpll.m2 = clock.m2;
+		crtc->config.dpll.p1 = clock.p1;
+		crtc->config.dpll.p2 = clock.p2;
 	}
 
 	if (IS_GEN2(dev)) {
@@ -6572,9 +6570,9 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 				has_reduced_clock ? &reduced_clock : NULL,
 				num_connectors);
 	} else if (IS_CHERRYVIEW(dev)) {
-		chv_update_pll(crtc, crtc_state);
+		chv_update_pll(crtc);
 	} else if (IS_VALLEYVIEW(dev)) {
-		vlv_update_pll(crtc, crtc_state);
+		vlv_update_pll(crtc);
 	} else {
 		i9xx_update_pll(crtc, crtc_state,
 				has_reduced_clock ? &reduced_clock : NULL,
@@ -7521,40 +7519,40 @@ static uint32_t ironlake_compute_dpll(struct intel_crtc *intel_crtc,
 	return dpll | DPLL_VCO_ENABLE;
 }
 
-static int ironlake_crtc_compute_clock(struct intel_crtc *crtc,
-				       struct intel_crtc_state *crtc_state)
+static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
+				  int x, int y,
+				  struct drm_framebuffer *fb)
 {
-	struct drm_device *dev = crtc->dev;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct drm_device *dev = crtc->base.dev;
 	intel_clock_t clock, reduced_clock;
 	u32 dpll = 0, fp = 0, fp2 = 0;
 	bool ok, has_reduced_clock = false;
 	bool is_lvds = false;
 	struct intel_shared_dpll *pll;
 
-	is_lvds = intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS);
+	is_lvds = intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_LVDS);
 
 	WARN(!(HAS_PCH_IBX(dev) || HAS_PCH_CPT(dev)),
 	     "Unexpected PCH type %d\n", INTEL_PCH_TYPE(dev));
 
 	ok = ironlake_compute_clocks(&crtc->base, crtc_state, &clock,
 				     &has_reduced_clock, &reduced_clock);
-	if (!ok && !crtc_state->clock_set) {
+	if (!ok && !crtc->config.clock_set) {
 		DRM_ERROR("Couldn't find PLL settings for mode!\n");
 		return -EINVAL;
 	}
 	/* Compat-code for transition, will disappear. */
-	if (!crtc_state->clock_set) {
-		crtc_state->dpll.n = clock.n;
-		crtc_state->dpll.m1 = clock.m1;
-		crtc_state->dpll.m2 = clock.m2;
-		crtc_state->dpll.p1 = clock.p1;
-		crtc_state->dpll.p2 = clock.p2;
+	if (!crtc->config.clock_set) {
+		crtc->config.dpll.n = clock.n;
+		crtc->config.dpll.m1 = clock.m1;
+		crtc->config.dpll.m2 = clock.m2;
+		crtc->config.dpll.p1 = clock.p1;
+		crtc->config.dpll.p2 = clock.p2;
 	}
 
 	/* CPU eDP is the only output that doesn't need a PCH PLL of its own. */
-	if (crtc_state->has_pch_encoder) {
-		fp = i9xx_dpll_compute_fp(&crtc_state->dpll);
+	if (crtc->config.has_pch_encoder) {
+		fp = i9xx_dpll_compute_fp(&crtc->config.dpll);
 		if (has_reduced_clock)
 			fp2 = i9xx_dpll_compute_fp(&reduced_clock);
 
@@ -7562,12 +7560,12 @@ static int ironlake_crtc_compute_clock(struct intel_crtc *crtc,
 					     &fp, &reduced_clock,
 					     has_reduced_clock ? &fp2 : NULL);
 
-		crtc_state->dpll_hw_state.dpll = dpll;
-		crtc_state->dpll_hw_state.fp0 = fp;
+		crtc->config.dpll_hw_state.dpll = dpll;
+		crtc->config.dpll_hw_state.fp0 = fp;
 		if (has_reduced_clock)
-			crtc_state->dpll_hw_state.fp1 = fp2;
+			crtc->config.dpll_hw_state.fp1 = fp2;
 		else
-			crtc_state->dpll_hw_state.fp1 = fp;
+			crtc->config.dpll_hw_state.fp1 = fp;
 
 		pll = intel_get_shared_dpll(crtc, crtc_state);
 		if (pll == NULL) {
@@ -7575,7 +7573,8 @@ static int ironlake_crtc_compute_clock(struct intel_crtc *crtc,
 					 pipe_name(crtc->pipe));
 			return -EINVAL;
 		}
-	}
+	} else
+		intel_put_shared_dpll(crtc);
 
 	if (is_lvds && has_reduced_clock && i915.powersave)
 		crtc->lowfreq_avail = true;
@@ -8151,14 +8150,14 @@ static int haswell_crtc_compute_clock(struct intel_crtc *crtc,
 	return 0;
 }
 
-static void skylake_get_ddi_pll(struct drm_i915_private *dev_priv,
-				enum port port,
-				struct intel_crtc_state *pipe_config)
+static int haswell_crtc_mode_set(struct intel_crtc *crtc,
+				 int x, int y,
+				 struct drm_framebuffer *fb)
 {
-	u32 temp, dpll_ctl1;
+	if (!intel_ddi_pll_select(crtc))
+		return -EINVAL;
 
-	temp = I915_READ(DPLL_CTRL2) & DPLL_CTRL2_DDI_CLK_SEL_MASK(port);
-	pipe_config->ddi_pll_sel = temp >> (port * 3 + 1);
+	crtc->lowfreq_avail = false;
 
 	switch (pipe_config->ddi_pll_sel) {
 	case SKL_DPLL0:
@@ -11284,12 +11283,13 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 		struct drm_plane *primary = intel_crtc->base.primary;
 		int vdisplay, hdisplay;
 
-		drm_crtc_get_hv_timing(mode, &hdisplay, &vdisplay);
-		ret = primary->funcs->update_plane(primary, &intel_crtc->base,
-						   fb, 0, 0,
-						   hdisplay, vdisplay,
-						   x << 16, y << 16,
-						   hdisplay << 16, vdisplay << 16);
+		crtc->primary->fb = fb;
+		crtc->x = x;
+		crtc->y = y;
+
+		ret = dev_priv->display.crtc_mode_set(intel_crtc, x, y, fb);
+		if (ret)
+			goto done;
 	}
 
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */

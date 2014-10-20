@@ -498,11 +498,12 @@ struct drm_i915_display_funcs {
 	/* Returns the active state of the crtc, and if the crtc is active,
 	 * fills out the pipe-config with the hw state. */
 	bool (*get_pipe_config)(struct intel_crtc *,
-				struct intel_crtc_state *);
-	void (*get_initial_plane_config)(struct intel_crtc *,
-					 struct intel_initial_plane_config *);
-	int (*crtc_compute_clock)(struct intel_crtc *crtc,
-				  struct intel_crtc_state *crtc_state);
+				struct intel_crtc_config *);
+	void (*get_plane_config)(struct intel_crtc *,
+				 struct intel_plane_config *);
+	int (*crtc_mode_set)(struct intel_crtc *crtc,
+			     int x, int y,
+			     struct drm_framebuffer *old_fb);
 	void (*crtc_enable)(struct drm_crtc *crtc);
 	void (*crtc_disable)(struct drm_crtc *crtc);
 	void (*off)(struct drm_crtc *crtc);
