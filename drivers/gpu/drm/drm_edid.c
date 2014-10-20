@@ -1015,6 +1015,9 @@ module_param_named(edid_fixup, edid_fixup, int, 0400);
 MODULE_PARM_DESC(edid_fixup,
 		 "Minimum number of valid EDID header bytes (0-8, default 6)");
 
+static void drm_get_displayid(struct drm_connector *connector,
+			      struct edid *edid);
+
 static int drm_edid_block_checksum(const u8 *raw_edid)
 {
 	int i;
