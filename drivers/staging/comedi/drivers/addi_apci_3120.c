@@ -63,7 +63,6 @@ struct apci3120_private {
 	int iobase;
 	int i_IobaseAmcc;
 	int i_IobaseAddon;
-	int i_IobaseReserved;
 	unsigned int ui_AiActualScan;
 	unsigned int ui_AiNbrofChannels;
 	unsigned int ui_AiChannelList[32];
@@ -160,10 +159,9 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 	pci_set_master(pcidev);
 
 	dev->iobase = pci_resource_start(pcidev, 1);
-	devpriv->amcc = pci_resource_start(pcidev, 0);
-	devpriv->addon = pci_resource_start(pcidev, 2);
-
-	apci3120_reset(dev);
+	devpriv->iobase = dev->iobase;
+	devpriv->i_IobaseAmcc = pci_resource_start(pcidev, 0);
+	devpriv->i_IobaseAddon = pci_resource_start(pcidev, 2);
 
 	if (pcidev->irq > 0) {
 		ret = request_irq(pcidev->irq, apci3120_interrupt, IRQF_SHARED,
