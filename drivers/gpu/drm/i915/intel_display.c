@@ -7376,12 +7376,11 @@ static bool ironlake_compute_clocks(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	int refclk;
 	const intel_limit_t *limit;
 	bool ret, is_lvds = false;
 
-	is_lvds = intel_pipe_will_have_type(intel_crtc, INTEL_OUTPUT_LVDS);
+	is_lvds = intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS);
 
 	refclk = ironlake_get_refclk(crtc);
 
@@ -7524,7 +7523,8 @@ static uint32_t ironlake_compute_dpll(struct intel_crtc *intel_crtc,
 static int ironlake_crtc_compute_clock(struct intel_crtc *crtc,
 				       struct intel_crtc_state *crtc_state)
 {
-	struct drm_device *dev = crtc->base.dev;
+	struct drm_device *dev = crtc->dev;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	intel_clock_t clock, reduced_clock;
 	u32 dpll = 0, fp = 0, fp2 = 0;
 	bool ok, has_reduced_clock = false;
