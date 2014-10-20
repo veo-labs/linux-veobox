@@ -607,7 +607,7 @@ i9xx_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	intel_clock_t clock;
 	int err = target;
 
-	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_LVDS)) {
 		/*
 		 * For LVDS just rely on its current settings for dual-channel.
 		 * We haven't figured out how to reliably set up different
@@ -668,7 +668,7 @@ pnv_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	intel_clock_t clock;
 	int err = target;
 
-	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_LVDS)) {
 		/*
 		 * For LVDS just rely on its current settings for dual-channel.
 		 * We haven't figured out how to reliably set up different
@@ -731,7 +731,7 @@ g4x_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	int err_most = (target >> 8) + (target >> 9);
 	found = false;
 
-	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_has_type(&crtc->base, INTEL_OUTPUT_LVDS)) {
 		if (intel_is_dual_link_lvds(dev))
 			clock.p2 = limit->p2.p2_fast;
 		else
@@ -6538,8 +6538,8 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 		 * 2) / p1 / p2.
 		 */
 		limit = intel_limit(crtc, refclk);
-		ok = dev_priv->display.find_dpll(limit, crtc,
-						 crtc_state->port_clock,
+		ok = dev_priv->display.find_dpll(limit, intel_crtc,
+						 intel_crtc->config.port_clock,
 						 refclk, NULL, &clock);
 		if (!ok) {
 			DRM_ERROR("Couldn't find PLL settings for mode!\n");
@@ -6554,7 +6554,7 @@ static int i9xx_crtc_compute_clock(struct intel_crtc *crtc,
 			 * we will disable the LVDS downclock feature.
 			 */
 			has_reduced_clock =
-				dev_priv->display.find_dpll(limit, crtc,
+				dev_priv->display.find_dpll(limit, intel_crtc,
 							    dev_priv->lvds_downclock,
 							    refclk, &clock,
 							    &reduced_clock);
@@ -7376,6 +7376,7 @@ static bool ironlake_compute_clocks(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	int refclk;
 	const intel_limit_t *limit;
 	bool ret, is_lvds = false;
@@ -7389,9 +7390,9 @@ static bool ironlake_compute_clocks(struct drm_crtc *crtc,
 	 * refclk, or FALSE.  The returned values represent the clock equation:
 	 * reflck * (5 * (m1 + 2) + (m2 + 2)) / (n + 2) / p1 / p2.
 	 */
-	limit = intel_limit(intel_crtc, refclk);
+	limit = intel_limit(crtc, refclk);
 	ret = dev_priv->display.find_dpll(limit, intel_crtc,
-					  crtc_state->port_clock,
+					  intel_crtc->config.port_clock,
 					  refclk, NULL, clock);
 	if (!ret)
 		return false;
