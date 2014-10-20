@@ -516,7 +516,7 @@ int __mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 	 * before sending CMD13 after CMD6
 	 * On SDIN5D1-2G MANFID is 0x45 and not 0x2 as specified in datasheet
 	 */
-	if (card->cid.manfid == CID_MANFID_SANDISK ||
+	if (card->cid.manfid == 0x02 ||
 		card->cid.manfid == 0x45) {
 		msleep(1);
 	}
