@@ -1282,7 +1282,7 @@ static int ft1000_parse_dpram_msg(struct net_device *dev)
 		}
 		pr_debug("total length = %d\n", total_len);
 		if ((total_len < MAX_CMD_SQSIZE) && (total_len > sizeof(struct pseudo_hdr))) {
-			total_len += nxtph;
+            total_len += nxtph;
 			/*
 			 * ft1000_read_reg will return a value that needs to be byteswap
 			 * in order to get DSP_QID_OFFSET.
