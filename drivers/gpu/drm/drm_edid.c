@@ -1015,24 +1015,8 @@ module_param_named(edid_fixup, edid_fixup, int, 0400);
 MODULE_PARM_DESC(edid_fixup,
 		 "Minimum number of valid EDID header bytes (0-8, default 6)");
 
-static int drm_edid_block_checksum(const u8 *raw_edid)
-{
-	int i;
-	u8 csum = 0;
-	for (i = 0; i < EDID_LENGTH; i++)
-		csum += raw_edid[i];
-
-	return csum;
-}
-
-static bool drm_edid_is_zero(const u8 *in_edid, int length)
-{
-	if (memchr_inv(in_edid, 0, length))
-		return false;
-
-	return true;
-}
-
+static void drm_get_displayid(struct drm_connector *connector,
+			      struct edid *edid);
 /**
  * drm_edid_block_valid - Sanity check the EDID block (base or extension)
  * @raw_edid: pointer to raw EDID block
@@ -1321,10 +1305,15 @@ EXPORT_SYMBOL(drm_probe_ddc);
 struct edid *drm_get_edid(struct drm_connector *connector,
 			  struct i2c_adapter *adapter)
 {
+	struct edid *edid;
+
 	if (!drm_probe_ddc(adapter))
 		return NULL;
 
-	return drm_do_get_edid(connector, drm_do_probe_ddc_edid, adapter);
+	edid = drm_do_get_edid(connector, drm_do_probe_ddc_edid, adapter);
+	if (edid)
+		drm_get_displayid(connector, edid);
+	return edid;
 }
 EXPORT_SYMBOL(drm_get_edid);
 
