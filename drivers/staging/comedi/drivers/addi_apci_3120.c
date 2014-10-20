@@ -61,7 +61,7 @@ struct apci3120_dmabuf {
 
 struct apci3120_private {
 	int iobase;
-	int i_IobaseAmcc;
+	unsigned long amcc;
 	unsigned long addon;
 	unsigned int ui_AiActualScan;
 	unsigned int ui_AiNbrofChannels;
@@ -160,7 +160,7 @@ static int apci3120_auto_attach(struct comedi_device *dev,
 
 	dev->iobase = pci_resource_start(pcidev, 1);
 	devpriv->iobase = dev->iobase;
-	devpriv->i_IobaseAmcc = pci_resource_start(pcidev, 0);
+	devpriv->amcc = pci_resource_start(pcidev, 0);
 	devpriv->addon = pci_resource_start(pcidev, 2);
 
 	if (pcidev->irq > 0) {
