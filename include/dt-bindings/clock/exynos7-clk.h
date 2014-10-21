@@ -35,6 +35,17 @@
 #define CLK_SCLK_I2S1			14
 #define TOP0_NR_CLK			15
 
+/* TOP1 */
+#define DOUT_ACLK_FSYS1_200		1
+#define DOUT_ACLK_FSYS0_200		2
+#define DOUT_SCLK_MMC2			3
+#define DOUT_SCLK_MMC1			4
+#define DOUT_SCLK_MMC0			5
+#define CLK_SCLK_MMC2			6
+#define CLK_SCLK_MMC1			7
+#define CLK_SCLK_MMC0			8
+#define TOP1_NR_CLK			9
+
 /* PERIC0 */
 #define PCLK_UART0			1
 #define SCLK_UART0			2
@@ -66,47 +77,13 @@
 #define SCLK_CHIPID			2
 #define PERIS_NR_CLK			3
 
-/* MSCL */
-#define USERMUX_ACLK_MSCL_532		1
-#define DOUT_PCLK_MSCL			2
-#define ACLK_MSCL_0			3
-#define ACLK_MSCL_1			4
-#define ACLK_JPEG			5
-#define ACLK_G2D			6
-#define ACLK_LH_ASYNC_SI_MSCL_0		7
-#define ACLK_LH_ASYNC_SI_MSCL_1		8
-#define ACLK_AXI2ACEL_BRIDGE		9
-#define ACLK_XIU_MSCLX_0		10
-#define ACLK_XIU_MSCLX_1		11
-#define ACLK_QE_MSCL_0			12
-#define ACLK_QE_MSCL_1			13
-#define ACLK_QE_JPEG			14
-#define ACLK_QE_G2D			15
-#define ACLK_PPMU_MSCL_0		16
-#define ACLK_PPMU_MSCL_1		17
-#define ACLK_MSCLNP_133			18
-#define ACLK_AHB2APB_MSCL0P		19
-#define ACLK_AHB2APB_MSCL1P		20
+/* FSYS0 */
+#define ACLK_MMC2			1
+#define FSYS0_NR_CLK			2
 
-#define PCLK_MSCL_0			21
-#define PCLK_MSCL_1			22
-#define PCLK_JPEG			23
-#define PCLK_G2D			24
-#define PCLK_QE_MSCL_0			25
-#define PCLK_QE_MSCL_1			26
-#define PCLK_QE_JPEG			27
-#define PCLK_QE_G2D			28
-#define PCLK_PPMU_MSCL_0		29
-#define PCLK_PPMU_MSCL_1		30
-#define PCLK_AXI2ACEL_BRIDGE		31
-#define PCLK_PMU_MSCL			32
-#define MSCL_NR_CLK			33
+/* FSYS1 */
+#define ACLK_MMC1			1
+#define ACLK_MMC0			2
+#define FSYS1_NR_CLK			3
 
-/* AUD */
-#define SCLK_I2S			1
-#define SCLK_PCM			2
-#define PCLK_I2S			3
-#define PCLK_PCM			4
-#define ACLK_ADMA			5
-#define AUD_NR_CLK			6
 #endif /* _DT_BINDINGS_CLOCK_EXYNOS7_H */
