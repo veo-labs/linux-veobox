@@ -137,6 +137,54 @@ static const struct regmap_config bmp280_regmap_config = {
 	.volatile_reg = bmp280_is_volatile_reg,
 };
 
+static int bmp280_read_compensation_temp(struct bmp280_data *data,
+					 struct bmp280_comp_temp *comp)
+{
+	int ret;
+	__le16 buf[BMP280_COMP_TEMP_REG_COUNT / 2];
+
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_TEMP_START,
+			       buf, BMP280_COMP_TEMP_REG_COUNT);
+	if (ret < 0) {
+		dev_err(&data->client->dev,
+			"failed to read temperature calibration parameters\n");
+		return ret;
+	}
+
+	comp->dig_t1 = (u16) le16_to_cpu(buf[0]);
+	comp->dig_t2 = (s16) le16_to_cpu(buf[1]);
+	comp->dig_t3 = (s16) le16_to_cpu(buf[2]);
+
+	return 0;
+}
+
+static int bmp280_read_compensation_press(struct bmp280_data *data,
+					  struct bmp280_comp_press *comp)
+{
+	int ret;
+	__le16 buf[BMP280_COMP_PRESS_REG_COUNT / 2];
+
+	ret = regmap_bulk_read(data->regmap, BMP280_REG_COMP_PRESS_START,
+			       buf, BMP280_COMP_PRESS_REG_COUNT);
+	if (ret < 0) {
+		dev_err(&data->client->dev,
+			"failed to read pressure calibration parameters\n");
+		return ret;
+	}
+
+	comp->dig_p1 = (s16) le16_to_cpu(buf[0]);
+	comp->dig_p2 = (u16) le16_to_cpu(buf[1]);
+	comp->dig_p3 = (u16) le16_to_cpu(buf[2]);
+	comp->dig_p4 = (u16) le16_to_cpu(buf[3]);
+	comp->dig_p5 = (u16) le16_to_cpu(buf[4]);
+	comp->dig_p6 = (u16) le16_to_cpu(buf[5]);
+	comp->dig_p7 = (u16) le16_to_cpu(buf[6]);
+	comp->dig_p8 = (u16) le16_to_cpu(buf[7]);
+	comp->dig_p9 = (u16) le16_to_cpu(buf[8]);
+
+	return 0;
+}
+
 /*
  * Returns temperature in DegC, resolution is 0.01 DegC.  Output value of
  * "5123" equals 51.23 DegC.  t_fine carries fine temperature as global
@@ -209,11 +257,11 @@ static u32 bmp280_compensate_press(struct bmp280_data *data,
 	if (var1 == 0)
 		return 0;
 
-	p = ((((s64)1048576 - adc_press) << 31) - var2) * 3125;
-	p = div64_s64(p, var1);
-	var1 = (((s64)(s16)le16_to_cpu(buf[P9])) * (p >> 13) * (p >> 13)) >> 25;
-	var2 = (((s64)(s16)le16_to_cpu(buf[P8])) * p) >> 19;
-	p = ((p + var1 + var2) >> 8) + (((s64)(s16)le16_to_cpu(buf[P7])) << 4);
+	p = ((((s64) 1048576 - adc_press) << 31) - var2) * 3125;
+	do_div(p, var1);
+	var1 = (((s64) comp->dig_p9) * (p >> 13) * (p >> 13)) >> 25;
+	var2 = (((s64) comp->dig_p8) * p) >> 19;
+	p = ((p + var1 + var2) >> 8) + (((s64) comp->dig_p7) << 4);
 
 	return (u32)p;
 }
@@ -270,10 +318,10 @@ static int bmp280_read_press(struct bmp280_data *data,
 	adc_press = be32_to_cpu(tmp) >> 12;
 	comp_press = bmp280_compensate_press(data, adc_press);
 
-	*val = comp_press;
-	*val2 = 256000;
+	*val = comp_press / 256000;
+	*val2 = comp_press * 1000000 / 256000;
 
-	return IIO_VAL_FRACTIONAL;
+	return IIO_VAL_INT_PLUS_MICRO;
 }
 
 static int bmp280_read_raw(struct iio_dev *indio_dev,
