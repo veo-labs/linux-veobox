@@ -404,8 +404,199 @@ static void tegra_dc_setup_window(struct tegra_dc *dc, unsigned int index,
 	return 0;
 }
 
-static void tegra_cursor_atomic_disable(struct drm_plane *plane,
-					struct drm_plane_state *old_state)
+static int tegra_window_plane_disable(struct drm_plane *plane)
+{
+	struct tegra_dc *dc = to_tegra_dc(plane->crtc);
+	struct tegra_plane *p = to_tegra_plane(plane);
+	u32 value;
+
+	if (!plane->crtc)
+		return 0;
+
+	value = WINDOW_A_SELECT << p->index;
+	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_WINDOW_HEADER);
+
+	value = tegra_dc_readl(dc, DC_WIN_WIN_OPTIONS);
+	value &= ~WIN_ENABLE;
+	tegra_dc_writel(dc, value, DC_WIN_WIN_OPTIONS);
+
+	tegra_dc_window_commit(dc, p->index);
+
+	return 0;
+}
+
+static void tegra_plane_destroy(struct drm_plane *plane)
+{
+	struct tegra_plane *p = to_tegra_plane(plane);
+
+	drm_plane_cleanup(plane);
+	kfree(p);
+}
+
+static const u32 tegra_primary_plane_formats[] = {
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_RGB565,
+};
+
+static int tegra_primary_plane_update(struct drm_plane *plane,
+				      struct drm_crtc *crtc,
+				      struct drm_framebuffer *fb, int crtc_x,
+				      int crtc_y, unsigned int crtc_w,
+				      unsigned int crtc_h, uint32_t src_x,
+				      uint32_t src_y, uint32_t src_w,
+				      uint32_t src_h)
+{
+	struct tegra_bo *bo = tegra_fb_get_plane(fb, 0);
+	struct tegra_plane *p = to_tegra_plane(plane);
+	struct tegra_dc *dc = to_tegra_dc(crtc);
+	struct tegra_dc_window window;
+	int err;
+
+	memset(&window, 0, sizeof(window));
+	window.src.x = src_x >> 16;
+	window.src.y = src_y >> 16;
+	window.src.w = src_w >> 16;
+	window.src.h = src_h >> 16;
+	window.dst.x = crtc_x;
+	window.dst.y = crtc_y;
+	window.dst.w = crtc_w;
+	window.dst.h = crtc_h;
+	window.format = tegra_dc_format(fb->pixel_format, &window.swap);
+	window.bits_per_pixel = fb->bits_per_pixel;
+	window.bottom_up = tegra_fb_is_bottom_up(fb);
+
+	err = tegra_fb_get_tiling(fb, &window.tiling);
+	if (err < 0)
+		return err;
+
+	window.base[0] = bo->paddr + fb->offsets[0];
+	window.stride[0] = fb->pitches[0];
+
+	err = tegra_dc_setup_window(dc, p->index, &window);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+
+static void tegra_primary_plane_destroy(struct drm_plane *plane)
+{
+	tegra_window_plane_disable(plane);
+	tegra_plane_destroy(plane);
+}
+
+static const struct drm_plane_funcs tegra_primary_plane_funcs = {
+	.update_plane = tegra_primary_plane_update,
+	.disable_plane = tegra_window_plane_disable,
+	.destroy = tegra_primary_plane_destroy,
+};
+
+static struct drm_plane *tegra_dc_primary_plane_create(struct drm_device *drm,
+						       struct tegra_dc *dc)
+{
+	struct tegra_plane *plane;
+	unsigned int num_formats;
+	const u32 *formats;
+	int err;
+
+	plane = kzalloc(sizeof(*plane), GFP_KERNEL);
+	if (!plane)
+		return ERR_PTR(-ENOMEM);
+
+	num_formats = ARRAY_SIZE(tegra_primary_plane_formats);
+	formats = tegra_primary_plane_formats;
+
+	err = drm_universal_plane_init(drm, &plane->base, 1 << dc->pipe,
+				       &tegra_primary_plane_funcs, formats,
+				       num_formats, DRM_PLANE_TYPE_PRIMARY);
+	if (err < 0) {
+		kfree(plane);
+		return ERR_PTR(err);
+	}
+
+	return &plane->base;
+}
+
+static const u32 tegra_cursor_plane_formats[] = {
+	DRM_FORMAT_RGBA8888,
+};
+
+static int tegra_cursor_plane_update(struct drm_plane *plane,
+				     struct drm_crtc *crtc,
+				     struct drm_framebuffer *fb, int crtc_x,
+				     int crtc_y, unsigned int crtc_w,
+				     unsigned int crtc_h, uint32_t src_x,
+				     uint32_t src_y, uint32_t src_w,
+				     uint32_t src_h)
+{
+	struct tegra_bo *bo = tegra_fb_get_plane(fb, 0);
+	struct tegra_dc *dc = to_tegra_dc(crtc);
+	u32 value = CURSOR_CLIP_DISPLAY;
+
+	/* scaling not supported for cursor */
+	if ((src_w >> 16 != crtc_w) || (src_h >> 16 != crtc_h))
+		return -EINVAL;
+
+	/* only square cursors supported */
+	if (src_w != src_h)
+		return -EINVAL;
+
+	switch (crtc_w) {
+	case 32:
+		value |= CURSOR_SIZE_32x32;
+		break;
+
+	case 64:
+		value |= CURSOR_SIZE_64x64;
+		break;
+
+	case 128:
+		value |= CURSOR_SIZE_128x128;
+		break;
+
+	case 256:
+		value |= CURSOR_SIZE_256x256;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	value |= (bo->paddr >> 10) & 0x3fffff;
+	tegra_dc_writel(dc, value, DC_DISP_CURSOR_START_ADDR);
+
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+	value = (bo->paddr >> 32) & 0x3;
+	tegra_dc_writel(dc, value, DC_DISP_CURSOR_START_ADDR_HI);
+#endif
+
+	/* enable cursor and set blend mode */
+	value = tegra_dc_readl(dc, DC_DISP_DISP_WIN_OPTIONS);
+	value |= CURSOR_ENABLE;
+	tegra_dc_writel(dc, value, DC_DISP_DISP_WIN_OPTIONS);
+
+	value = tegra_dc_readl(dc, DC_DISP_BLEND_CURSOR_CONTROL);
+	value &= ~CURSOR_DST_BLEND_MASK;
+	value &= ~CURSOR_SRC_BLEND_MASK;
+	value |= CURSOR_MODE_NORMAL;
+	value |= CURSOR_DST_BLEND_NEG_K1_TIMES_SRC;
+	value |= CURSOR_SRC_BLEND_K1_TIMES_SRC;
+	value |= CURSOR_ALPHA;
+	tegra_dc_writel(dc, value, DC_DISP_BLEND_CURSOR_CONTROL);
+
+	/* position the cursor */
+	value = (crtc_y & 0x3fff) << 16 | (crtc_x & 0x3fff);
+	tegra_dc_writel(dc, value, DC_DISP_CURSOR_POSITION);
+
+	/* apply changes */
+	tegra_dc_cursor_commit(dc);
+	tegra_dc_commit(dc);
+
+	return 0;
+}
+
+static int tegra_cursor_plane_disable(struct drm_plane *plane)
 {
 	struct tegra_dc *dc;
 	u32 value;
@@ -473,28 +664,7 @@ static struct drm_plane *tegra_dc_cursor_plane_create(struct drm_device *drm,
 	return &plane->base;
 }
 
-static int tegra_plane_disable(struct drm_plane *plane)
-{
-	struct tegra_dc *dc = to_tegra_dc(plane->crtc);
-	struct tegra_plane *p = to_tegra_plane(plane);
-	unsigned long value;
-
-	if (!plane->crtc)
-		return 0;
-
-	value = WINDOW_A_SELECT << p->index;
-	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_WINDOW_HEADER);
-
-	value = tegra_dc_readl(dc, DC_WIN_WIN_OPTIONS);
-	value &= ~WIN_ENABLE;
-	tegra_dc_writel(dc, value, DC_WIN_WIN_OPTIONS);
-
-	tegra_dc_window_commit(dc, p->index);
-
-	return 0;
-}
-
-static void tegra_plane_destroy(struct drm_plane *plane)
+static void tegra_overlay_plane_destroy(struct drm_plane *plane)
 {
 	tegra_plane_destroy(plane);
 }
@@ -595,103 +765,6 @@ void tegra_dc_disable_vblank(struct tegra_dc *dc)
 	tegra_dc_writel(dc, value, DC_CMD_INT_MASK);
 
 	spin_unlock_irqrestore(&dc->lock, flags);
-}
-
-static int tegra_dc_cursor_set2(struct drm_crtc *crtc, struct drm_file *file,
-				uint32_t handle, uint32_t width,
-				uint32_t height, int32_t hot_x, int32_t hot_y)
-{
-	unsigned long value = CURSOR_CLIP_DISPLAY;
-	struct tegra_dc *dc = to_tegra_dc(crtc);
-	struct drm_gem_object *gem;
-	struct tegra_bo *bo = NULL;
-
-	if (!dc->soc->supports_cursor)
-		return -ENXIO;
-
-	if (width != height)
-		return -EINVAL;
-
-	switch (width) {
-	case 32:
-		value |= CURSOR_SIZE_32x32;
-		break;
-
-	case 64:
-		value |= CURSOR_SIZE_64x64;
-		break;
-
-	case 128:
-		value |= CURSOR_SIZE_128x128;
-
-	case 256:
-		value |= CURSOR_SIZE_256x256;
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	if (handle) {
-		gem = drm_gem_object_lookup(crtc->dev, file, handle);
-		if (!gem)
-			return -ENOENT;
-
-		bo = to_tegra_bo(gem);
-	}
-
-	if (bo) {
-		unsigned long addr = (bo->paddr & 0xfffffc00) >> 10;
-#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
-		unsigned long high = (bo->paddr & 0xfffffffc) >> 32;
-#endif
-
-		tegra_dc_writel(dc, value | addr, DC_DISP_CURSOR_START_ADDR);
-
-#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
-		tegra_dc_writel(dc, high, DC_DISP_CURSOR_START_ADDR_HI);
-#endif
-
-		value = tegra_dc_readl(dc, DC_DISP_DISP_WIN_OPTIONS);
-		value |= CURSOR_ENABLE;
-		tegra_dc_writel(dc, value, DC_DISP_DISP_WIN_OPTIONS);
-
-		value = tegra_dc_readl(dc, DC_DISP_BLEND_CURSOR_CONTROL);
-		value &= ~CURSOR_DST_BLEND_MASK;
-		value &= ~CURSOR_SRC_BLEND_MASK;
-		value |= CURSOR_MODE_NORMAL;
-		value |= CURSOR_DST_BLEND_NEG_K1_TIMES_SRC;
-		value |= CURSOR_SRC_BLEND_K1_TIMES_SRC;
-		value |= CURSOR_ALPHA;
-		tegra_dc_writel(dc, value, DC_DISP_BLEND_CURSOR_CONTROL);
-	} else {
-		value = tegra_dc_readl(dc, DC_DISP_DISP_WIN_OPTIONS);
-		value &= ~CURSOR_ENABLE;
-		tegra_dc_writel(dc, value, DC_DISP_DISP_WIN_OPTIONS);
-	}
-
-	tegra_dc_cursor_commit(dc);
-	tegra_dc_commit(dc);
-
-	return 0;
-}
-
-static int tegra_dc_cursor_move(struct drm_crtc *crtc, int x, int y)
-{
-	struct tegra_dc *dc = to_tegra_dc(crtc);
-	unsigned long value;
-
-	if (!dc->soc->supports_cursor)
-		return -ENXIO;
-
-	value = ((y & 0x3fff) << 16) | (x & 0x3fff);
-	tegra_dc_writel(dc, value, DC_DISP_CURSOR_POSITION);
-
-	tegra_dc_cursor_commit(dc);
-	/* XXX: only required on generations earlier than Tegra124? */
-	tegra_dc_commit(dc);
-
-	return 0;
 }
 
 static void tegra_dc_finish_page_flip(struct tegra_dc *dc)
@@ -869,7 +942,8 @@ static void tegra_crtc_disable(struct drm_crtc *crtc)
 		tegra_dc_writel(dc, value, DC_CMD_DISPLAY_POWER_CONTROL);
 	}
 
-	drm_crtc_vblank_off(crtc);
+	drm_vblank_off(drm, dc->pipe);
+	tegra_dc_commit(dc);
 }
 
 static bool tegra_crtc_mode_fixup(struct drm_crtc *crtc,
@@ -1433,7 +1507,25 @@ static int tegra_dc_init(struct host1x_client *client)
 		dc->domain = tegra->domain;
 	}
 
-	drm_crtc_init(drm, &dc->base, &tegra_crtc_funcs);
+	primary = tegra_dc_primary_plane_create(drm, dc);
+	if (IS_ERR(primary)) {
+		err = PTR_ERR(primary);
+		goto cleanup;
+	}
+
+	if (dc->soc->supports_cursor) {
+		cursor = tegra_dc_cursor_plane_create(drm, dc);
+		if (IS_ERR(cursor)) {
+			err = PTR_ERR(cursor);
+			goto cleanup;
+		}
+	}
+
+	err = drm_crtc_init_with_planes(drm, &dc->base, primary, cursor,
+					&tegra_crtc_funcs);
+	if (err < 0)
+		goto cleanup;
+
 	drm_mode_crtc_set_gamma_size(&dc->base, 256);
 	drm_crtc_helper_add(&dc->base, &tegra_crtc_helper_funcs);
 
