@@ -213,6 +213,5 @@ void tegra_output_exit(struct tegra_output *output)
 	if (gpio_is_valid(output->hpd_gpio))
 		disable_irq(output->hpd_irq);
 
-	if (output->panel)
-		drm_panel_detach(output->panel);
+	return 0;
 }
