@@ -1071,6 +1071,7 @@ static void pci230_ao_stop(struct comedi_device *dev,
 static void pci230_handle_ao_nofifo(struct comedi_device *dev,
 				    struct comedi_subdevice *s)
 {
+	struct pci230_private *devpriv = dev->private;
 	struct comedi_async *async = s->async;
 	struct comedi_cmd *cmd = &async->cmd;
 	unsigned short data;
@@ -1082,16 +1083,14 @@ static void pci230_handle_ao_nofifo(struct comedi_device *dev,
 	for (i = 0; i < cmd->chanlist_len; i++) {
 		unsigned int chan = CR_CHAN(cmd->chanlist[i]);
 
-		/* Read sample from Comedi's circular buffer. */
-		ret = comedi_buf_get(s, &data);
-		if (ret == 0) {
-			s->async->events |= COMEDI_CB_OVERFLOW;
+		if (!comedi_buf_read_samples(s, &data, 1)) {
+			async->events |= COMEDI_CB_OVERFLOW;
 			return;
 		}
 		pci230_ao_write_nofifo(dev, data, chan);
 		s->readback[chan] = data;
 	}
-	async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
+
 	if (cmd->stop_src == TRIG_COUNT) {
 		devpriv->ao_scan_count--;
 		if (devpriv->ao_scan_count == 0) {
@@ -1174,16 +1173,21 @@ static bool pci230_handle_ao_fifo(struct comedi_device *dev,
 			}
 		}
 
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg) {
-			/*
-			 * All data for the command has been written
-			 * to FIFO.  Set FIFO interrupt trigger level
-			 * to 'empty'.
-			 */
-			devpriv->daccon &= ~PCI230P2_DAC_INT_FIFO_MASK;
-			devpriv->daccon |= PCI230P2_DAC_INT_FIFO_EMPTY;
-			outw(devpriv->daccon, devpriv->daqio + PCI230_DACCON);
+		if (cmd->stop_src == TRIG_COUNT) {
+			devpriv->ao_scan_count -= num_scans;
+			if (devpriv->ao_scan_count == 0) {
+				/*
+				 * All data for the command has been written
+				 * to FIFO.  Set FIFO interrupt trigger level
+				 * to 'empty'.
+				 */
+				devpriv->daccon =
+				    (devpriv->daccon &
+				     ~PCI230P2_DAC_INT_FIFO_MASK) |
+				    PCI230P2_DAC_INT_FIFO_EMPTY;
+				outw(devpriv->daccon,
+				     devpriv->daqio + PCI230_DACCON);
+			}
 		}
 		/* Check if FIFO underrun occurred while writing to FIFO. */
 		dacstat = inw(devpriv->daqio + PCI230_DACCON);
