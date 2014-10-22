@@ -860,8 +860,116 @@ static int ll_create_nd(struct inode *dir, struct dentry *dentry,
 
 static inline void ll_get_child_fid(struct dentry *child, struct lu_fid *fid)
 {
-	if (child->d_inode)
-		*fid = *ll_inode2fid(child->d_inode);
+	int err;
+
+	CDEBUG(D_VFSTRACE, "VFS Op:name=%.*s,dir=%lu/%u(%p),target=%.*s\n",
+	       name->len, name->name, dir->i_ino, dir->i_generation,
+	       dir, 3000, tgt);
+
+	err = ll_new_node(dir, name, (char *)tgt, S_IFLNK | S_IRWXUGO,
+			  0, dchild, LUSTRE_OPC_SYMLINK);
+
+	if (!err)
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_SYMLINK, 1);
+
+	return err;
+}
+
+static int ll_link_generic(struct inode *src,  struct inode *dir,
+			   struct qstr *name, struct dentry *dchild)
+{
+	struct ll_sb_info *sbi = ll_i2sbi(dir);
+	struct ptlrpc_request *request = NULL;
+	struct md_op_data *op_data;
+	int err;
+
+	CDEBUG(D_VFSTRACE,
+	       "VFS Op: inode=%lu/%u(%p), dir=%lu/%u(%p), target=%.*s\n",
+	       src->i_ino, src->i_generation, src, dir->i_ino,
+	       dir->i_generation, dir, name->len, name->name);
+
+	op_data = ll_prep_md_op_data(NULL, src, dir, name->name, name->len,
+				     0, LUSTRE_OPC_ANY, NULL);
+	if (IS_ERR(op_data))
+		return PTR_ERR(op_data);
+
+	err = md_link(sbi->ll_md_exp, op_data, &request);
+	ll_finish_md_op_data(op_data);
+	if (err)
+		goto out;
+
+	ll_update_times(request, dir);
+	ll_stats_ops_tally(sbi, LPROC_LL_LINK, 1);
+out:
+	ptlrpc_req_finished(request);
+	return err;
+}
+
+static int ll_mkdir_generic(struct inode *dir, struct qstr *name,
+			    int mode, struct dentry *dchild)
+
+{
+	int err;
+
+	CDEBUG(D_VFSTRACE, "VFS Op:name=%.*s,dir=%lu/%u(%p)\n",
+	       name->len, name->name, dir->i_ino, dir->i_generation, dir);
+
+	if (!IS_POSIXACL(dir) || !exp_connect_umask(ll_i2mdexp(dir)))
+		mode &= ~current_umask();
+	mode = (mode & (S_IRWXUGO|S_ISVTX)) | S_IFDIR;
+	err = ll_new_node(dir, name, NULL, mode, 0, dchild, LUSTRE_OPC_MKDIR);
+
+	if (!err)
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_MKDIR, 1);
+
+	return err;
+}
+
+/* Try to find the child dentry by its name.
+   If found, put the result fid into @fid. */
+static void ll_get_child_fid(struct inode *dir, struct qstr *name,
+			     struct lu_fid *fid)
+{
+	struct dentry *parent, *child;
+
+	parent = ll_d_hlist_entry(dir->i_dentry, struct dentry, d_alias);
+	child = d_lookup(parent, name);
+	if (child) {
+		if (child->d_inode)
+			*fid = *ll_inode2fid(child->d_inode);
+		dput(child);
+	}
+}
+
+static int ll_rmdir_generic(struct inode *dir, struct dentry *dparent,
+			    struct dentry *dchild, struct qstr *name)
+{
+	struct ptlrpc_request *request = NULL;
+	struct md_op_data *op_data;
+	int rc;
+
+	CDEBUG(D_VFSTRACE, "VFS Op:name=%.*s,dir=%lu/%u(%p)\n",
+	       name->len, name->name, dir->i_ino, dir->i_generation, dir);
+
+	if (unlikely(ll_d_mountpoint(dparent, dchild, name)))
+		return -EBUSY;
+
+	op_data = ll_prep_md_op_data(NULL, dir, NULL, name->name, name->len,
+				     S_IFDIR, LUSTRE_OPC_ANY, NULL);
+	if (IS_ERR(op_data))
+		return PTR_ERR(op_data);
+
+	ll_get_child_fid(dir, name, &op_data->op_fid3);
+	op_data->op_fid2 = op_data->op_fid3;
+	rc = md_unlink(ll_i2sbi(dir)->ll_md_exp, op_data, &request);
+	ll_finish_md_op_data(op_data);
+	if (rc == 0) {
+		ll_update_times(request, dir);
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_RMDIR, 1);
+	}
+
+	ptlrpc_req_finished(request);
+	return rc;
 }
 
 /**
@@ -1057,9 +1165,10 @@ static int ll_symlink(struct inode *dir, struct dentry *dentry,
 {
 	int err;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd,dir=%lu/%u(%p),target=%.*s\n",
-	       dentry, dir->i_ino, dir->i_generation,
-	       dir, 3000, oldname);
+static int ll_unlink(struct inode *dir, struct dentry *dentry)
+{
+	return ll_unlink_generic(dir, NULL, dentry, &dentry->d_name);
+}
 
 	err = ll_new_node(dir, dentry, oldname, S_IFLNK | S_IRWXUGO,
 			0, LUSTRE_OPC_SYMLINK);
