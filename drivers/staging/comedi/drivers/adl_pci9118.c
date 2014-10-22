@@ -505,53 +505,18 @@ static unsigned int valid_samples_in_act_dma_buf(struct comedi_device *dev,
 static void move_block_from_dma(struct comedi_device *dev,
 				struct comedi_subdevice *s,
 				unsigned short *dma_buffer,
-				unsigned int n_raw_samples)
+				unsigned int num_samples)
 {
 	struct pci9118_private *devpriv = dev->private;
 	struct comedi_cmd *cmd = &s->async->cmd;
-	unsigned int start_pos = devpriv->ai_add_front;
-	unsigned int stop_pos = start_pos + cmd->chanlist_len;
-	unsigned int span_len = stop_pos + devpriv->ai_add_back;
-	unsigned int dma_pos = devpriv->ai_act_dmapos;
-	unsigned int x;
 
-	if (span_len == cmd->chanlist_len) {
-		/* All samples are to be copied. */
-		comedi_buf_write_samples(s, dma_buffer, n_raw_samples);
-		dma_pos += n_raw_samples;
-	} else {
-		/*
-		 * Not all samples are to be copied.  Buffer contents consist
-		 * of a possibly non-whole number of spans and a region of
-		 * each span is to be copied.
-		 */
-		while (n_raw_samples) {
-			if (dma_pos < start_pos) {
-				/* Skip samples before start position. */
-				x = start_pos - dma_pos;
-				if (x > n_raw_samples)
-					x = n_raw_samples;
-				dma_pos += x;
-				n_raw_samples -= x;
-				if (!n_raw_samples)
-					break;
-			}
-			if (dma_pos < stop_pos) {
-				/* Copy samples before stop position. */
-				x = stop_pos - dma_pos;
-				if (x > n_raw_samples)
-					x = n_raw_samples;
-				comedi_buf_write_samples(s, dma_buffer, x);
-				dma_pos += x;
-				n_raw_samples -= x;
-			}
-			/* Advance to next span. */
-			start_pos += span_len;
-			stop_pos += span_len;
-		}
-	}
-	/* Update position in span for next time. */
-	devpriv->ai_act_dmapos = dma_pos % span_len;
+	num_samples = defragment_dma_buffer(dev, s, dma_buffer, num_samples);
+	devpriv->ai_act_scan +=
+	    (s->async->cur_chan + num_samples) / cmd->scan_end_arg;
+	s->async->cur_chan += num_samples;
+	s->async->cur_chan %= cmd->scan_end_arg;
+
+	comedi_buf_write_samples(s, dma_buffer, num_samples);
 }
 
 static void pci9118_exttrg_enable(struct comedi_device *dev, bool enable)
@@ -677,10 +642,16 @@ static void interrupt_pci9118_ai_onesample(struct comedi_device *dev,
 	sampl = inl(dev->iobase + PCI9118_AI_FIFO_REG);
 
 	comedi_buf_write_samples(s, &sampl, 1);
-
-	if (!devpriv->ai_neverending) {
-		if (s->async->scans_done >= cmd->stop_arg)
-			s->async->events |= COMEDI_CB_EOA;
+	s->async->cur_chan++;
+	if (s->async->cur_chan >= cmd->scan_end_arg) {
+							/* one scan done */
+		s->async->cur_chan %= cmd->scan_end_arg;
+		devpriv->ai_act_scan++;
+		if (!devpriv->ai_neverending) {
+			/* all data sampled? */
+			if (devpriv->ai_act_scan >= cmd->stop_arg)
+				s->async->events |= COMEDI_CB_EOA;
+		}
 	}
 }
 
