@@ -1096,12 +1096,17 @@ static void cb_pcidas_ao_load_fifo(struct comedi_device *dev,
 				   unsigned int nsamples)
 {
 	struct cb_pcidas_private *devpriv = dev->private;
+	struct comedi_cmd *cmd = &s->async->cmd;
 	unsigned int nbytes;
 
-	nsamples = comedi_nsamples_left(s, nsamples);
-	nbytes = comedi_buf_read_samples(s, devpriv->ao_buffer, nsamples);
+	if (cmd->stop_src == TRIG_COUNT && devpriv->ao_count < nsamples)
+		nsamples = devpriv->ao_count;
 
-	nsamples = comedi_bytes_to_samples(s, nbytes);
+	nbytes = comedi_buf_read_samples(s, devpriv->ao_buffer, nsamples);
+	nsamples = nbytes / bytes_per_sample(s);
+	if (cmd->stop_src == TRIG_COUNT)
+		devpriv->ao_count -= nsamples;
+
 	outsw(devpriv->ao_registers + DACDATA, devpriv->ao_buffer, nsamples);
 }
 
