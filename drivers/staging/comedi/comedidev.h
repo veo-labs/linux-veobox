@@ -483,8 +483,18 @@ unsigned int comedi_buf_read_n_available(struct comedi_subdevice *s);
 unsigned int comedi_buf_read_alloc(struct comedi_subdevice *s, unsigned int n);
 unsigned int comedi_buf_read_free(struct comedi_subdevice *s, unsigned int n);
 
-unsigned int comedi_buf_write_samples(struct comedi_subdevice *s,
-				      const void *data, unsigned int nsamples);
+int comedi_buf_put(struct comedi_subdevice *s, unsigned short x);
+int comedi_buf_get(struct comedi_subdevice *s, unsigned short *x);
+
+void comedi_buf_memcpy_to(struct comedi_subdevice *s, unsigned int offset,
+			  const void *source, unsigned int num_bytes);
+void comedi_buf_memcpy_from(struct comedi_subdevice *s, unsigned int offset,
+			    void *destination, unsigned int num_bytes);
+unsigned int comedi_write_array_to_buffer(struct comedi_subdevice *s,
+					  const void *data,
+					  unsigned int num_bytes);
+unsigned int comedi_read_array_from_buffer(struct comedi_subdevice *s,
+					   void *data, unsigned int num_bytes);
 unsigned int comedi_buf_read_samples(struct comedi_subdevice *s,
 				     void *data, unsigned int nsamples);
 
