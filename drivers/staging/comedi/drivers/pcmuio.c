@@ -334,10 +334,7 @@ static void pcmuio_handle_intr_subdev(struct comedi_device *dev,
 			val |= (1 << i);
 	}
 
-	/* Write the scan to the buffer. */
-	if (comedi_buf_put(s, val) &&
-	    comedi_buf_put(s, val >> 16))
-		s->async->events |= (COMEDI_CB_BLOCK | COMEDI_CB_EOS);
+	comedi_buf_write_samples(s, &val, 1);
 
 	/* Check for end of acquisition. */
 	if (cmd->stop_src == TRIG_COUNT) {
