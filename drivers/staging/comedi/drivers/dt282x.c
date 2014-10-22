@@ -455,9 +455,10 @@ static void dt282x_ai_dma_interrupt(struct comedi_device *dev,
 				    struct comedi_subdevice *s)
 {
 	struct dt282x_private *devpriv = dev->private;
-	struct comedi_isadma *dma = devpriv->dma;
-	struct comedi_isadma_desc *desc = &dma->desc[dma->cur_dma];
-	unsigned int nsamples = comedi_bytes_to_samples(s, desc->size);
+	int cur_dma = devpriv->current_dma_index;
+	void *ptr = devpriv->dma[cur_dma].buf;
+	int size = devpriv->dma[cur_dma].size;
+	unsigned int nsamples = size / bytes_per_sample(s);
 	int ret;
 
 	outw(devpriv->supcsr | DT2821_SUPCSR_CLRDMADNE,
