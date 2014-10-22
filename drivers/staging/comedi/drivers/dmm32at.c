@@ -427,8 +427,13 @@ static irqreturn_t dmm32at_isr(int irq, void *d)
 		struct comedi_cmd *cmd = &s->async->cmd;
 
 		for (i = 0; i < cmd->chanlist_len; i++) {
-			val = dmm32at_ai_get_sample(dev, s);
-			comedi_buf_write_samples(s, &val, 1);
+			/* read data */
+			lsb = inb(dev->iobase + DMM32AT_AILSB);
+			msb = inb(dev->iobase + DMM32AT_AIMSB);
+
+			/* invert sign bit to make range unsigned */
+			samp = ((msb ^ 0x0080) << 8) + lsb;
+			comedi_buf_write_samples(s, &samp, 1);
 		}
 
 		if (cmd->stop_src == TRIG_COUNT &&
