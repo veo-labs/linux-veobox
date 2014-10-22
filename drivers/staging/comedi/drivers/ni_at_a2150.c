@@ -233,8 +233,6 @@ static irqreturn_t a2150_interrupt(int irq, void *d)
 		comedi_isadma_program(desc);
 	}
 
-	async->events |= COMEDI_CB_BLOCK;
-
 	comedi_handle_events(dev, s);
 
 	/* clear interrupt */
