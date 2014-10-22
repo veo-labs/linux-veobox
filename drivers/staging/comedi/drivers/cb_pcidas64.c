@@ -2728,11 +2728,15 @@ static void pio_drain_ai_fifo_32(struct comedi_device *dev)
 	for (i = 0; read_code != write_code && i < nsamples;) {
 		unsigned short val;
 
+	}
+	for (i = 0; read_code != write_code && i < max_transfer;) {
+		unsigned short val;
+
 		fifo_data = readl(dev->mmio + ADC_FIFO_REG);
 		val = fifo_data & 0xffff;
 		comedi_buf_write_samples(s, &val, 1);
 		i++;
-		if (i < nsamples) {
+		if (i < max_transfer) {
 			val = (fifo_data >> 16) & 0xffff;
 			comedi_buf_write_samples(s, &val, 1);
 			i++;
@@ -2778,8 +2782,13 @@ static void drain_dma_buffers(struct comedi_device *dev, unsigned int channel)
 	      devpriv->ai_buffer_bus_addr[devpriv->ai_dma_index] +
 	      DMA_BUFFER_SIZE) && j < ai_dma_ring_count(thisboard); j++) {
 		/*  transfer data from dma buffer to comedi buffer */
-		num_samples = comedi_nsamples_left(s, dma_transfer_size(dev));
-		comedi_buf_write_samples(s,
+		num_samples = dma_transfer_size(dev);
+		if (cmd->stop_src == TRIG_COUNT) {
+			if (num_samples > devpriv->ai_count)
+				num_samples = devpriv->ai_count;
+			devpriv->ai_count -= num_samples;
+		}
+		comedi_buf_write_samples(dev->read_subdev,
 				devpriv->ai_buffer[devpriv->ai_dma_index],
 				num_samples);
 		devpriv->ai_dma_index = (devpriv->ai_dma_index + 1) %
