@@ -462,7 +462,8 @@ static void pci9111_handle_fifo_half_full(struct comedi_device *dev,
 	     devpriv->ai_bounce_buffer, samples);
 
 	if (devpriv->scan_delay < 1) {
-		comedi_buf_write_samples(s, devpriv->ai_bounce_buffer, samples);
+		total = comedi_buf_write_samples(s, devpriv->ai_bounce_buffer,
+						 samples);
 	} else {
 		unsigned int pos = 0;
 		unsigned int to_read;
@@ -475,7 +476,7 @@ static void pci9111_handle_fifo_half_full(struct comedi_device *dev,
 				if (to_read > samples - pos)
 					to_read = samples - pos;
 
-				comedi_buf_write_samples(s,
+				total += comedi_buf_write_samples(s,
 						devpriv->ai_bounce_buffer + pos,
 						to_read);
 			} else {
