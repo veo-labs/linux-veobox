@@ -686,6 +686,10 @@ static void pci1710_handle_every_sample(struct comedi_device *dev,
 
 		comedi_buf_write_samples(s, &val, 1);
 
+		s->async->cur_chan++;
+		if (s->async->cur_chan >= cmd->chanlist_len)
+			s->async->cur_chan = 0;
+
 		if (cmd->stop_src == TRIG_COUNT &&
 		    s->async->scans_done >= cmd->stop_arg) {
 			s->async->events |= COMEDI_CB_EOA;
@@ -694,6 +698,39 @@ static void pci1710_handle_every_sample(struct comedi_device *dev,
 	}
 
 	outb(0, dev->iobase + PCI171x_CLRINT);	/*  clear our INT request */
+
+	comedi_handle_events(dev, s);
+}
+
+/*
+==============================================================================
+*/
+static int move_block_from_fifo(struct comedi_device *dev,
+				struct comedi_subdevice *s, int n, int turn)
+{
+	unsigned int val;
+	int ret;
+	int i;
+
+	for (i = 0; i < n; i++) {
+		val = inw(dev->iobase + PCI171x_AD_DATA);
+
+		ret = pci171x_ai_dropout(dev, s, s->async->cur_chan, val);
+		if (ret) {
+			s->async->events |= COMEDI_CB_EOA | COMEDI_CB_ERROR;
+			return ret;
+		}
+
+		val &= s->maxdata;
+		comedi_buf_write_samples(s, &val, 1);
+
+		s->async->cur_chan++;
+		if (s->async->cur_chan >= cmd->chanlist_len) {
+			s->async->cur_chan = 0;
+			devpriv->ai_act_scan++;
+		}
+	}
+	return 0;
 }
 
 static void pci1710_handle_fifo(struct comedi_device *dev,
