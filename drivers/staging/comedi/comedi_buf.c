@@ -460,6 +460,7 @@ void comedi_buf_memcpy_to(struct comedi_subdevice *s, unsigned int offset,
 }
 
 static void comedi_buf_memcpy_from(struct comedi_subdevice *s,
+				   unsigned int offset,
 				   void *dest, unsigned int nbytes)
 {
 	void *src;
