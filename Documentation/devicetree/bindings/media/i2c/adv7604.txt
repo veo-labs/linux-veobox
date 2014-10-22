@@ -11,7 +11,10 @@ Required Properties:
   - compatible: Must contain one of the following
     - "adi,adv7611" for the ADV7611
 
-  - reg: I2C slave address
+  - reg: I2C slave addresses
+    The ADV7604 has thirteen 256-byte maps that can be accessed via the main
+    I²C ports. Each map has it own I²C address and acts
+    as a standard slave device on the I²C bus.
 
   - hpd-gpios: References to the GPIOs that control the HDMI hot-plug
     detection pins, one per HDMI input. The active flag indicates the GPIO
@@ -32,6 +35,12 @@ The digital output port node must contain at least one endpoint.
 Optional Properties:
 
   - reset-gpios: Reference to the GPIO connected to the device's reset pin.
+  - reg-names : Names of maps with programmable addresses.
+		It can contain any map needing another address than default one.
+		Possible maps names are :
+ADV7604 : "main", "avlink", "cec", "infoframe", "esdp", "dpp", "afe", "rep",
+		"edid", "hdmi", "test", "cp", "vdp"
+ADV7611 : "main", "cec", "infoframe", "afe", "rep", "edid", "hdmi", "cp"
 
 Optional Endpoint Properties:
 
@@ -50,7 +59,10 @@ Example:
 
 	hdmi_receiver@4c {
 		compatible = "adi,adv7611";
-		reg = <0x4c>;
+		/* edid page will be accessible @ 0x66 on i2c bus */
+		/* other maps keep their default addresses */
+		reg = <0x4c 0x66>;
+		reg-names = "main", "edid";
 
 		reset-gpios = <&ioexp 0 GPIO_ACTIVE_LOW>;
 		hpd-gpios = <&ioexp 2 GPIO_ACTIVE_HIGH>;
