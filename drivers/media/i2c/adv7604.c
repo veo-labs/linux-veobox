@@ -327,6 +327,27 @@ static const struct adv7604_video_standards adv7604_prim_mode_hdmi_gr[] = {
 	{ },
 };
 
+struct adv7604_register {
+	const char *name;
+	u8 default_addr;
+};
+
+static const struct adv7604_register adv7604_secondary_names[] = {
+	[ADV7604_PAGE_IO] = { "main", 0x4c },
+	[ADV7604_PAGE_AVLINK] = { "avlink", 0x42 },
+	[ADV7604_PAGE_CEC] = { "cec", 0x40 },
+	[ADV7604_PAGE_INFOFRAME] = { "infoframe", 0x3e },
+	[ADV7604_PAGE_ESDP] = { "esdp", 0x38 },
+	[ADV7604_PAGE_DPP] = { "dpp", 0x3c },
+	[ADV7604_PAGE_AFE] = { "afe", 0x26 },
+	[ADV7604_PAGE_REP] = { "rep", 0x32 },
+	[ADV7604_PAGE_EDID] = { "edid", 0x36 },
+	[ADV7604_PAGE_HDMI] = { "hdmi", 0x34 },
+	[ADV7604_PAGE_TEST] = { "test", 0x30 },
+	[ADV7604_PAGE_CP] = { "cp", 0x22 },
+	[ADV7604_PAGE_VDP] = { "vdp", 0x24 },
+};
+
 /* ----------------------------------------------------------------------- */
 
 static inline struct adv7604_state *to_state(struct v4l2_subdev *sd)
@@ -2452,13 +2473,25 @@ static void adv7604_unregister_clients(struct adv7604_state *state)
 }
 
 static struct i2c_client *adv7604_dummy_client(struct v4l2_subdev *sd,
-							u8 addr, u8 io_reg)
+						unsigned int i)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct adv7604_platform_data *pdata = client->dev.platform_data;
+	unsigned int io_reg = 0xf2 + i;
+	struct i2c_client *new_client;
 
-	if (addr)
-		io_write(sd, io_reg, addr << 1);
-	return i2c_new_dummy(client->adapter, io_read(sd, io_reg) >> 1);
+	if (pdata && pdata->i2c_addresses[i])
+		new_client = i2c_new_dummy(client->adapter,
+					pdata->i2c_addresses[i]);
+	else
+		new_client = i2c_new_secondary_device(client,
+			adv7604_secondary_names[i].name,
+			adv7604_secondary_names[i].default_addr);
+
+	if (new_client)
+		io_write(sd, io_reg, new_client->addr << 1);
+
+	return new_client;
 }
 
 static const struct adv7604_reg_seq adv7604_recommended_settings_afe[] = {
@@ -2643,20 +2676,6 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 	/* Disable the interrupt for now as no DT-based board uses it. */
 	state->pdata.int1_config = ADV7604_INT1_CONFIG_DISABLED;
 
-	/* Use the default I2C addresses. */
-	state->pdata.i2c_addresses[ADV7604_PAGE_AVLINK] = 0x42;
-	state->pdata.i2c_addresses[ADV7604_PAGE_CEC] = 0x40;
-	state->pdata.i2c_addresses[ADV7604_PAGE_INFOFRAME] = 0x3e;
-	state->pdata.i2c_addresses[ADV7604_PAGE_ESDP] = 0x38;
-	state->pdata.i2c_addresses[ADV7604_PAGE_DPP] = 0x3c;
-	state->pdata.i2c_addresses[ADV7604_PAGE_AFE] = 0x26;
-	state->pdata.i2c_addresses[ADV7604_PAGE_REP] = 0x32;
-	state->pdata.i2c_addresses[ADV7604_PAGE_EDID] = 0x36;
-	state->pdata.i2c_addresses[ADV7604_PAGE_HDMI] = 0x34;
-	state->pdata.i2c_addresses[ADV7604_PAGE_TEST] = 0x30;
-	state->pdata.i2c_addresses[ADV7604_PAGE_CP] = 0x22;
-	state->pdata.i2c_addresses[ADV7604_PAGE_VDP] = 0x24;
-
 	/* Hardcode the remaining platform data fields. */
 	state->pdata.disable_pwrdnb = 0;
 	state->pdata.disable_cable_det_rst = 0;
@@ -2817,8 +2836,7 @@ static int adv7604_probe(struct i2c_client *client,
 			continue;
 
 		state->i2c_clients[i] =
-			adv7604_dummy_client(sd, state->pdata.i2c_addresses[i],
-					     0xf2 + i);
+			adv7604_dummy_client(sd, i);
 		if (state->i2c_clients[i] == NULL) {
 			err = -ENOMEM;
 			v4l2_err(sd, "failed to create i2c client %u\n", i);
