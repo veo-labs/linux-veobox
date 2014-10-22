@@ -228,7 +228,6 @@ static irqreturn_t parport_interrupt(int irq, void *d)
 	comedi_buf_write_samples(s, &s->state, 1);
 	comedi_handle_events(dev, s);
 
-	comedi_handle_events(dev, s);
 	return IRQ_HANDLED;
 }
 
