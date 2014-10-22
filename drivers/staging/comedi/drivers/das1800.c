@@ -475,9 +475,15 @@ static void das1800_handle_fifo_half_full(struct comedi_device *dev,
 	struct das1800_private *devpriv = dev->private;
 	unsigned int nsamples = comedi_nsamples_left(s, FIFO_SIZE / 2);
 
-	insw(dev->iobase + DAS1800_FIFO, devpriv->fifo_buf, nsamples);
-	munge_data(dev, devpriv->fifo_buf, nsamples);
-	comedi_buf_write_samples(s, devpriv->fifo_buf, nsamples);
+	numPoints = FIFO_SIZE / 2;
+	/* if we only need some of the points */
+	if (cmd->stop_src == TRIG_COUNT && devpriv->count < numPoints)
+		numPoints = devpriv->count;
+	insw(dev->iobase + DAS1800_FIFO, devpriv->ai_buf0, numPoints);
+	munge_data(dev, devpriv->ai_buf0, numPoints);
+	comedi_buf_write_samples(s, devpriv->ai_buf0, numPoints);
+	if (cmd->stop_src == TRIG_COUNT)
+		devpriv->count -= numPoints;
 }
 
 static void das1800_handle_fifo_not_empty(struct comedi_device *dev,
@@ -496,10 +502,8 @@ static void das1800_handle_fifo_not_empty(struct comedi_device *dev,
 			;
 		dpnt = munge_bipolar_sample(dev, dpnt);
 		comedi_buf_write_samples(s, &dpnt, 1);
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    s->async->scans_done >= cmd->stop_arg)
-			break;
+		if (cmd->stop_src == TRIG_COUNT)
+			devpriv->count--;
 	}
 }
 
@@ -516,8 +520,10 @@ static void das1800_flush_dma_channel(struct comedi_device *dev,
 	nsamples = comedi_bytes_to_samples(s, nbytes);
 	nsamples = comedi_nsamples_left(s, nsamples);
 
-	munge_data(dev, desc->virt_addr, nsamples);
-	comedi_buf_write_samples(s, desc->virt_addr, nsamples);
+	munge_data(dev, buffer, num_samples);
+	comedi_buf_write_samples(s, buffer, num_samples);
+	if (cmd->stop_src == TRIG_COUNT)
+		devpriv->count -= num_samples;
 }
 
 /* flushes remaining data from board when external trigger has stopped acquisition
