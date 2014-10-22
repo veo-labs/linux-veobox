@@ -1310,9 +1310,8 @@ static irqreturn_t cb_pcidas_interrupt(int irq, void *d)
 		insw(devpriv->adc_fifo + ADCDATA, devpriv->ai_buffer,
 		     num_samples);
 		comedi_buf_write_samples(s, devpriv->ai_buffer, num_samples);
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg)
+		devpriv->count -= num_samples;
+		if (cmd->stop_src == TRIG_COUNT && devpriv->count == 0)
 			async->events |= COMEDI_CB_EOA;
 
 		/*  clear half-full interrupt latch */
@@ -1331,7 +1330,6 @@ static irqreturn_t cb_pcidas_interrupt(int irq, void *d)
 				break;
 			val = inw(devpriv->adc_fifo);
 			comedi_buf_write_samples(s, &val, 1);
-
 			if (cmd->stop_src == TRIG_COUNT &&
 			    async->scans_done >= cmd->stop_arg) {
 				async->events |= COMEDI_CB_EOA;
