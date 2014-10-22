@@ -223,7 +223,6 @@ static irqreturn_t atmio16d_interrupt(int irq, void *d)
 	comedi_buf_write_samples(s, &val, 1);
 	comedi_handle_events(dev, s);
 
-	comedi_handle_events(dev, s);
 	return IRQ_HANDLED;
 }
 
