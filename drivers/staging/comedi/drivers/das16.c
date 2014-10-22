@@ -515,10 +515,9 @@ static void das16_interrupt(struct comedi_device *dev)
 
 	spin_unlock_irqrestore(&dev->spinlock, spin_flags);
 
-	comedi_buf_write_samples(s, desc->virt_addr, nsamples);
-
-	if (cmd->stop_src == TRIG_COUNT && async->scans_done >= cmd->stop_arg)
-		async->events |= COMEDI_CB_EOA;
+	nsamples = num_bytes / bytes_per_sample(s);
+	comedi_buf_write_samples(s, devpriv->dma_buffer[buffer_index],
+				 nsamples);
 
 	comedi_handle_events(dev, s);
 }
