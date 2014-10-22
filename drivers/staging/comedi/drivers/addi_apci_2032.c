@@ -209,8 +209,7 @@ static irqreturn_t apci2032_interrupt(int irq, void *d)
 				bits |= (1 << i);
 		}
 
-		if (comedi_buf_put(s, bits)) {
-			s->async->events |= COMEDI_CB_BLOCK | COMEDI_CB_EOS;
+		if (comedi_buf_write_samples(s, &bits, 1)) {
 			if (cmd->stop_src == TRIG_COUNT &&
 			    subpriv->stop_count > 0) {
 				subpriv->stop_count--;
@@ -219,8 +218,6 @@ static irqreturn_t apci2032_interrupt(int irq, void *d)
 					s->async->events |= COMEDI_CB_EOA;
 				}
 			}
-		} else {
-			s->async->events |= COMEDI_CB_OVERFLOW;
 		}
 	}
 
