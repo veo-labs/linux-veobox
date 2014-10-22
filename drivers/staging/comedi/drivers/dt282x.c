@@ -420,9 +420,8 @@ static unsigned int dt282x_ao_setup_dma(struct comedi_device *dev,
 					int cur_dma)
 {
 	struct dt282x_private *devpriv = dev->private;
-	struct comedi_isadma *dma = devpriv->dma;
-	struct comedi_isadma_desc *desc = &dma->desc[cur_dma];
-	unsigned int nsamples = comedi_bytes_to_samples(s, desc->maxsize);
+	void *ptr = devpriv->dma[cur_dma].buf;
+	unsigned int nsamples = devpriv->dma_maxsize / bytes_per_sample(s);
 	unsigned int nbytes;
 
 	nbytes = comedi_buf_read_samples(s, desc->virt_addr, nsamples);
