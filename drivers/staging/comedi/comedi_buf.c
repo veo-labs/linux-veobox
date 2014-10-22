@@ -468,19 +468,9 @@ static void comedi_buf_memcpy_from(struct comedi_subdevice *s,
 	}
 }
 
-/**
- * comedi_buf_write_samples - write sample data to comedi buffer
- * @s: comedi_subdevice struct
- * @data: samples
- * @nsamples: number of samples
- *
- * Writes nsamples to the comedi buffer associated with the subdevice, marks
- * it as written and updates the acquisition scan progress.
- *
- * Returns the amount of data written in bytes.
- */
-unsigned int comedi_buf_write_samples(struct comedi_subdevice *s,
-				      const void *data, unsigned int nsamples)
+static unsigned int comedi_write_array_to_buffer(struct comedi_subdevice *s,
+						 const void *data,
+						 unsigned int num_bytes)
 {
 	unsigned int max_samples;
 	unsigned int nbytes;
@@ -512,7 +502,6 @@ unsigned int comedi_buf_write_samples(struct comedi_subdevice *s,
 
 	return nbytes;
 }
-EXPORT_SYMBOL_GPL(comedi_buf_write_samples);
 
 /**
  * comedi_buf_write_samples - write sample data to comedi buffer
