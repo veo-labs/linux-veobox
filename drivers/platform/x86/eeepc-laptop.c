@@ -603,12 +603,10 @@ static void eeepc_rfkill_hotplug(struct eeepc_laptop *eeepc, acpi_handle handle)
 	absent = (l == 0xffffffff);
 
 	if (blocked != absent) {
-		pr_warn("BIOS says wireless lan is %s, "
-			"but the pci device is %s\n",
+		pr_warn("BIOS says wireless lan is %s, but the pci device is %s\n",
 			blocked ? "blocked" : "unblocked",
 			absent ? "absent" : "present");
-		pr_warn("skipped wireless hotplug as probably "
-			"inappropriate for this model\n");
+		pr_warn("skipped wireless hotplug as probably inappropriate for this model\n");
 		goto out_put_dev;
 	}
 
