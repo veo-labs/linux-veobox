@@ -296,6 +296,13 @@ static int ll_md_close(struct obd_export *md_exp, struct inode *inode,
 
 	/* Let's see if we have good enough OPEN lock on the file and if
 	   we can skip talking to MDS */
+	if (file->f_dentry->d_inode) { /* Can this ever be false? */
+		int lockmode;
+		__u64 flags = LDLM_FL_BLOCK_GRANTED | LDLM_FL_TEST_LOCK;
+		struct lustre_handle lockh;
+		struct inode *inode = file->f_dentry->d_inode;
+		ldlm_policy_data_t policy = {
+                .l_inodebits = {MDS_INODELOCK_OPEN} };
 
 	mutex_lock(&lli->lli_och_mutex);
 	if (fd->fd_omode & FMODE_WRITE) {
