@@ -499,13 +499,11 @@ static irqreturn_t das800_interrupt(int irq, void *d)
 		if (s->maxdata == 0x0fff)
 			val >>= 4;	/* 12-bit sample */
 
-		val &= s->maxdata;
-		comedi_buf_write_samples(s, &val, 1);
-
-		if (cmd->stop_src == TRIG_COUNT &&
-		    async->scans_done >= cmd->stop_arg) {
-			async->events |= COMEDI_CB_EOA;
-			break;
+		/* if there are more data points to collect */
+		if (cmd->stop_src == TRIG_NONE || devpriv->count > 0) {
+			val &= s->maxdata;
+			comedi_buf_write_samples(s, &val, 1);
+			devpriv->count--;
 		}
 	}
 
