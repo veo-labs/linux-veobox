@@ -2081,8 +2081,7 @@ static void pci230_handle_ai(struct comedi_device *dev,
 		}
 
 		val = pci230_ai_read(dev);
-		if (!comedi_buf_write_samples(s, &val, 1))
-			break;
+		comedi_buf_write_samples(s, &val, 1);
 
 		fifoamount--;
 
@@ -2095,9 +2094,6 @@ static void pci230_handle_ai(struct comedi_device *dev,
 	if (cmd->stop_src == TRIG_COUNT && devpriv->ai_scan_count == 0) {
 		/* End of acquisition. */
 		events |= COMEDI_CB_EOA;
-	} else {
-		/* More samples required, tell Comedi to block. */
-		events |= COMEDI_CB_BLOCK;
 	}
 	async->events |= events;
 	if (!(async->events & COMEDI_CB_CANCEL_MASK)) {
