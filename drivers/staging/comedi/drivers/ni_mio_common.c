@@ -1128,15 +1128,19 @@ static void ni_ao_fifo_load(struct comedi_device *dev,
 	int i;
 	unsigned short d;
 	u32 packed_data;
+	int range;
 
 	for (i = 0; i < n; i++) {
 		comedi_buf_read_samples(s, &d, 1);
+
+		range = CR_RANGE(cmd->chanlist[chan]);
 
 		if (devpriv->is_6xxx) {
 			packed_data = d & 0xffff;
 			/* 6711 only has 16 bit wide ao fifo */
 			if (!devpriv->is_6711) {
 				comedi_buf_read_samples(s, &d, 1);
+				chan++;
 				i++;
 				packed_data |= (d << 16) & 0xffff0000;
 			}
@@ -1145,6 +1149,7 @@ static void ni_ao_fifo_load(struct comedi_device *dev,
 			ni_writew(dev, d, DAC_FIFO_Data);
 		}
 	}
+	async->cur_chan = chan;
 }
 
 /*
@@ -1179,8 +1184,6 @@ static int ni_ao_fifo_half_empty(struct comedi_device *dev,
 	nsamples = comedi_bytes_to_samples(s, nbytes);
 	if (nsamples > board->ao_fifo_depth / 2)
 		nsamples = board->ao_fifo_depth / 2;
-
-	ni_ao_fifo_load(dev, s, nsamples);
 
 	return 1;
 }
