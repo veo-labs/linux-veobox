@@ -788,7 +788,19 @@ int i915_resume_legacy(struct drm_device *dev)
 	if (ret)
 		return ret;
 
-	return i915_drm_resume(dev);
+	drm_kms_helper_poll_enable(dev);
+	return 0;
+}
+
+static int i915_resume_legacy(struct drm_device *dev)
+{
+	int ret;
+
+	ret = i915_resume_early(dev);
+	if (ret)
+		return ret;
+
+	return i915_resume(dev);
 }
 
 /**
