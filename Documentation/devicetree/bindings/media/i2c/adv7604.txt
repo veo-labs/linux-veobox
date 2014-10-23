@@ -9,6 +9,7 @@ These device tree bindings support the ADV7611 only at the moment.
 Required Properties:
 
   - compatible: Must contain one of the following
+    - "adi,adv7604" for the ADV7604
     - "adi,adv7611" for the ADV7611
 
   - reg: I2C slave addresses
