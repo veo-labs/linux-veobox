@@ -47,11 +47,11 @@ static const uuid_le spar_controlvm_channel_protocol_uuid =
 
 #define SPAR_CONTROLVM_CHANNEL_OK_CLIENT(ch)           \
 	spar_check_channel_client(ch, \
-				  spar_controlvm_channel_protocol_uuid, \
-				  "controlvm", \
-				  sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL), \
-				  ULTRA_CONTROLVM_CHANNEL_PROTOCOL_VERSIONID, \
-				  ULTRA_CONTROLVM_CHANNEL_PROTOCOL_SIGNATURE)
+		spar_controlvm_channel_protocol_uuid, \
+		"controlvm", \
+		sizeof(struct spar_controlvm_channel_protocol), \
+		ULTRA_CONTROLVM_CHANNEL_PROTOCOL_VERSIONID, \
+		ULTRA_CONTROLVM_CHANNEL_PROTOCOL_SIGNATURE)
 
 #define MY_DEVICE_INDEX 0
 #define MAX_MACDATA_LEN 8 /* number of bytes for MAC address in config packet */
@@ -360,9 +360,9 @@ struct guest_devices  {
 	u32 pad;
 };
 
-typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
-	 struct channel_header Header;
-	 GUEST_PHYSICAL_ADDRESS gpControlVm;	/* guest physical address of
+struct spar_controlvm_channel_protocol {
+	 struct channel_header header;
+	 GUEST_PHYSICAL_ADDRESS gp_controlvm;	/* guest physical address of
 						 * this channel */
 	 GUEST_PHYSICAL_ADDRESS gp_partition_tables;/* guest physical address of
 						     * partition tables */
@@ -394,7 +394,7 @@ typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
 	 GUEST_PHYSICAL_ADDRESS gp_physical_smbios_table;/* guest phys addr of
 							  * SMBIOS table  */
 	 /* ULTRA_MAX_GUESTS_PER_SERVICE */
-	 struct guest_devices gpObsoleteGuestDevices[16];
+	 struct guest_devices gp_obsolete_guest_devices[16];
 
 	 /* guest physical address of EFI firmware image base  */
 	 GUEST_PHYSICAL_ADDRESS virtual_guest_firmware_image_base;
@@ -427,40 +427,40 @@ typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
 					  * steps (for progress bars) */
 	u8 tool_action;		/* ULTRA_TOOL_ACTIONS Installation Action
 				 * field */
-	u8 Reserved;		/* alignment */
-	struct efi_spar_indication EfiSparIndication;
-	struct efi_spar_indication EfiSparIndicationSupported;
-	u32 SPReserved;
-	u8 Reserved2[28];	/* Force signals to begin on 128-byte cache
+	u8 reserved;		/* alignment */
+	struct efi_spar_indication efi_spar_ind;
+	struct efi_spar_indication efi_spar_ind_supported;
+	u32 sp_reserved;
+	u8 reserved2[28];	/* Force signals to begin on 128-byte cache
 				 * line */
-	struct signal_queue_header RequestQueue;/* Service or guest partition
-						 * uses this queue to send
-						 * requests to Control */
-	struct signal_queue_header ResponseQueue;/* Control uses this queue to
-						 * respond to service or guest
-						 * partition requests */
-	struct signal_queue_header EventQueue;	/* Control uses this queue to
+	struct signal_queue_header request_queue;/* Service or guest partition
+						  * uses this queue to send
+						  * requests to Control */
+	struct signal_queue_header response_queue;/* Control uses this queue to
+						   * respond to service or guest
+						   * partition requests */
+	struct signal_queue_header event_queue;	/* Control uses this queue to
 						 * send events to service or
 						 * guest partition */
-	struct signal_queue_header EventAckQueue;/* Service or guest partition
-						 * uses this queue to ack
-						 * Control events */
+	struct signal_queue_header event_ack_queue;/* Service or guest partition
+						    * uses this queue to ack
+						    * Control events */
 
 	 /* Request fixed-size message pool - does not include payload */
-	 struct controlvm_message RequestMsg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message request_msg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Response fixed-size message pool - does not include payload */
-	 struct controlvm_message ResponseMsg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message response_msg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Event fixed-size message pool - does not include payload */
-	 struct controlvm_message EventMsg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message event_msg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Ack fixed-size message pool - does not include payload */
-	 struct controlvm_message EventAckMsg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message event_ack_msg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Message stored during IOVM creation to be reused after crash */
-	 struct controlvm_message SavedCrashMsg[CONTROLVM_CRASHMSG_MAX];
-} ULTRA_CONTROLVM_CHANNEL_PROTOCOL;
+	 struct controlvm_message saved_crash_msg[CONTROLVM_CRASHMSG_MAX];
+};
 
 /* Offsets for VM channel attributes... */
 #define VM_CH_REQ_QUEUE_OFFSET \

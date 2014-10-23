@@ -390,8 +390,8 @@ static ssize_t boottotool_show(struct device *dev,
 	struct efi_spar_indication efiSparIndication;
 
 	visorchannel_read(ControlVm_channel,
-		offsetof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL,
-			EfiSparIndication), &efiSparIndication,
+		offsetof(struct spar_controlvm_channel_protocol,
+			efi_spar_ind), &efiSparIndication,
 		sizeof(struct efi_spar_indication));
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
 			efiSparIndication.boot_to_tool);
@@ -2385,7 +2385,7 @@ visorchipset_init(void)
 		ControlVm_channel =
 		    visorchannel_create_with_lock
 		    (addr,
-		     sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL),
+		     sizeof(struct spar_controlvm_channel_protocol),
 		     spar_controlvm_channel_protocol_uuid);
 		if (SPAR_CONTROLVM_CHANNEL_OK_CLIENT(
 				visorchannel_get_header(ControlVm_channel))) {
