@@ -124,7 +124,7 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 				old,				\
 				ULTRA_CHANNELCLI_STRING(new),	\
 				new,				\
-				PathName_Last_N_Nodes((u8 *)file, 4), \
+				pathname_last_n_nodes((u8 *)file, 4), \
 				line);				\
 	} while (0)
 
@@ -144,7 +144,7 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 				      (pChan))->cli_state_os),		\
 				ULTRA_CHANNELCLI_STRING(newstate),	\
 				newstate,				\
-				PathName_Last_N_Nodes(__FILE__, 4), __LINE__); \
+				pathname_last_n_nodes(__FILE__, 4), __LINE__); \
 		writel(newstate, &((struct channel_header __iomem *) \
 				   (pChan))->cli_state_os);		\
 		mb(); /* required for channel synch */			\
@@ -415,7 +415,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			/* throttle until acquire successful */
 
 			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client DISABLED @%s:%d\n",
-				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				chanId, pathname_last_n_nodes((u8 *) file, 4),
 				line);
 		}
 		return 0;
@@ -429,7 +429,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			readl(&pChan->cli_state_os),
 			ULTRA_CHANNELCLI_STRING(CHANNELCLI_OWNED),
 			CHANNELCLI_OWNED,
-			PathName_Last_N_Nodes((u8 *) file, 4), line);
+			pathname_last_n_nodes((u8 *) file, 4), line);
 		writel(CHANNELCLI_OWNED, &pChan->cli_state_os);
 		mb(); /* required for channel synch */
 	}
@@ -438,7 +438,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			/* we are in an error msg throttling state;
 			 * come out of it */
 			pr_info("%s Channel OS client acquire now successful @%s:%d\n",
-				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				chanId, pathname_last_n_nodes((u8 *) file, 4),
 				line);
 			writeb(0, &pChan->cli_error_os);
 		}
@@ -460,7 +460,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 				chanId, ULTRA_CHANNELCLI_STRING(
 						readl(&pChan->cli_state_os)),
 				readl(&pChan->cli_state_os),
-				PathName_Last_N_Nodes((u8 *) file, 4),
+				pathname_last_n_nodes((u8 *) file, 4),
 				line);
 		}
 		return 0;
@@ -476,7 +476,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			       &pChan->cli_error_os);
 			/* throttle until acquire successful */
 			pr_info("%s Channel StateTransition failed - host OS acquire failed because boot BUSY @%s:%d\n",
-				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				chanId, pathname_last_n_nodes((u8 *) file, 4),
 				line);
 		}
 		/* reset busy */
@@ -487,7 +487,7 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 	if (readb(&pChan->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
 		pr_info("%s Channel OS client acquire now successful @%s:%d\n",
-			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+			chanId, pathname_last_n_nodes((u8 *) file, 4),
 			line);
 		writeb(0, &pChan->cli_error_os);
 	}
@@ -502,7 +502,7 @@ spar_channel_client_release_os(void __iomem *ch, u8 *id)
 	if (readb(&pChan->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
 		pr_info("%s Channel OS client error state cleared @%s:%d\n",
-			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+			chanId, pathname_last_n_nodes((u8 *) file, 4),
 			line);
 		writeb(0, &pChan->cli_error_os);
 	}
@@ -513,7 +513,7 @@ spar_channel_client_release_os(void __iomem *ch, u8 *id)
 			chanId, ULTRA_CHANNELCLI_STRING(
 					readl(&pChan->cli_state_os)),
 			readl(&pChan->cli_state_os),
-			PathName_Last_N_Nodes((u8 *) file, 4), line);
+			pathname_last_n_nodes((u8 *) file, 4), line);
 		/* return; */
 	}
 	writel(CHANNELCLI_ATTACHED, &pChan->cli_state_os); /* release busy */
