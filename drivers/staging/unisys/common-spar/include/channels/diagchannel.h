@@ -120,7 +120,7 @@ struct diag_efi_time  {
 	u8 pad2;
 };
 
-typedef enum  {
+enum spar_component_types  {
 	 ULTRA_COMPONENT_GUEST = 0,
 	 ULTRA_COMPONENT_MONITOR = 0x01,
 	 ULTRA_COMPONENT_CCM = 0x02,	/* Common Control module */
