@@ -120,7 +120,7 @@ struct diag_efi_time  {
 	u8 pad2;
 };
 
-enum spar_component_types  {
+typedef enum  {
 	 ULTRA_COMPONENT_GUEST = 0,
 	 ULTRA_COMPONENT_MONITOR = 0x01,
 	 ULTRA_COMPONENT_CCM = 0x02,	/* Common Control module */
@@ -156,13 +156,13 @@ enum spar_component_types  {
  * Reserved: Padding to align structure on a 64-byte cache line boundary.
  * AdditionalInfo: Array of characters for additional event info (may be
  * empty).  */
-struct diag_channel_event {
-	u32 event_id;
-	u32 severity;
-	u8 module_name[MAX_MODULE_NAME_SIZE];
-	u32 line_number;
-	struct diag_efi_time timestamp;	/* Size = 16 bytes */
-	u32 partition_number;	/* Filled in by Diag Switch as pool blocks are
+typedef struct _DIAG_CHANNEL_EVENT  {
+	u32 EventId;
+	u32 Severity;
+	u8 ModuleName[MAX_MODULE_NAME_SIZE];
+	u32 LineNumber;
+	struct diag_efi_time Timestamp;	/* Size = 16 bytes */
+	u32 PartitionNumber;	/* Filled in by Diag Switch as pool blocks are
 				 * filled */
 	u16 vcpu_number;
 	u16 lcpu_number;
