@@ -581,8 +581,13 @@ static void incoming_packet(struct sasem_context *context,
 		return;
 	}
 
-	if (debug)
-		dev_info(&context->dev->dev, "Incoming data: %*ph\n", len, buf);
+	if (debug) {
+		pr_info("Incoming data: ");
+		for (i = 0; i < 8; ++i)
+			pr_cont("%02x ", buf[i]);
+		pr_cont("\n");
+	}
+
 	/*
 	 * Lirc could deal with the repeat code, but we really need to block it
 	 * if it arrives too late.  Otherwise we could repeat the wrong code.
