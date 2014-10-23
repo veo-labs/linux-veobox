@@ -86,7 +86,7 @@ struct visorchipset_device_info {
 	u64 Reserved2;
 	u32 switchNo;		/* when devState.attached==1 */
 	u32 internalPortNo;	/* when devState.attached==1 */
-	CONTROLVM_MESSAGE_HEADER pendingMsgHdr;	/* CONTROLVM_MESSAGE */
+	struct controlvm_message_header pendingMsgHdr;	/* CONTROLVM_MESSAGE */
 	/** For private use by the bus driver */
 	void *bus_driver_context;
 
@@ -139,7 +139,7 @@ struct visorchipset_bus_info {
 		/* Add new fields above. */
 		/* Remaining bits in this 32-bit word are unused. */
 	} flags;
-	struct controlvm_message_header pending_msg_hdr;/* CONTROLVM MsgHdr */
+	struct controlvm_message_header pendingMsgHdr;	/* CONTROLVM MsgHdr */
 	/** For private use by the bus driver */
 	void *bus_driver_context;
 	u64 dev_no;
@@ -172,8 +172,9 @@ typedef struct {
 	u32 Reserved2;		/* control_vm_id */
 	struct device dev;
 	BOOL dev_exists;
-	struct controlvm_message_header pending_msg_hdr;
-};
+	struct controlvm_message_header pendingMsgHdr;
+
+} VISORCHIPSET_SWITCH_INFO;
 
 /** Attributes for a particular Supervisor external port, which is connected
  *  to a specific switch.
@@ -194,8 +195,9 @@ struct visorchipset_externalport_info {
 	u32 Reserved2;		/* control_vm_id */
 	struct device dev;
 	BOOL dev_exists;
-	struct controlvm_message_header pending_msg_hdr;
-};
+	struct controlvm_message_header pendingMsgHdr;
+
+} VISORCHIPSET_EXTERNALPORT_INFO;
 
 /** Attributes for a particular Supervisor internal port, which is how a
  *  device connects to a particular switch.
@@ -207,8 +209,8 @@ typedef struct {
 	u32 busNo;		/* valid only when state.attached == 1 */
 	u32 devNo;		/* valid only when state.attached == 1 */
 	u64 Reserved1;
-	u32 Reserved2;		/* control_vm_id */
-	CONTROLVM_MESSAGE_HEADER pendingMsgHdr;
+	u32 Reserved2;		/* CONTROLVM_ID */
+	struct controlvm_message_header pendingMsgHdr;
 	MYPROCOBJECT *procObject;
 
 } VISORCHIPSET_INTERNALPORT_INFO;

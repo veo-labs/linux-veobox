@@ -122,7 +122,7 @@ static const struct file_operations debugfs_info_fops = {
 static void
 init_msg_header(struct controlvm_message *msg, u32 id, uint rsp, uint svr)
 {
-	memset(msg, 0, sizeof(struct controlvm_message));
+	memset(msg, 0, sizeof(CONTROLVM_MESSAGE));
 	msg->hdr.id = id;
 	msg->hdr.flags.response_expected = rsp;
 	msg->hdr.flags.server = svr;
@@ -818,7 +818,7 @@ init_chipset(struct controlvm_message *msg, char *buf)
 	* from a user.  If no test_message is set, we will wait for the
 	* functions.
 	*/
-	if (!msg->hdr.Flags.testMessage)
+	if (!msg->hdr.flags.test_message)
 		WAIT_ON_CALLBACK(virt_control_chan_func);
 
 	chipset_inited = 1;
@@ -974,7 +974,7 @@ uislib_client_inject_add_vhba(u32 bus_no, u32 dev_no,
 		/* signify that the physical channel address does NOT
 		 * need to be ioremap()ed
 		 */
-		msg.hdr.Flags.testMessage = 1;
+		msg.hdr.flags.test_message = 1;
 	msg.cmd.create_device.busNo = bus_no;
 	msg.cmd.create_device.devNo = dev_no;
 	msg.cmd.create_device.devInstGuid = inst_uuid;
@@ -1033,7 +1033,7 @@ uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 		/* signify that the physical channel address does NOT
 		 * need to be ioremap()ed
 		 */
-		msg.hdr.Flags.testMessage = 1;
+		msg.hdr.flags.test_message = 1;
 	msg.cmd.create_device.busNo = bus_no;
 	msg.cmd.create_device.devNo = dev_no;
 	msg.cmd.create_device.devInstGuid = inst_uuid;
@@ -1121,7 +1121,7 @@ uislib_client_add_vnic(u32 busNo)
 	CONTROLVM_MESSAGE msg;
 
 	init_msg_header(&msg, CONTROLVM_BUS_CREATE, 0, 0);
-	msg.hdr.Flags.testMessage = 1;
+	msg.hdr.flags.test_message = 1;
 	msg.cmd.create_bus.bus_no = busNo;
 	msg.cmd.create_bus.dev_count = 4;
 	msg.cmd.create_bus.channel_addr = 0;
@@ -1133,7 +1133,7 @@ uislib_client_add_vnic(u32 busNo)
 	busCreated = TRUE;
 
 	init_msg_header(&msg, CONTROLVM_DEVICE_CREATE, 0, 0);
-	msg.hdr.Flags.testMessage = 1;
+	msg.hdr.flags.test_message = 1;
 	msg.cmd.create_device.busNo = busNo;
 	msg.cmd.create_device.devNo = devNo;
 	msg.cmd.create_device.devInstGuid = NULL_UUID_LE;
@@ -1151,7 +1151,7 @@ uislib_client_add_vnic(u32 busNo)
 AwayCleanup:
 	if (busCreated) {
 		init_msg_header(&msg, CONTROLVM_BUS_DESTROY, 0, 0);
-		msg.hdr.Flags.testMessage = 1;
+		msg.hdr.flags.test_message = 1;
 		msg.cmd.destroy_bus.bus_no = busNo;
 		if (destroy_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS)
 			LOGERR("client destroy_bus failed.\n");
@@ -1169,7 +1169,7 @@ uislib_client_delete_vnic(u32 busNo)
 	CONTROLVM_MESSAGE msg;
 
 	init_msg_header(&msg, CONTROLVM_DEVICE_DESTROY, 0, 0);
-	msg.hdr.Flags.testMessage = 1;
+	msg.hdr.flags.test_message = 1;
 	msg.cmd.destroy_device.bus_no = busNo;
 	msg.cmd.destroy_device.dev_no = devNo;
 	if (destroy_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
@@ -1178,7 +1178,7 @@ uislib_client_delete_vnic(u32 busNo)
 	}
 
 	init_msg_header(&msg, CONTROLVM_BUS_DESTROY, 0, 0);
-	msg.hdr.Flags.testMessage = 1;
+	msg.hdr.flags.test_message = 1;
 	msg.cmd.destroy_bus.bus_no = busNo;
 	if (destroy_bus(&msg, NULL) != CONTROLVM_RESP_SUCCESS)
 		LOGERR("client destroy_bus failed.\n");

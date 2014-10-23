@@ -343,12 +343,14 @@ static struct platform_device Visorchipset_platform_device = {
 };
 
 /* Function prototypes */
-static void controlvm_respond(CONTROLVM_MESSAGE_HEADER *msgHdr, int response);
-static void controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr,
-					   int response,
-					   enum ultra_chipset_feature features);
-static void controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *
-		msgHdr, int response, struct spar_segment_state state);
+static void controlvm_respond(struct controlvm_message_header *msgHdr,
+			      int response);
+static void controlvm_respond_chipset_init(
+		struct controlvm_message_header *msgHdr, int response,
+		enum ultra_chipset_feature features);
+static void controlvm_respond_physdev_changestate(
+		struct controlvm_message_header *msgHdr, int response,
+		struct spar_segment_state state);
 
 static ssize_t toolaction_show(struct device *dev,
 			       struct device_attribute *attr,
@@ -685,10 +687,10 @@ Away:
 }
 
 static void
-controlvm_init_response(struct controlvm_message *msg,
+controlvm_init_response(CONTROLVM_MESSAGE *msg,
 			struct controlvm_message_header *msgHdr, int response)
 {
-	memset(msg, 0, sizeof(struct controlvm_message));
+	memset(msg, 0, sizeof(CONTROLVM_MESSAGE));
 	memcpy(&msg->hdr, msgHdr, sizeof(struct controlvm_message_header));
 	msg->hdr.payload_bytes = 0;
 	msg->hdr.payload_vm_offset = 0;
@@ -707,7 +709,7 @@ controlvm_respond(struct controlvm_message_header *msgHdr, int response)
 	controlvm_init_response(&outmsg, msgHdr, response);
 	/* For DiagPool channel DEVICE_CHANGESTATE, we need to send
 	* back the deviceChangeState structure in the packet. */
-	if (msgHdr->Id == CONTROLVM_DEVICE_CHANGESTATE
+	if (msgHdr->id == CONTROLVM_DEVICE_CHANGESTATE
 	    && g_DeviceChangeStatePacket.device_change_state.bus_no ==
 	    g_diagpoolBusNo
 	    && g_DeviceChangeStatePacket.device_change_state.dev_no ==
@@ -726,7 +728,8 @@ controlvm_respond(struct controlvm_message_header *msgHdr, int response)
 }
 
 static void
-controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
+controlvm_respond_chipset_init(struct controlvm_message_header *msgHdr,
+			       int response,
 			       enum ultra_chipset_feature features)
 {
 	struct controlvm_message outmsg;
@@ -740,9 +743,9 @@ controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
 	}
 }
 
-static void
-controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *msgHdr,
-		int response, struct spar_segment_state state)
+static void controlvm_respond_physdev_changestate(
+		struct controlvm_message_header *msgHdr, int response,
+		struct spar_segment_state state)
 {
 	struct controlvm_message outmsg;
 
@@ -841,16 +844,16 @@ bus_responder(enum controlvm_id cmdId, ulong busNo, int response)
 			need_clear = TRUE;
 	}
 
-	if (p->pending_msg_hdr.id == CONTROLVM_INVALID) {
+	if (p->pendingMsgHdr.id == CONTROLVM_INVALID) {
 		LOGERR("bus_responder no pending msg");
 		return;		/* no controlvm response needed */
 	}
-	if (p->pending_msg_hdr.id != (u32) cmdId) {
-		LOGERR("expected=%d, found=%d", cmdId, p->pending_msg_hdr.id);
+	if (p->pendingMsgHdr.id != (u32) cmdId) {
+		LOGERR("expected=%d, found=%d", cmdId, p->pendingMsgHdr.id);
 		return;
 	}
-	controlvm_respond(&p->pending_msg_hdr, response);
-	p->pending_msg_hdr.id = CONTROLVM_INVALID;
+	controlvm_respond(&p->pendingMsgHdr, response);
+	p->pendingMsgHdr.id = CONTROLVM_INVALID;
 	if (need_clear) {
 		busInfo_clear(p);
 		delbusdevices(&DevInfoList, busNo);
@@ -870,12 +873,12 @@ device_changestate_responder(enum controlvm_id cmdId,
 		LOGERR("internal error; busNo=%lu, devNo=%lu", busNo, devNo);
 		return;
 	}
-	if (p->pending_msg_hdr.id == CONTROLVM_INVALID) {
+	if (p->pendingMsgHdr.id == CONTROLVM_INVALID) {
 		LOGERR("device_responder no pending msg");
 		return;		/* no controlvm response needed */
 	}
-	if (p->pending_msg_hdr.id != cmdId) {
-		LOGERR("expected=%d, found=%d", cmdId, p->pending_msg_hdr.id);
+	if (p->pendingMsgHdr.id != cmdId) {
+		LOGERR("expected=%d, found=%d", cmdId, p->pendingMsgHdr.id);
 		return;
 	}
 
@@ -891,7 +894,7 @@ device_changestate_responder(enum controlvm_id cmdId,
 		return;
 	}
 
-	p->pending_msg_hdr.id = CONTROLVM_INVALID;
+	p->pendingMsgHdr.id = CONTROLVM_INVALID;
 }
 
 static void
@@ -913,16 +916,16 @@ device_responder(enum controlvm_id cmdId, ulong busNo, ulong devNo,
 			need_clear = TRUE;
 	}
 
-	if (p->pending_msg_hdr.id == CONTROLVM_INVALID) {
+	if (p->pendingMsgHdr.id == CONTROLVM_INVALID) {
 		LOGERR("device_responder no pending msg");
 		return;		/* no controlvm response needed */
 	}
-	if (p->pending_msg_hdr.id != (u32) cmdId) {
-		LOGERR("expected=%d, found=%d", cmdId, p->pending_msg_hdr.id);
+	if (p->pendingMsgHdr.id != (u32) cmdId) {
+		LOGERR("expected=%d, found=%d", cmdId, p->pendingMsgHdr.id);
 		return;
 	}
-	controlvm_respond(&p->pending_msg_hdr, response);
-	p->pending_msg_hdr.id = CONTROLVM_INVALID;
+	controlvm_respond(&p->pendingMsgHdr, response);
+	p->pendingMsgHdr.id = CONTROLVM_INVALID;
 	if (need_clear)
 		devInfo_clear(p);
 }
@@ -941,10 +944,10 @@ bus_epilog(u32 busNo,
 		return;
 	}
 	if (needResponse) {
-		memcpy(&pBusInfo->pending_msg_hdr, msgHdr,
+		memcpy(&pBusInfo->pendingMsgHdr, msgHdr,
 		       sizeof(struct controlvm_message_header));
 	} else
-		pBusInfo->pending_msg_hdr.id = CONTROLVM_INVALID;
+		pBusInfo->pendingMsgHdr.id = CONTROLVM_INVALID;
 
 	down(&NotifierLock);
 	if (response == CONTROLVM_RESP_SUCCESS) {
@@ -996,7 +999,7 @@ bus_epilog(u32 busNo,
 
 static void
 device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
-	      CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
+	      struct controlvm_message_header *msgHdr, int response,
 	      BOOL needResponse, BOOL for_visorbus)
 {
 	struct visorchipset_busdev_notifiers *notifiers = NULL;
@@ -1018,10 +1021,10 @@ device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
 	else
 		notifiers = &BusDev_Client_Notifiers;
 	if (needResponse) {
-		memcpy(&pDevInfo->pending_msg_hdr, msgHdr,
+		memcpy(&pDevInfo->pendingMsgHdr, msgHdr,
 		       sizeof(struct controlvm_message_header));
 	} else
-		pDevInfo->pending_msg_hdr.id = CONTROLVM_INVALID;
+		pDevInfo->pendingMsgHdr.id = CONTROLVM_INVALID;
 
 	down(&NotifierLock);
 	if (response >= 0) {
@@ -1128,11 +1131,11 @@ bus_create(struct controlvm_message *inmsg)
 	POSTCODE_LINUX_3(BUS_CREATE_ENTRY_PC, busNo, POSTCODE_SEVERITY_INFO);
 
 	if (inmsg->hdr.flags.test_message == 1)
-		pBusInfo->chan_info.addr_type = ADDRTYPE_LOCALTEST;
+		pBusInfo->chanInfo.addrType = ADDRTYPE_localTest;
 	else
 		pBusInfo->chan_info.addr_type = ADDRTYPE_LOCALPHYSICAL;
 
-	pBusInfo->flags.server = inmsg->hdr.Flags.server;
+	pBusInfo->flags.server = inmsg->hdr.flags.server;
 	pBusInfo->chanInfo.channelAddr = cmd->create_bus.channel_addr;
 	pBusInfo->chanInfo.nChannelBytes = cmd->create_bus.channel_bytes;
 	pBusInfo->chanInfo.channelTypeGuid = cmd->create_bus.bus_data_type_uuid;
@@ -1203,9 +1206,9 @@ bus_configure(struct controlvm_message *inmsg, PARSER_CONTEXT *parser_ctx)
 		goto Away;
 	}
 	/* TBD - add this check to other commands also... */
-	if (pBusInfo->pending_msg_hdr.id != CONTROLVM_INVALID) {
+	if (pBusInfo->pendingMsgHdr.id != CONTROLVM_INVALID) {
 		LOGERR("CONTROLVM_BUS_CONFIGURE Failed: bus %lu MsgId=%u outstanding",
-		     busNo, (uint) pBusInfo->pending_msg_hdr.id);
+		     busNo, (uint) pBusInfo->pendingMsgHdr.id);
 		POSTCODE_LINUX_3(BUS_CONFIGURE_FAILURE_PC, busNo,
 				 POSTCODE_SEVERITY_ERR);
 		rc = -CONTROLVM_RESP_ERROR_MESSAGE_ID_INVALID_FOR_CLIENT;
@@ -1278,7 +1281,7 @@ my_device_create(struct controlvm_message *inmsg)
 			 POSTCODE_SEVERITY_INFO);
 
 	if (inmsg->hdr.flags.test_message == 1)
-		pDevInfo->chan_info.addr_type = ADDRTYPE_LOCALTEST;
+		pDevInfo->chanInfo.addrType = ADDRTYPE_localTest;
 	else
 		pDevInfo->chanInfo.addrType = ADDRTYPE_localPhysical;
 	pDevInfo->chanInfo.channelAddr = cmd->create_device.channelAddr;
@@ -1300,7 +1303,7 @@ Away:
 	device_epilog(busNo, devNo, segment_state_running,
 		      CONTROLVM_DEVICE_CREATE, &inmsg->hdr, rc,
 		      inmsg->hdr.flags.response_expected == 1,
-		      FOR_VISORBUS(pDevInfo->chan_info.channel_type_uuid));
+		      FOR_VISORBUS(pDevInfo->chanInfo.channelTypeGuid));
 }
 
 static void
@@ -1334,8 +1337,7 @@ Away:
 		device_epilog(busNo, devNo, state, CONTROLVM_DEVICE_CHANGESTATE,
 			      &inmsg->hdr, rc,
 			      inmsg->hdr.flags.response_expected == 1,
-			      FOR_VISORBUS(
-					pDevInfo->chan_info.channel_type_uuid));
+			      FOR_VISORBUS(pDevInfo->chanInfo.channelTypeGuid));
 }
 
 static void
@@ -1365,8 +1367,7 @@ Away:
 		device_epilog(busNo, devNo, segment_state_running,
 			      CONTROLVM_DEVICE_DESTROY, &inmsg->hdr, rc,
 			      inmsg->hdr.flags.response_expected == 1,
-			      FOR_VISORBUS(
-					pDevInfo->chan_info.channel_type_uuid));
+			      FOR_VISORBUS(pDevInfo->chanInfo.channelTypeGuid));
 }
 
 /* When provided with the physical address of the controlvm channel
@@ -1708,7 +1709,7 @@ parahotplug_request_complete(int id, u16 active)
 			list_del(pos);
 			spin_unlock(&Parahotplug_request_list_lock);
 			req->msg.cmd.device_change_state.state.active = active;
-			if (req->msg.hdr.Flags.responseExpected)
+			if (req->msg.hdr.flags.response_expected)
 				controlvm_respond_physdev_changestate(
 					&req->msg.hdr, CONTROLVM_RESP_SUCCESS,
 					req->msg.cmd.device_change_state.state);
@@ -2058,7 +2059,7 @@ setup_crash_devices_work_queue(struct work_struct *work)
 	POSTCODE_LINUX_2(CRASH_DEV_ENTRY_PC, POSTCODE_SEVERITY_INFO);
 
 	/* send init chipset msg */
-	msg.hdr.Id = CONTROLVM_CHIPSET_INIT;
+	msg.hdr.id = CONTROLVM_CHIPSET_INIT;
 	msg.cmd.init_chipset.bus_count = 23;
 	msg.cmd.init_chipset.switch_count = 0;
 

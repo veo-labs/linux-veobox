@@ -169,8 +169,8 @@ enum ultra_chipset_feature {
  *  queue.  Commands are easily distinguished from responses by
  *  looking at the flags.response field.
  */
-typedef struct _CONTROLVM_MESSAGE_HEADER  {
-	u32 Id;		/* See control_vm_id. */
+struct controlvm_message_header  {
+	u32 id;		/* See CONTROLVM_ID. */
 	/* For requests, indicates the message type. */
 	/* For responses, indicates the type of message we are responding to. */
 
@@ -215,6 +215,10 @@ typedef struct _CONTROLVM_MESSAGE_HEADER  {
 	/* if non-zero, there is a payload to copy. */
 };
 
+typedef struct _CONTROLVM_PACKET_DEVICE_CREATE  {
+	u32 busNo;	   /**< bus # (0..n-1) from the msg receiver's
+			    * perspective */
+
 	    /* Control uses header SegmentIndex field to access bus number... */
 	u32 devNo;	   /**< bus-relative (0..n-1) device number */
 	u64 channelAddr;  /**< Guest physical address of the channel, which
@@ -234,15 +238,15 @@ typedef struct _CONTROLVM_PACKET_DEVICE_CONFIGURE  {
 	u32 dev_no;	      /**< bus-relative (0..n-1) device number */
 } ;	/* for CONTROLVM_DEVICE_CONFIGURE */
 
-struct controlvm_message_device_create {
-	struct controlvm_message_header header;
-	struct controlvm_packet_device_create packet;
-};	/* total 128 bytes */
+typedef struct _CONTROLVM_MESSAGE_DEVICE_CREATE  {
+	struct controlvm_message_header Header;
+	CONTROLVM_PACKET_DEVICE_CREATE Packet;
+} CONTROLVM_MESSAGE_DEVICE_CREATE;	/* total 128 bytes */
 
-struct controlvm_message_device_configure  {
-	struct controlvm_message_header header;
-	struct controlvm_packet_device_configure packet;
-};	/* total 56 bytes */
+typedef struct _CONTROLVM_MESSAGE_DEVICE_CONFIGURE  {
+	struct controlvm_message_header Header;
+	CONTROLVM_PACKET_DEVICE_CONFIGURE Packet;
+} CONTROLVM_MESSAGE_DEVICE_CONFIGURE;	/* total 56 bytes */
 
 /* This is the format for a message in any ControlVm queue. */
 struct controlvm_message_packet  {
@@ -337,7 +341,7 @@ struct controlvm_message_packet  {
 
 /* All messages in any ControlVm queue have this layout. */
 typedef struct _CONTROLVM_MESSAGE  {
-	CONTROLVM_MESSAGE_HEADER hdr;
+	struct controlvm_message_header hdr;
 	struct controlvm_message_packet cmd;
 } CONTROLVM_MESSAGE;
 
