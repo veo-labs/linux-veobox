@@ -2635,6 +2635,7 @@ static struct i2c_device_id adv7604_i2c_id[] = {
 MODULE_DEVICE_TABLE(i2c, adv7604_i2c_id);
 
 static struct of_device_id adv7604_of_id[] __maybe_unused = {
+	{ .compatible = "adi,adv7604", .data = &adv7604_chip_info[ADV7604] },
 	{ .compatible = "adi,adv7611", .data = &adv7604_chip_info[ADV7611] },
 	{ }
 };
