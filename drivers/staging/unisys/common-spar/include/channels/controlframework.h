@@ -36,10 +36,10 @@
 
 /* Define Ki scale page to be traditional 4KB page */
 #define ULTRA_MEMORY_PAGE_Ki (ULTRA_MEMORY_PAGE_WORD * ULTRA_MEMORY_COUNT_Ki)
-struct ultra_segment_state {
-	u16 Enabled:1;		/* Bit 0: May enter other states */
-	u16 Active:1;		/* Bit 1: Assigned to active partition */
-	u16 Alive:1;		/* Bit 2: Configure message sent to
+struct spar_segment_state  {
+	u16 enabled:1;		/* Bit 0: May enter other states */
+	u16 active:1;		/* Bit 1: Assigned to active partition */
+	u16 alive:1;		/* Bit 2: Configure message sent to
 				 * service/server */
 	u16 revoked:1;		/* Bit 3: similar to partition state
 				 * ShuttingDown */
@@ -54,13 +54,16 @@ struct ultra_segment_state {
 	/* Note: don't use high bit unless we need to switch to ushort
 	 * which is non-compliant */
 };
-static const struct ultra_segment_state SegmentStateRunning = {
+
+static const struct spar_segment_state SegmentStateRunning = {
 	1, 1, 1, 0, 1, 1, 1, 1
 };
-static const struct ultra_segment_state SegmentStatePaused = {
+
+static const struct spar_segment_state SegmentStatePaused = {
 	1, 1, 1, 0, 1, 1, 1, 0
 };
-static const struct ultra_segment_state SegmentStateStandby = {
+
+static const struct spar_segment_state SegmentStateStandby = {
 	1, 1, 0, 0, 1, 1, 1, 0
 };
 

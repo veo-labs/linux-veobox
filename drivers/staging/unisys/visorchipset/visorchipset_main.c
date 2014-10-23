@@ -347,9 +347,8 @@ static void controlvm_respond(CONTROLVM_MESSAGE_HEADER *msgHdr, int response);
 static void controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr,
 					   int response,
 					   ULTRA_CHIPSET_FEATURE features);
-static void controlvm_respond_physdev_changestate(
-			CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
-			struct ultra_segment_state state);
+static void controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *
+		msgHdr, int response, struct spar_segment_state state);
 
 static ssize_t toolaction_show(struct device *dev,
 			       struct device_attribute *attr,
@@ -744,8 +743,7 @@ controlvm_respond_chipset_init(struct controlvm_message_header *msgHdr,
 
 static void
 controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *msgHdr,
-				      int response, struct ultra_segment_state
-				      state)
+		int response, struct spar_segment_state state)
 {
 	struct controlvm_message outmsg;
 
@@ -863,7 +861,7 @@ bus_responder(enum control_vm_id cmdId, ulong busNo, int response)
 static void
 device_changestate_responder(enum control_vm_id cmdId,
 			     ulong busNo, ulong devNo, int response,
-			     struct ultra_segment_state responseState)
+			     struct spar_segment_state responseState)
 {
 	struct visorchipset_device_info *p = NULL;
 	struct controlvm_message outmsg;
@@ -997,7 +995,7 @@ bus_epilog(u32 busNo,
 }
 
 static void
-device_epilog(u32 busNo, u32 devNo, struct ultra_segment_state state, u32 cmd,
+device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
 	      CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
 	      BOOL needResponse, BOOL for_visorbus)
 {
@@ -1036,9 +1034,8 @@ device_epilog(u32 busNo, u32 devNo, struct ultra_segment_state state, u32 cmd,
 			break;
 		case CONTROLVM_DEVICE_CHANGESTATE:
 			/* ServerReady / ServerRunning / SegmentStateRunning */
-			if (state.alive == segment_state_running.alive &&
-			    state.operating ==
-				segment_state_running.operating) {
+			if (state.alive == SegmentStateRunning.alive &&
+			    state.operating == SegmentStateRunning.operating) {
 				if (notifiers->device_resume) {
 					(*notifiers->device_resume) (busNo,
 								     devNo);
@@ -1046,9 +1043,9 @@ device_epilog(u32 busNo, u32 devNo, struct ultra_segment_state state, u32 cmd,
 				}
 			}
 			/* ServerNotReady / ServerLost / SegmentStateStandby */
-			else if (state.alive == segment_state_standby.alive &&
+			else if (state.alive == SegmentStateStandby.alive &&
 				 state.operating ==
-				 segment_state_standby.operating) {
+				 SegmentStateStandby.operating) {
 				/* technically this is standby case
 				 * where server is lost
 				 */
@@ -1057,9 +1054,9 @@ device_epilog(u32 busNo, u32 devNo, struct ultra_segment_state state, u32 cmd,
 								    devNo);
 					notified = TRUE;
 				}
-			} else if (state.alive == segment_state_paused.alive &&
+			} else if (state.alive == SegmentStatePaused.alive &&
 				   state.operating ==
-				   segment_state_paused.operating) {
+				   SegmentStatePaused.operating) {
 				/* this is lite pause where channel is
 				 * still valid just 'pause' of it
 				 */
@@ -1313,7 +1310,7 @@ my_device_changestate(struct controlvm_message *inmsg)
 	CONTROLVM_MESSAGE_PACKET *cmd = &inmsg->cmd;
 	ulong busNo = cmd->deviceChangeState.busNo;
 	ulong devNo = cmd->deviceChangeState.devNo;
-	struct ultra_segment_state state = cmd->deviceChangeState.state;
+	struct spar_segment_state state = cmd->deviceChangeState.state;
 	VISORCHIPSET_DEVICE_INFO *pDevInfo = NULL;
 	int rc = CONTROLVM_RESP_SUCCESS;
 
@@ -1641,7 +1638,7 @@ parahotplug_request_kickoff(struct parahotplug_request *req)
 	sprintf(env_cmd, "SPAR_PARAHOTPLUG=1");
 	sprintf(env_id, "SPAR_PARAHOTPLUG_ID=%d", req->id);
 	sprintf(env_state, "SPAR_PARAHOTPLUG_STATE=%d",
-		cmd->device_change_state.state.active);
+		cmd->deviceChangeState.state.active);
 	sprintf(env_bus, "SPAR_PARAHOTPLUG_BUS=%d",
 		cmd->device_change_state.bus_no);
 	sprintf(env_dev, "SPAR_PARAHOTPLUG_DEVICE=%d",
@@ -1650,10 +1647,9 @@ parahotplug_request_kickoff(struct parahotplug_request *req)
 		cmd->device_change_state.dev_no & 0x7);
 
 	LOGINF("parahotplug_request_kickoff: state=%d, bdf=%d/%d/%d, id=%u\n",
-	       cmd->device_change_state.state.active,
-	       cmd->device_change_state.bus_no,
-	       cmd->device_change_state.dev_no >> 3,
-	       cmd->device_change_state.dev_no & 7, req->id);
+	       cmd->deviceChangeState.state.active,
+	       cmd->deviceChangeState.busNo, cmd->deviceChangeState.devNo >> 3,
+	       cmd->deviceChangeState.devNo & 7, req->id);
 
 	kobject_uevent_env(&Visorchipset_platform_device.dev.kobj, KOBJ_CHANGE,
 			   envp);
@@ -1711,8 +1707,8 @@ parahotplug_request_complete(int id, u16 active)
 			 */
 			list_del(pos);
 			spin_unlock(&Parahotplug_request_list_lock);
-			req->msg.cmd.device_change_state.state.active = active;
-			if (req->msg.hdr.flags.response_expected)
+			req->msg.cmd.deviceChangeState.state.active = active;
+			if (req->msg.hdr.Flags.responseExpected)
 				controlvm_respond_physdev_changestate(
 					&req->msg.hdr, CONTROLVM_RESP_SUCCESS,
 					req->msg.cmd.device_change_state.state);
@@ -1740,7 +1736,7 @@ parahotplug_process_message(struct controlvm_message *inmsg)
 		return;
 	}
 
-	if (inmsg->cmd.device_change_state.state.active) {
+	if (inmsg->cmd.deviceChangeState.state.active) {
 		/* For enable messages, just respond with success
 		* right away.  This is a bit of a hack, but there are
 		* issues with the early enable messages we get (with
@@ -1861,15 +1857,15 @@ handle_command(struct controlvm_message inmsg, HOSTADDRESS channel_addr)
 	case CONTROLVM_DEVICE_CHANGESTATE:
 		if (cmd->device_change_state.flags.phys_device) {
 			LOGINF("DEVICE_CHANGESTATE for physical device (%lu,%lu, active=%lu)",
-			     (ulong) cmd->device_change_state.bus_no,
-			     (ulong) cmd->device_change_state.dev_no,
-			     (ulong) cmd->device_change_state.state.active);
+			     (ulong) cmd->deviceChangeState.busNo,
+			     (ulong) cmd->deviceChangeState.devNo,
+			     (ulong) cmd->deviceChangeState.state.active);
 			parahotplug_process_message(&inmsg);
 		} else {
 			LOGINF("DEVICE_CHANGESTATE for virtual device (%lu,%lu, state.Alive=0x%lx)",
-			     (ulong) cmd->device_change_state.bus_no,
-			     (ulong) cmd->device_change_state.dev_no,
-			     (ulong) cmd->device_change_state.state.alive);
+			     (ulong) cmd->deviceChangeState.busNo,
+			     (ulong) cmd->deviceChangeState.devNo,
+			     (ulong) cmd->deviceChangeState.state.alive);
 			/* save the hdr and cmd structures for later use */
 			/* when sending back the response to Command */
 			my_device_changestate(&inmsg);
