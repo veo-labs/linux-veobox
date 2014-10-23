@@ -472,19 +472,70 @@ static int create_device(struct controlvm_message *msg, char *buf)
 				result = CONTROLVM_RESP_ERROR_CHANNEL_INVALID;
 				goto cleanup;
 			}
-			cmd.msgtype = GUEST_ADD_VNIC;
-			cmd.add_vnic.chanptr = dev->chanptr;
-			cmd.add_vnic.bus_no = bus_no;
-			cmd.add_vnic.device_no = dev_no;
-			cmd.add_vnic.instance_uuid = dev->instance_uuid;
-			cmd.add_vhba.intr = dev->intr;
-		} else {
-			LOGERR("CONTROLVM_DEVICE_CREATE Failed: unknown channelTypeGuid.\n");
-			POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no,
-					 bus_no, POSTCODE_SEVERITY_ERR);
-			result = CONTROLVM_RESP_ERROR_CHANNEL_TYPE_UNKNOWN;
-			goto cleanup;
-		}
+			read_unlock(&BusListLock);
+			/* the msg is bound for virtpci; send
+			 * guest_msgs struct to callback
+			 */
+			if (!msg->hdr.flags.server) {
+				struct guest_msgs cmd;
+
+				if (!uuid_le_cmp(dev->channel_uuid,
+				     spar_vhba_channel_protocol_uuid)) {
+					wait_for_valid_guid(&((CHANNEL_HEADER
+							      __iomem *) (dev->
+								  chanptr))->
+							    chtype);
+					if (!SPAR_VHBA_CHANNEL_OK_CLIENT
+					    (dev->chanptr)) {
+						LOGERR("CONTROLVM_DEVICE_CREATE Failed:[CLIENT]VHBA dev %d chan invalid.",
+						     devNo);
+						POSTCODE_LINUX_4
+						    (DEVICE_CREATE_FAILURE_PC,
+						     devNo, busNo,
+						     POSTCODE_SEVERITY_ERR);
+						result = CONTROLVM_RESP_ERROR_CHANNEL_INVALID;
+						goto Away;
+					}
+					cmd.msgtype = GUEST_ADD_VHBA;
+					cmd.add_vhba.chanptr = dev->chanptr;
+					cmd.add_vhba.bus_no = busNo;
+					cmd.add_vhba.device_no = devNo;
+					cmd.add_vhba.instance_uuid =
+					    dev->instance_uuid;
+					cmd.add_vhba.intr = dev->intr;
+				} else
+				    if (!uuid_le_cmp(dev->channel_uuid,
+					 spar_vnic_channel_protocol_uuid)) {
+					wait_for_valid_guid(&((CHANNEL_HEADER
+							      __iomem *) (dev->
+								  chanptr))->
+							    chtype);
+					if (!SPAR_VNIC_CHANNEL_OK_CLIENT
+					    (dev->chanptr)) {
+						LOGERR("CONTROLVM_DEVICE_CREATE Failed: VNIC[CLIENT] dev %d chan invalid.",
+						     devNo);
+						POSTCODE_LINUX_4
+						    (DEVICE_CREATE_FAILURE_PC,
+						     devNo, busNo,
+						     POSTCODE_SEVERITY_ERR);
+						result = CONTROLVM_RESP_ERROR_CHANNEL_INVALID;
+						goto Away;
+					}
+					cmd.msgtype = GUEST_ADD_VNIC;
+					cmd.add_vnic.chanptr = dev->chanptr;
+					cmd.add_vnic.bus_no = busNo;
+					cmd.add_vnic.device_no = devNo;
+					cmd.add_vnic.instance_uuid =
+					    dev->instance_uuid;
+					cmd.add_vhba.intr = dev->intr;
+				} else {
+					LOGERR("CONTROLVM_DEVICE_CREATE Failed: unknown channelTypeGuid.\n");
+					POSTCODE_LINUX_4
+					    (DEVICE_CREATE_FAILURE_PC, devNo,
+					     busNo, POSTCODE_SEVERITY_ERR);
+					result = CONTROLVM_RESP_ERROR_CHANNEL_TYPE_UNKNOWN;
+					goto Away;
+				}
 
 		if (!virt_control_chan_func) {
 			LOGERR("CONTROLVM_DEVICE_CREATE Failed: virtpci callback not registered.");
@@ -938,8 +989,8 @@ uislib_client_inject_add_vhba(u32 bus_no, u32 dev_no,
 				 MIN_IO_CHANNEL_SIZE, POSTCODE_SEVERITY_ERR);
 		return 0;
 	}
-	msg.cmd.create_device.channel_bytes = chan_bytes;
-	msg.cmd.create_device.data_type_uuid = spar_vhba_channel_protocol_uuid;
+	msg.cmd.createDevice.channelBytes = chan_bytes;
+	msg.cmd.createDevice.dataTypeGuid = spar_vhba_channel_protocol_uuid;
 	if (create_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
 		LOGERR("VHBA create_device failed.\n");
 		POSTCODE_LINUX_4(VHBA_CREATE_FAILURE_PC, dev_no, bus_no,
@@ -997,8 +1048,8 @@ uislib_client_inject_add_vnic(u32 bus_no, u32 dev_no,
 				 MIN_IO_CHANNEL_SIZE, POSTCODE_SEVERITY_ERR);
 		return 0;
 	}
-	msg.cmd.create_device.channel_bytes = chan_bytes;
-	msg.cmd.create_device.data_type_uuid = spar_vnic_channel_protocol_uuid;
+	msg.cmd.createDevice.channelBytes = chan_bytes;
+	msg.cmd.createDevice.dataTypeGuid = spar_vnic_channel_protocol_uuid;
 	if (create_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
 		LOGERR("VNIC create_device failed.\n");
 		POSTCODE_LINUX_4(VNIC_CREATE_FAILURE_PC, dev_no, bus_no,
@@ -1087,7 +1138,7 @@ uislib_client_add_vnic(u32 busNo)
 	memset(&msg.cmd.createDevice.intr, 0, sizeof(struct irq_info));
 	msg.cmd.createDevice.channelAddr = PhysicalDataChan;
 	msg.cmd.createDevice.channelBytes = MIN_IO_CHANNEL_SIZE;
-	msg.cmd.createDevice.dataTypeGuid = UltraVnicChannelProtocolGuid;
+	msg.cmd.createDevice.dataTypeGuid = spar_vnic_channel_protocol_uuid;
 	if (create_device(&msg, NULL) != CONTROLVM_RESP_SUCCESS) {
 		LOGERR("client create_device failed");
 		goto AwayCleanup;

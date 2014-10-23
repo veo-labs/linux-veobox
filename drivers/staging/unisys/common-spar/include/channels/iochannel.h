@@ -59,18 +59,37 @@
 #define ULTRA_VNIC_CHANNEL_PROTOCOL_VERSIONID 2
 #define ULTRA_VSWITCH_CHANNEL_PROTOCOL_VERSIONID 1
 
-#define SPAR_VHBA_CHANNEL_OK_CLIENT(ch)			\
-	(spar_check_channel_client(ch, spar_vhba_channel_protocol_uuid, \
-				   "vhba", MIN_IO_CHANNEL_SIZE,	\
-				   ULTRA_VHBA_CHANNEL_PROTOCOL_VERSIONID, \
-				   ULTRA_VHBA_CHANNEL_PROTOCOL_SIGNATURE))
-
-#define SPAR_VNIC_CHANNEL_OK_CLIENT(ch)			\
-	(spar_check_channel_client(ch, spar_vnic_channel_protocol_uuid, \
-				   "vnic", MIN_IO_CHANNEL_SIZE,	\
-				   ULTRA_VNIC_CHANNEL_PROTOCOL_VERSIONID, \
-				   ULTRA_VNIC_CHANNEL_PROTOCOL_SIGNATURE))
-
+#define ULTRA_VHBA_CHANNEL_OK_CLIENT(pChannel, logCtx)			\
+	(ULTRA_check_channel_client(pChannel, spar_vhba_channel_protocol_uuid, \
+				    "vhba", MIN_IO_CHANNEL_SIZE,	\
+				    ULTRA_VHBA_CHANNEL_PROTOCOL_VERSIONID, \
+				    ULTRA_VHBA_CHANNEL_PROTOCOL_SIGNATURE, \
+				    __FILE__, __LINE__, logCtx))
+#define ULTRA_VHBA_CHANNEL_OK_SERVER(actualBytes, logCtx)		\
+	(ULTRA_check_channel_server(spar_vhba_channel_protocol_uuid,	\
+				    "vhba", MIN_IO_CHANNEL_SIZE, actualBytes, \
+				    __FILE__, __LINE__, logCtx))
+#define ULTRA_VNIC_CHANNEL_OK_CLIENT(pChannel, logCtx)			\
+	(ULTRA_check_channel_client(pChannel, spar_vnic_channel_protocol_uuid, \
+				    "vnic", MIN_IO_CHANNEL_SIZE,	\
+				    ULTRA_VNIC_CHANNEL_PROTOCOL_VERSIONID, \
+				    ULTRA_VNIC_CHANNEL_PROTOCOL_SIGNATURE, \
+				    __FILE__, __LINE__, logCtx))
+#define ULTRA_VNIC_CHANNEL_OK_SERVER(actualBytes, logCtx)		\
+	(ULTRA_check_channel_server(spar_vnic_channel_protocol_uuid,	\
+				    "vnic", MIN_IO_CHANNEL_SIZE, actualBytes, \
+				    __FILE__, __LINE__, logCtx))
+#define ULTRA_VSWITCH_CHANNEL_OK_CLIENT(pChannel, logCtx)		\
+	(ULTRA_check_channel_client(pChannel, UltraVswitchChannelProtocolGuid, \
+				    "vswitch", MIN_IO_CHANNEL_SIZE,	\
+				    ULTRA_VSWITCH_CHANNEL_PROTOCOL_VERSIONID, \
+				    ULTRA_VSWITCH_CHANNEL_PROTOCOL_SIGNATURE, \
+				    __FILE__, __LINE__, logCtx))
+#define ULTRA_VSWITCH_CHANNEL_OK_SERVER(actualBytes, logCtx)          \
+	(ULTRA_check_channel_server(UltraVswitchChannelProtocolGuid,	\
+				    "vswitch", MIN_IO_CHANNEL_SIZE,	\
+				    actualBytes,		    \
+				    __FILE__, __LINE__, logCtx))
 /*
 * Everything necessary to handle SCSI & NIC traffic between Guest Partition and
 * IO Partition is defined below.  */
@@ -717,6 +736,127 @@ struct spar_io_channel_protocol {
 
 #define MIN_IO_CHANNEL_SIZE COVER(SIZEOF_PROTOCOL + \
 				  2 * MIN_NUMSIGNALS * SIZEOF_CMDRSP, 4096)
+#ifdef __GNUC__
+/* These defines should only ever be used in service partitons */
+/* because they rely on the size of uiscmdrsp */
+#define QSLOTSFROMBYTES(bytes) (((bytes-SIZEOF_PROTOCOL)/2)/SIZEOF_CMDRSP)
+#define QSIZEFROMBYTES(bytes) (QSLOTSFROMBYTES(bytes)*SIZEOF_CMDRSP)
+#define SignalQInit(x)						\
+	do {							\
+		x->cmdQ.Size = QSIZEFROMBYTES(x->ChannelHeader.Size);	\
+		x->cmdQ.oSignalBase = SIZEOF_PROTOCOL -			\
+			offsetof(ULTRA_IO_CHANNEL_PROTOCOL, cmdQ);	\
+		x->cmdQ.SignalSize = SIZEOF_CMDRSP;			\
+		x->cmdQ.MaxSignalSlots =				\
+			QSLOTSFROMBYTES(x->ChannelHeader.Size);		\
+		x->cmdQ.MaxSignals = x->cmdQ.MaxSignalSlots - 1;	\
+		x->rspQ.Size = QSIZEFROMBYTES(x->ChannelHeader.Size);	\
+		x->rspQ.oSignalBase =					\
+			(SIZEOF_PROTOCOL + x->cmdQ.Size) -		\
+			offsetof(ULTRA_IO_CHANNEL_PROTOCOL, rspQ);	\
+		x->rspQ.SignalSize = SIZEOF_CMDRSP;			\
+		x->rspQ.MaxSignalSlots =				\
+			QSLOTSFROMBYTES(x->ChannelHeader.Size);		\
+		x->rspQ.MaxSignals = x->rspQ.MaxSignalSlots - 1;	\
+		x->ChannelHeader.oChannelSpace =			\
+			offsetof(ULTRA_IO_CHANNEL_PROTOCOL, cmdQ);	\
+	} while (0)
+
+#define INIT_CLIENTSTRING(chan, type, clientStr, clientStrLen)	\
+	do {								\
+		if (clientStr) {					\
+			chan->ChannelHeader.oClientString =		\
+				offsetof(type, clientString);		\
+			memcpy(chan->clientString, clientStr,		\
+			       MINNUM(clientStrLen,			\
+				      (u32) (MAX_CLIENTSTRING_LEN - 1))); \
+			chan->clientString[MINNUM(clientStrLen,		\
+						  (u32) (MAX_CLIENTSTRING_LEN \
+							 - 1))]		\
+				= '\0';					\
+		}							\
+		else							\
+			if (clientStrLen > 0)				\
+				return 0;				\
+	} while (0)
+
+
+#define ULTRA_IO_CHANNEL_SERVER_READY(x, chanId, logCtx) \
+	ULTRA_CHANNEL_SERVER_TRANSITION(x, chanId, SrvState, CHANNELSRV_READY, \
+					logCtx)
+
+#define ULTRA_IO_CHANNEL_SERVER_NOTREADY(x, chanId, logCtx)	\
+	ULTRA_CHANNEL_SERVER_TRANSITION(x, chanId, SrvState, \
+					CHANNELSRV_UNINITIALIZED, logCtx)
+
+static inline int ULTRA_VHBA_init_channel(ULTRA_IO_CHANNEL_PROTOCOL *x,
+					      struct vhba_wwnn *wwnn,
+					      struct vhba_config_max *max,
+					      unsigned char *clientStr,
+					      u32 clientStrLen, u64 bytes)  {
+	memset(x, 0, sizeof(ULTRA_IO_CHANNEL_PROTOCOL));
+	x->ChannelHeader.VersionId = ULTRA_VHBA_CHANNEL_PROTOCOL_VERSIONID;
+	x->ChannelHeader.Signature = ULTRA_VHBA_CHANNEL_PROTOCOL_SIGNATURE;
+	x->ChannelHeader.SrvState = CHANNELSRV_UNINITIALIZED;
+	x->ChannelHeader.HeaderSize = sizeof(x->ChannelHeader);
+	x->ChannelHeader.Size = COVER(bytes, 4096);
+	x->ChannelHeader.Type = spar_vhba_channel_protocol_uuid;
+	x->ChannelHeader.ZoneGuid = NULL_UUID_LE;
+	x->vhba.wwnn = *wwnn;
+	x->vhba.max = *max;
+	INIT_CLIENTSTRING(x, ULTRA_IO_CHANNEL_PROTOCOL, clientStr,
+			  clientStrLen);
+	SignalQInit(x);
+	if ((x->cmdQ.MaxSignalSlots > MAX_NUMSIGNALS) ||
+	     (x->rspQ.MaxSignalSlots > MAX_NUMSIGNALS)) {
+		return 0;
+	}
+	if ((x->cmdQ.MaxSignalSlots < MIN_NUMSIGNALS) ||
+	     (x->rspQ.MaxSignalSlots < MIN_NUMSIGNALS)) {
+		return 0;
+	}
+	return 1;
+}
+
+static inline void ULTRA_VHBA_set_max(ULTRA_IO_CHANNEL_PROTOCOL *x,
+				      struct vhba_config_max *max)  {
+	x->vhba.max = *max;
+}
+
+static inline int ULTRA_VNIC_init_channel(ULTRA_IO_CHANNEL_PROTOCOL *x,
+						 unsigned char *macaddr,
+						 u32 num_rcv_bufs, u32 mtu,
+						 uuid_le zoneGuid,
+						 unsigned char *clientStr,
+						 u32 clientStrLen,
+						 u64 bytes)  {
+	memset(x, 0, sizeof(ULTRA_IO_CHANNEL_PROTOCOL));
+	x->ChannelHeader.VersionId = ULTRA_VNIC_CHANNEL_PROTOCOL_VERSIONID;
+	x->ChannelHeader.Signature = ULTRA_VNIC_CHANNEL_PROTOCOL_SIGNATURE;
+	x->ChannelHeader.SrvState = CHANNELSRV_UNINITIALIZED;
+	x->ChannelHeader.HeaderSize = sizeof(x->ChannelHeader);
+	x->ChannelHeader.Size = COVER(bytes, 4096);
+	x->ChannelHeader.Type = spar_vnic_channel_protocol_uuid;
+	x->ChannelHeader.ZoneGuid = NULL_UUID_LE;
+	memcpy(x->vnic.macaddr, macaddr, MAX_MACADDR_LEN);
+	x->vnic.num_rcv_bufs = num_rcv_bufs;
+	x->vnic.mtu = mtu;
+	x->vnic.zoneGuid = zoneGuid;
+	INIT_CLIENTSTRING(x, ULTRA_IO_CHANNEL_PROTOCOL, clientStr,
+			   clientStrLen);
+	SignalQInit(x);
+	if ((x->cmdQ.MaxSignalSlots > MAX_NUMSIGNALS) ||
+	     (x->rspQ.MaxSignalSlots > MAX_NUMSIGNALS)) {
+		return 0;
+	}
+	if ((x->cmdQ.MaxSignalSlots < MIN_NUMSIGNALS) ||
+	     (x->rspQ.MaxSignalSlots < MIN_NUMSIGNALS)) {
+		return 0;
+	}
+	return 1;
+}
+
+#endif	/* __GNUC__ */
 
 /*
 * INLINE function for expanding a guest's pfn-off-size into multiple 4K page
