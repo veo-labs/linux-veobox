@@ -1016,9 +1016,9 @@ static int virtpci_device_add(struct device *parentbus, int devtype,
 	 * registering the device, because polling of the channel
 	 * queues can begin at any time after device_register().
 	 */
-	dev = &virtpcidev->generic_dev;
+	pDev = &virtpcidev->generic_dev;
 	SPAR_CHANNEL_CLIENT_TRANSITION(addparams->chanptr,
-				       BUS_ID(dev),
+				       BUS_ID(pDev),
 				       CHANNELCLI_ATTACHED, NULL);
 
 	/* don't register until device has been added to
@@ -1039,9 +1039,9 @@ static int virtpci_device_add(struct device *parentbus, int devtype,
 	 */
 	if (ret) {
 		LOGERR("device_register returned %d\n", ret);
-		dev = &virtpcidev->generic_dev;
+		pDev = &virtpcidev->generic_dev;
 		SPAR_CHANNEL_CLIENT_TRANSITION(addparams->chanptr,
-					       BUS_ID(dev),
+					       BUS_ID(pDev),
 					       CHANNELCLI_DETACHED, NULL);
 		/* remove virtpcidev, the one we just added, from the list */
 		write_lock_irqsave(&vpcidev_list_lock, flags);
