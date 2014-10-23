@@ -51,6 +51,12 @@ static const uuid_le spar_vbus_channel_protocol_uuid =
 				    ULTRA_VBUS_CHANNEL_PROTOCOL_VERSIONID, \
 				    ULTRA_VBUS_CHANNEL_PROTOCOL_SIGNATURE)) \
 
+#define ULTRA_VBUS_CHANNEL_OK_SERVER(actualBytes)    \
+	(spar_check_channel_server(UltraVbusChannelProtocolGuid,	\
+				    "vbus",				\
+				    sizeof(struct ultra_vbus_channel_protocol),\
+				    actualBytes))
+
 #pragma pack(push, 1)		/* both GCC and VC now allow this pragma */
 struct spar_vbus_headerinfo {
 	u32 struct_bytes;	/* size of this struct in bytes */
