@@ -177,10 +177,7 @@ static void waveform_ai_interrupt(unsigned long arg)
 	unsigned long elapsed_time;
 	unsigned int num_scans;
 	ktime_t now;
-
-	/* check command is still active */
-	if (!test_bit(WAVEFORM_AI_RUNNING, &devpriv->state_bits))
-		return;
+	bool stopping = false;
 
 	now = ktime_get();
 
