@@ -150,45 +150,11 @@ struct pci_id {
 	u8 reserved[3];	/* Natural alignment purposes */
 };
 
-struct PciConfigHdr {
-	u16 VendorId;
-	u16 SubSysVendor;
-	u16 DeviceId;
-	u16 SubSysDevice;
-	u32 ClassCode;
-	u32 Reserved;		/* Natural alignment purposes */
-};
-
-struct ScsiId {
-	u32 Bus;
-	u32 Target;
-	u32 Lun;
-	u32 Host; /* Command should ignore this for *
-		   * DiskArrival/RemovalEvents */
-};
-
-struct WWID {
-	u32 wwid1;
-	u32 wwid2;
-};
-
-struct virtDiskInfo  {
-	u32 switchNo;		/* defined by SWITCH_CREATE */
-	u32 externalPortNo;	/* 0 for SAS RAID provided (external)
-				 * virtual disks, 1 for virtual disk
-				 * images, 2 for gold disk images */
-	u16 VirtualDiskIndex;	/* Index of disk descriptor in the
-				 * VirtualDisk segment associated with
-				 * externalPortNo */
-	u16 Reserved1;
-	u32 Reserved2;
-};
-
-struct efi_spar_indication  {
-	u64 boot_to_fw_ui:1;	/* Bit 0: Stop in uefi ui */
-	u64 clear_nvram:1;	/* Bit 1: Clear NVRAM */
-	u64 clear_cmos:1;	/* Bit 2: Clear CMOS */
-	u64 boot_to_tool:1;	/* Bit 3: Run install tool */
+typedef struct _ULTRA_EFI_SPAR_INDICATION  {
+	u64 BootToFirmwareUI:1;	/* Bit 0: Stop in uefi ui */
+	u64 ClearNvram:1;	/* Bit 1: Clear NVRAM */
+	u64 ClearCmos:1;	/* Bit 2: Clear CMOS */
+	u64 BootToTool:1;	/* Bit 3: Run install tool */
 	/* remaining bits are available */
 };
 
