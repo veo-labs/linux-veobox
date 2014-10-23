@@ -317,12 +317,13 @@ struct controlvm_message_packet  {
 		} device_change_state_event;
 			/* for CONTROLVM_DEVICE_CHANGESTATE_EVENT */
 		struct  {
-			u32 bus_count;	/* indicates the max number of busses */
-			u32 switch_count; /* indicates the max number of
-					   * switches if a service partition */
+			u32 busCount; /*< indicates the max number of busses */
+			u32 switchCount; /*< indicates the max number of
+					  *   switches (applicable for service
+					  *   partition only) */
 			enum ultra_chipset_feature features;
-			u32 platform_number;	/* Platform Number */
-		} init_chipset;	/* for CONTROLVM_CHIPSET_INIT */
+			u32 platformNumber;	/* Platform Number */
+		} initChipset;	/* for CONTROLVM_CHIPSET_INIT */
 		struct  {
 			u32 options;	/* reserved */
 			u32 test;	/* bit 0 set to run embedded selftest */

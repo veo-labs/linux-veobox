@@ -346,7 +346,7 @@ static struct platform_device Visorchipset_platform_device = {
 static void controlvm_respond(CONTROLVM_MESSAGE_HEADER *msgHdr, int response);
 static void controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr,
 					   int response,
-					   ULTRA_CHIPSET_FEATURE features);
+					   enum ultra_chipset_feature features);
 static void controlvm_respond_physdev_changestate(CONTROLVM_MESSAGE_HEADER *
 		msgHdr, int response, struct spar_segment_state state);
 
@@ -726,8 +726,7 @@ controlvm_respond(struct controlvm_message_header *msgHdr, int response)
 }
 
 static void
-controlvm_respond_chipset_init(struct controlvm_message_header *msgHdr,
-			       int response,
+controlvm_respond_chipset_init(CONTROLVM_MESSAGE_HEADER *msgHdr, int response,
 			       enum ultra_chipset_feature features)
 {
 	struct controlvm_message outmsg;
