@@ -687,10 +687,10 @@ Away:
 }
 
 static void
-controlvm_init_response(CONTROLVM_MESSAGE *msg,
+controlvm_init_response(struct controlvm_message *msg,
 			struct controlvm_message_header *msgHdr, int response)
 {
-	memset(msg, 0, sizeof(CONTROLVM_MESSAGE));
+	memset(msg, 0, sizeof(struct controlvm_message));
 	memcpy(&msg->hdr, msgHdr, sizeof(struct controlvm_message_header));
 	msg->hdr.payload_bytes = 0;
 	msg->hdr.payload_vm_offset = 0;
@@ -760,8 +760,7 @@ static void controlvm_respond_physdev_changestate(
 }
 
 void
-visorchipset_save_message(struct controlvm_message *msg,
-			  enum crash_obj_type type)
+visorchipset_save_message(struct controlvm_message *msg, CRASH_OBJ_TYPE type)
 {
 	u32 localSavedCrashMsgOffset;
 	u16 localSavedCrashMsgCount;
@@ -865,7 +864,7 @@ device_changestate_responder(enum controlvm_id cmdId,
 			     ulong busNo, ulong devNo, int response,
 			     struct spar_segment_state responseState)
 {
-	struct visorchipset_device_info *p = NULL;
+	VISORCHIPSET_DEVICE_INFO *p = NULL;
 	struct controlvm_message outmsg;
 
 	p = finddevice(&DevInfoList, busNo, devNo);
@@ -1933,6 +1932,7 @@ static HOSTADDRESS controlvm_get_channel_address(void)
 static void
 controlvm_periodic_work(struct work_struct *work)
 {
+	VISORCHIPSET_CHANNEL_INFO chanInfo;
 	struct controlvm_message inmsg;
 	BOOL gotACommand = FALSE;
 	BOOL handle_command_failed = FALSE;

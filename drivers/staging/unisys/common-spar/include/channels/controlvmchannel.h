@@ -337,10 +337,10 @@ struct controlvm_message_packet  {
 };
 
 /* All messages in any ControlVm queue have this layout. */
-typedef struct _CONTROLVM_MESSAGE  {
+struct controlvm_message {
 	struct controlvm_message_header hdr;
 	struct controlvm_message_packet cmd;
-} CONTROLVM_MESSAGE;
+};
 
 typedef struct _DEVICE_MAP  {
 	GUEST_PHYSICAL_ADDRESS DeviceChannelAddress;
@@ -447,20 +447,20 @@ typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
 						 * Control events */
 
 	 /* Request fixed-size message pool - does not include payload */
-	 struct controlvm_message request_msg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message RequestMsg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Response fixed-size message pool - does not include payload */
-	 struct controlvm_message response_msg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message ResponseMsg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Event fixed-size message pool - does not include payload */
-	 struct controlvm_message event_msg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message EventMsg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Ack fixed-size message pool - does not include payload */
-	 struct controlvm_message event_ack_msg[CONTROLVM_MESSAGE_MAX];
+	 struct controlvm_message EventAckMsg[CONTROLVM_MESSAGE_MAX];
 
 	 /* Message stored during IOVM creation to be reused after crash */
-	 struct controlvm_message saved_crash_msg[CONTROLVM_CRASHMSG_MAX];
-};
+	 struct controlvm_message SavedCrashMsg[CONTROLVM_CRASHMSG_MAX];
+} ULTRA_CONTROLVM_CHANNEL_PROTOCOL;
 
 /* Offsets for VM channel attributes... */
 #define VM_CH_REQ_QUEUE_OFFSET \

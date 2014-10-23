@@ -122,7 +122,7 @@ static const struct file_operations debugfs_info_fops = {
 static void
 init_msg_header(struct controlvm_message *msg, u32 id, uint rsp, uint svr)
 {
-	memset(msg, 0, sizeof(CONTROLVM_MESSAGE));
+	memset(msg, 0, sizeof(struct controlvm_message));
 	msg->hdr.id = id;
 	msg->hdr.flags.response_expected = rsp;
 	msg->hdr.flags.server = svr;
@@ -1118,7 +1118,7 @@ uislib_client_add_vnic(u32 busNo)
 	BOOL busCreated = FALSE;
 	int devNo = 0;		/* Default to 0, since only one device
 				 * will be created for this bus... */
-	CONTROLVM_MESSAGE msg;
+	struct controlvm_message msg;
 
 	init_msg_header(&msg, CONTROLVM_BUS_CREATE, 0, 0);
 	msg.hdr.flags.test_message = 1;
@@ -1166,7 +1166,7 @@ uislib_client_delete_vnic(u32 busNo)
 {
 	int devNo = 0;		/* Default to 0, since only one device
 				 * will be created for this bus... */
-	CONTROLVM_MESSAGE msg;
+	struct controlvm_message msg;
 
 	init_msg_header(&msg, CONTROLVM_DEVICE_DESTROY, 0, 0);
 	msg.hdr.flags.test_message = 1;
@@ -1586,9 +1586,9 @@ uislib_mod_init(void)
 	LOGINF("sizeof(uiscmdrsp_net):%lu\n",
 	       (ulong)sizeof(struct uiscmdrsp_net));
 	LOGINF("sizeof(CONTROLVM_MESSAGE):%lu bytes\n",
-	       (ulong)sizeof(struct controlvm_message));
-	LOGINF("sizeof(struct spar_controlvm_channel_protocol):%lu bytes\n",
-	       (ulong)sizeof(struct spar_controlvm_channel_protocol));
+	       (ulong) sizeof(struct controlvm_message));
+	LOGINF("sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL):%lu bytes\n",
+	       (ulong) sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL));
 	LOGINF("sizeof(CHANNEL_HEADER):%lu bytes\n",
 	       (ulong) sizeof(struct channel_header));
 	LOGINF("sizeof(ULTRA_IO_CHANNEL_PROTOCOL):%lu bytes\n",
