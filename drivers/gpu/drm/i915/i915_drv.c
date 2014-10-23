@@ -669,22 +669,6 @@ int i915_suspend(struct drm_device *dev, pm_message_t state)
 	return i915_drm_suspend_late(dev);
 }
 
-static int i915_drm_thaw_early(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	int ret;
-
-	ret = intel_resume_prepare(dev_priv, false);
-	if (ret)
-		DRM_ERROR("Resume prepare failed: %d,Continuing resume\n", ret);
-
-	intel_uncore_early_sanitize(dev, true);
-	intel_uncore_sanitize(dev);
-	intel_power_domains_init_hw(dev_priv);
-
-	return ret;
-}
-
 static int __i915_drm_thaw(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -754,13 +738,11 @@ static int __i915_drm_thaw(struct drm_device *dev)
 	return 0;
 }
 
-static int i915_drm_thaw(struct drm_device *dev)
+static int i915_resume_early(struct drm_device *dev)
 {
-	return __i915_drm_thaw(dev);
-}
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int ret;
 
-static int i915_drm_resume_early(struct drm_device *dev)
-{
 	/*
 	 * We have a resume ordering issue with the snd-hda driver also
 	 * requiring our device to be power up. Due to the lack of a
@@ -775,16 +757,11 @@ static int i915_drm_resume_early(struct drm_device *dev)
 
 	pci_set_master(dev->pdev);
 
-	if (IS_VALLEYVIEW(dev_priv))
-		ret = vlv_resume_prepare(dev_priv, false);
+	ret = intel_resume_prepare(dev_priv, false);
 	if (ret)
 		DRM_ERROR("Resume prepare failed: %d,Continuing resume\n", ret);
 
 	intel_uncore_early_sanitize(dev, true);
-
-	if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv))
-		hsw_disable_pc8(dev_priv);
-
 	intel_uncore_sanitize(dev);
 	intel_power_domains_init_hw(dev_priv);
 
@@ -1006,65 +983,6 @@ static int i915_pm_resume(struct device *dev)
 		return 0;
 
 	return i915_drm_resume(drm_dev);
-}
-
-static int i915_pm_freeze(struct device *dev)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-
-	if (!drm_dev || !drm_dev->dev_private) {
-		dev_err(dev, "DRM not initialized, aborting suspend.\n");
-		return -ENODEV;
-	}
-
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	return i915_drm_freeze(drm_dev);
-}
-
-static int i915_pm_freeze_late(struct device *dev)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	return i915_drm_suspend_late(drm_dev);
-}
-
-static int i915_pm_thaw_early(struct device *dev)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	return i915_resume_early(drm_dev);
-}
-
-static int i915_pm_resume(struct device *dev)
-{
-	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
-
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	return i915_drm_thaw(drm_dev);
-}
-
-static int i915_pm_poweroff(struct device *dev)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-
-	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	return i915_drm_freeze(drm_dev);
 }
 
 static int hsw_suspend_complete(struct drm_i915_private *dev_priv)
@@ -1598,28 +1516,11 @@ static const struct dev_pm_ops i915_pm_ops = {
 	.suspend_late = i915_pm_suspend_late,
 	.resume_early = i915_pm_resume_early,
 	.resume = i915_pm_resume,
-
-	/*
-	 * S4 event handlers
-	 * @freeze, @freeze_late    : called (1) before creating the
-	 *                            hibernation image [PMSG_FREEZE] and
-	 *                            (2) after rebooting, before restoring
-	 *                            the image [PMSG_QUIESCE]
-	 * @thaw, @thaw_early       : called (1) after creating the hibernation
-	 *                            image, before writing it [PMSG_THAW]
-	 *                            and (2) after failing to create or
-	 *                            restore the image [PMSG_RECOVER]
-	 * @poweroff, @poweroff_late: called after writing the hibernation
-	 *                            image, before rebooting [PMSG_HIBERNATE]
-	 * @restore, @restore_early : called after rebooting and restoring the
-	 *                            hibernation image [PMSG_RESTORE]
-	 */
 	.freeze = i915_pm_suspend,
 	.freeze_late = i915_pm_suspend_late,
 	.thaw_early = i915_pm_resume_early,
 	.thaw = i915_pm_resume,
 	.poweroff = i915_pm_suspend,
-	.poweroff_late = i915_pm_suspend_late,
 	.restore_early = i915_pm_resume_early,
 	.restore = i915_pm_resume,
 
