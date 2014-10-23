@@ -645,7 +645,7 @@ static int i915_drm_suspend_late(struct drm_device *drm_dev)
 	return 0;
 }
 
-int i915_suspend_legacy(struct drm_device *dev, pm_message_t state)
+int i915_suspend(struct drm_device *dev, pm_message_t state)
 {
 	int error;
 
