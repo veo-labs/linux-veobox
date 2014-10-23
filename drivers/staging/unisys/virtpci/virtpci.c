@@ -173,7 +173,8 @@ int WAIT_FOR_IO_CHANNEL(struct spar_io_channel_protocol __iomem  *chanptr)
 	int count = 120;
 
 	while (count > 0) {
-		if (SPAR_CHANNEL_SERVER_READY(&chanptr->channel_header))
+
+		if (SPAR_CHANNEL_SERVER_READY(&chanptr->ChannelHeader))
 			return 1;
 		UIS_THREAD_WAIT_SEC(1);
 		count--;
