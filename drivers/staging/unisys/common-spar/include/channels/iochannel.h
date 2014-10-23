@@ -204,8 +204,8 @@ enum net_types {
 #define MAX_MACADDR_LEN 6	/* number of bytes in MAC address */
 #endif				/* MAX_MACADDR_LEN */
 
-#define ETH_IS_LOCALLY_ADMINISTERED(address) \
-	(((u8 *)(address))[0] & ((u8)0x02))
+#define ETH_IS_LOCALLY_ADMINISTERED(Address) \
+	(((u8 *)(Address))[0] & ((u8) 0x02))
 #define NIC_VENDOR_ID 0x0008000B
 
 /* various types of scsi task mgmt commands  */
@@ -764,9 +764,9 @@ typedef struct _ULTRA_IO_CHANNEL_PROTOCOL {
 				offsetof(type, clientString);		\
 			memcpy(chan->clientString, clientStr,		\
 			       MINNUM(clientStrLen,			\
-				      (u32) (MAX_CLIENTSTRING_LEN - 1))); \
+				      (u32)(MAX_CLIENTSTRING_LEN - 1))); \
 			chan->clientString[MINNUM(clientStrLen,		\
-						  (u32) (MAX_CLIENTSTRING_LEN \
+						  (u32)(MAX_CLIENTSTRING_LEN \
 							 - 1))]		\
 				= '\0';					\
 		}							\
