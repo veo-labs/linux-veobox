@@ -47,13 +47,13 @@ static const uuid_le spar_controlvm_channel_protocol_uuid =
 
 #define SPAR_CONTROLVM_CHANNEL_OK_CLIENT(pChannel)           \
 	(spar_check_channel_client(pChannel, \
-				   UltraControlvmChannelProtocolGuid, \
+				   spar_controlvm_channel_protocol_uuid, \
 				   "controlvm", \
 				   sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL), \
 				   ULTRA_CONTROLVM_CHANNEL_PROTOCOL_VERSIONID, \
 				   ULTRA_CONTROLVM_CHANNEL_PROTOCOL_SIGNATURE))
 #define ULTRA_CONTROLVM_CHANNEL_OK_SERVER(actualBytes)        \
-	(spar_check_channel_server(UltraControlvmChannelProtocolGuid,	\
+	(spar_check_channel_server(spar_controlvm_channel_protocol_uuid,\
 				    "controlvm",			\
 				    sizeof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL), \
 				    actualBytes))
