@@ -60,13 +60,13 @@ static const uuid_le spar_diag_channel_protocol_uuid =
 
 #define ULTRA_DIAG_CHANNEL_OK_CLIENT(pChannel, logCtx)			\
 	(spar_check_channel_client(pChannel,				\
-				    UltraDiagChannelProtocolGuid,	\
+				    spar_diag_channel_protocol_uuid,	\
 				    "diag",				\
 				    sizeof(ULTRA_DIAG_CHANNEL_PROTOCOL), \
 				    ULTRA_DIAG_CHANNEL_PROTOCOL_VERSIONID, \
 				    ULTRA_DIAG_CHANNEL_PROTOCOL_SIGNATURE))
 #define ULTRA_DIAG_CHANNEL_OK_SERVER(actualBytes)		\
-	(spar_check_channel_server(UltraDiagChannelProtocolGuid,	\
+	(spar_check_channel_server(spar_diag_channel_protocol_uuid,	\
 				   "diag",				\
 				   sizeof(ULTRA_DIAG_CHANNEL_PROTOCOL), \
 				    actualBytes))
