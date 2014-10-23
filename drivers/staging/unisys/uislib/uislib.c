@@ -481,8 +481,9 @@ static int create_device(struct controlvm_message *msg, char *buf)
 
 				if (!uuid_le_cmp(dev->channel_uuid,
 				     spar_vhba_channel_protocol_uuid)) {
-					wait_for_valid_guid(&((CHANNEL_HEADER
-							      __iomem *) (dev->
+					wait_for_valid_guid(&((
+						struct channel_header
+							__iomem *) (dev->
 								  chanptr))->
 							    chtype);
 					if (!SPAR_VHBA_CHANNEL_OK_CLIENT
@@ -506,8 +507,9 @@ static int create_device(struct controlvm_message *msg, char *buf)
 				} else
 				    if (!uuid_le_cmp(dev->channel_uuid,
 					 spar_vnic_channel_protocol_uuid)) {
-					wait_for_valid_guid(&((CHANNEL_HEADER
-							      __iomem *) (dev->
+					wait_for_valid_guid(&((
+						struct channel_header
+							__iomem *) (dev->
 								  chanptr))->
 							    chtype);
 					if (!SPAR_VNIC_CHANNEL_OK_CLIENT
@@ -1588,9 +1590,9 @@ uislib_mod_init(void)
 	LOGINF("sizeof(struct spar_controlvm_channel_protocol):%lu bytes\n",
 	       (ulong)sizeof(struct spar_controlvm_channel_protocol));
 	LOGINF("sizeof(CHANNEL_HEADER):%lu bytes\n",
-	       (ulong)sizeof(struct channel_header));
-	LOGINF("sizeof(struct spar_io_channel_protocol):%lu bytes\n",
-	       (ulong)sizeof(struct spar_io_channel_protocol));
+	       (ulong) sizeof(struct channel_header));
+	LOGINF("sizeof(ULTRA_IO_CHANNEL_PROTOCOL):%lu bytes\n",
+	       (ulong) sizeof(ULTRA_IO_CHANNEL_PROTOCOL));
 	LOGINF("SIZEOF_CMDRSP:%lu bytes\n", SIZEOF_CMDRSP);
 	LOGINF("SIZEOF_PROTOCOL:%lu bytes\n", SIZEOF_PROTOCOL);
 

@@ -421,9 +421,9 @@ process_disk_notify(struct Scsi_Host *shost, struct uiscmdrsp *cmdrsp)
 static irqreturn_t
 virthba_isr(int irq, void *dev_id)
 {
-	struct virthba_info *virthbainfo = (struct virthba_info *)dev_id;
-	struct channel_header __iomem *channel_header;
-	struct signal_queue_header __iomem *pqhdr;
+	struct virthba_info *virthbainfo = (struct virthba_info *) dev_id;
+	struct channel_header __iomem *pChannelHeader;
+	SIGNAL_QUEUE_HEADER __iomem *pqhdr;
 	u64 mask;
 	unsigned long long rc1;
 
@@ -462,9 +462,9 @@ virthba_probe(struct virtpci_dev *virtpcidev, const struct pci_device_id *id)
 	struct virthba_info *virthbainfo;
 	int rsp;
 	int i;
-	irq_handler_t handler = virthba_isr;
-	struct channel_header __iomem *channel_header;
-	struct signal_queue_header __iomem *pqhdr;
+	irq_handler_t handler = virthba_ISR;
+	struct channel_header __iomem *pChannelHeader;
+	SIGNAL_QUEUE_HEADER __iomem *pqhdr;
 	u64 mask;
 
 	LOGVER("entering virthba_probe...\n");

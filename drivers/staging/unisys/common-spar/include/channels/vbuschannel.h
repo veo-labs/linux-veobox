@@ -81,7 +81,7 @@ struct spar_vbus_headerinfo {
 };
 
 struct ultra_vbus_channel_protocol {
-	ULTRA_CHANNEL_PROTOCOL ChannelHeader;	/* initialized by server */
+	struct channel_header ChannelHeader;	/* initialized by server */
 	ULTRA_VBUS_HEADERINFO HdrInfo;	/* initialized by server */
 	/* the remainder of this channel is filled in by the client */
 	struct ultra_vbus_deviceinfo ChpInfo;

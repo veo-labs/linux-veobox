@@ -681,11 +681,11 @@ struct uiscmdrsp {
 
 /* This is just the header of the IO channel.  It is assumed that directly after
 * this header there is a large region of memory which contains the command and
-* response queues as specified in cmd_q and rsp_q SIGNAL_QUEUE_HEADERS. */
-struct spar_io_channel_protocol {
-	struct channel_header channel_header;
-	struct signal_queue_header cmd_q;
-	struct signal_queue_header rsp_q;
+* response queues as specified in cmdQ and rspQ SIGNAL_QUEUE_HEADERS. */
+typedef struct _ULTRA_IO_CHANNEL_PROTOCOL {
+	struct channel_header ChannelHeader;
+	SIGNAL_QUEUE_HEADER cmdQ;
+	SIGNAL_QUEUE_HEADER rspQ;
 	union {
 		struct {
 			struct vhba_wwnn wwnn;	/* 8 bytes */

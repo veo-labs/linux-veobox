@@ -28,8 +28,8 @@
 
 #define MYDRVNAME "visorchannel"
 
-struct visorchannel {
-	struct memregion *memregion;	/* from visor_memregion_create() */
+struct VISORCHANNEL_Tag {
+	MEMREGION *memregion;	/* from visor_memregion_create() */
 	struct channel_header chan_hdr;
 	uuid_le guid;
 	ulong size;
@@ -228,7 +228,7 @@ visorchannel_read(struct visorchannel *channel, ulong offset,
 	int rc = visor_memregion_read(channel->memregion, offset,
 				      local, nbytes);
 	if ((rc >= 0) && (offset == 0) &&
-	    (nbytes >= sizeof(struct channel_header))) {
+	   (nbytes >= sizeof(struct channel_header))) {
 		memcpy(&channel->chan_hdr, local,
 		       sizeof(struct channel_header));
 	}
@@ -324,7 +324,7 @@ sig_read_header(struct visorchannel *channel, u32 queue,
 {
 	BOOL rc = FALSE;
 
-	if (channel->chan_hdr.ch_space_offset < sizeof(struct channel_header)) {
+	if (channel->chan_hdr.oChannelSpace < sizeof(struct channel_header)) {
 		ERRDRV("oChannelSpace too small: (status=%d)\n", rc);
 		goto cleanup;
 	}
@@ -578,7 +578,7 @@ visorchannel_debug(struct visorchannel *channel, int num_queues,
 {
 	HOSTADDRESS addr = 0;
 	ulong nbytes = 0, nbytes_region = 0;
-	struct memregion *memregion = NULL;
+	MEMREGION *memregion = NULL;
 	struct channel_header hdr;
 	struct channel_header *phdr = &hdr;
 	int i = 0;

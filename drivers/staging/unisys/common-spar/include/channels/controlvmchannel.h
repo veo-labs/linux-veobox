@@ -393,9 +393,33 @@ struct guest_devices  {
 	u32 pad;
 };
 
-struct spar_controlvm_channel_protocol {
-	 struct channel_header header;
-	 GUEST_PHYSICAL_ADDRESS gp_controlvm;	/* guest physical address of
+/* All messages in any ControlVm queue have this layout. */
+typedef struct _CONTROLVM_MESSAGE  {
+	CONTROLVM_MESSAGE_HEADER hdr;
+	CONTROLVM_MESSAGE_PACKET cmd;
+} CONTROLVM_MESSAGE;
+
+typedef struct _DEVICE_MAP  {
+	GUEST_PHYSICAL_ADDRESS DeviceChannelAddress;
+	u64 DeviceChannelSize;
+	u32 CA_Index;
+	u32 Reserved;		/* natural alignment */
+	u64 Reserved2;		/* Align structure on 32-byte boundary */
+} DEVICE_MAP;
+
+typedef struct _GUEST_DEVICES  {
+	DEVICE_MAP VideoChannel;
+	DEVICE_MAP KeyboardChannel;
+	DEVICE_MAP NetworkChannel;
+	DEVICE_MAP StorageChannel;
+	DEVICE_MAP ConsoleChannel;
+	u32 PartitionIndex;
+	u32 Pad;
+} GUEST_DEVICES;
+
+typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
+	 struct channel_header Header;
+	 GUEST_PHYSICAL_ADDRESS gpControlVm;	/* guest physical address of
 						 * this channel */
 	 GUEST_PHYSICAL_ADDRESS gp_partition_tables;/* guest physical address of
 						     * partition tables */
