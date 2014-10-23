@@ -74,7 +74,7 @@ visor_signal_insert(struct channel_header __iomem *pChannel, u32 Queue,
 	 */
 	psignal = (char __iomem *)pqhdr + readq(&pqhdr->sig_base_offset) +
 		(head * readl(&pqhdr->signal_size));
-	memcpy_toio(psignal, sig, readl(&pqhdr->signal_size));
+	memcpy_toio(psignal, pSignal, readl(&pqhdr->signal_size));
 
 	mb(); /* channel synch */
 	writel(head, &pqhdr->head);
@@ -126,9 +126,9 @@ visor_signal_remove(struct channel_header __iomem *pChannel, u32 Queue,
 	tail = (tail + 1) % readl(&pqhdr->max_slots);
 
 	/* copy signal from tail location to the area pointed to by pSignal */
-	psource = (char __iomem *)pqhdr + readq(&pqhdr->sig_base_offset) +
+	psource = (char __iomem *) pqhdr + readq(&pqhdr->sig_base_offset) +
 		(tail * readl(&pqhdr->signal_size));
-	memcpy_fromio(sig, psource, readl(&pqhdr->signal_size));
+	memcpy_fromio(pSignal, psource, readl(&pqhdr->signal_size));
 
 	mb(); /* channel synch */
 	writel(tail, &pqhdr->tail);
@@ -183,15 +183,15 @@ SignalRemoveAll(struct channel_header *pChannel, u32 Queue, void *pSignal)
 		 * to by pSignal
 		 */
 		psource =
-		    (char *)pqhdr + pqhdr->sig_base_offset +
+		    (char *) pqhdr + pqhdr->sig_base_offset +
 		    (tail * pqhdr->signal_size);
-		memcpy((char *)sig + (pqhdr->signal_size * count),
+		memcpy((char *) pSignal + (pqhdr->signal_size * signalCount),
 		       psource, pqhdr->signal_size);
 
 		mb(); /* channel synch */
 		pqhdr->tail = tail;
 
-		count++;
+		signalCount++;
 		pqhdr->num_received++;
 	}
 
@@ -215,7 +215,7 @@ visor_signalqueue_empty(struct channel_header __iomem *pChannel, u32 Queue)
 	struct signal_queue_header __iomem *pqhdr =
 	    (struct signal_queue_header __iomem *) ((char __iomem *) pChannel +
 				    readq(&pChannel->ch_space_offset)) + Queue;
-	return readl(&pqhdr->Head) == readl(&pqhdr->Tail);
+	return readl(&pqhdr->head) == readl(&pqhdr->tail);
 }
 EXPORT_SYMBOL_GPL(spar_signalqueue_empty);
 
