@@ -50,7 +50,7 @@
 
 #define ULTRA_CHANNEL_PROTOCOL_SIGNATURE  SIGNATURE_32('E', 'C', 'N', 'L')
 
-typedef enum {
+enum channel_serverstate {
 	CHANNELSRV_UNINITIALIZED = 0,	/* channel is in an undefined state */
 	CHANNELSRV_READY = 1	/* channel has been initialized by server */
 };
