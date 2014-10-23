@@ -8694,6 +8694,9 @@ static void i9xx_update_cursor(struct drm_crtc *crtc, u32 base)
 			cntl |= CURSOR_PIPE_CSC_ENABLE;
 	}
 
+	if (to_intel_plane(crtc->cursor)->rotation == BIT(DRM_ROTATE_180))
+		cntl |= CURSOR_ROTATE_180;
+
 	if (intel_crtc->cursor_cntl != cntl) {
 		I915_WRITE(CURCNTR(pipe), cntl);
 		POSTING_READ(CURCNTR(pipe));
