@@ -50,7 +50,11 @@
 
 #define ULTRA_CHANNEL_PROTOCOL_SIGNATURE  SIGNATURE_32('E', 'C', 'N', 'L')
 
-enum channel_serverstate {
+#define UltraLogEvent(logCtx, EventId, Severity, SubsystemMask, pFunctionName, \
+		      LineNumber, Str, args...)				\
+	pr_info(Str, ## args)
+
+typedef enum {
 	CHANNELSRV_UNINITIALIZED = 0,	/* channel is in an undefined state */
 	CHANNELSRV_READY = 1	/* channel has been initialized by server */
 };
@@ -303,45 +307,43 @@ spar_check_channel_client(void __iomem *ch,
 			      &((struct channel_header __iomem *)(ch))->chtype,
 			      sizeof(guid));
 		/* caller wants us to verify type GUID */
-		if (uuid_le_cmp(guid, expected_uuid) != 0) {
+		if (uuid_le_cmp(guid, expectedTypeGuid) != 0) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=type expected=%pUL actual=%pUL\n",
-			       chname, &expected_uuid,
-			       &expected_uuid, &guid);
+			       channelName, &expectedTypeGuid,
+			       &expectedTypeGuid, &guid);
 			return 0;
 		}
 	}
-	if (expected_min_bytes > 0) {	/* caller wants us to verify
+	if (expectedMinBytes > 0) {	/* caller wants us to verify
 					 * channel size */
-		unsigned long long bytes =
-				readq(&((struct channel_header __iomem *)
-					(ch))->size);
-		if (bytes < expected_min_bytes) {
+		unsigned long long bytes = readq(&((CHANNEL_HEADER __iomem *)
+						(pChannel))->Size);
+		if (bytes < expectedMinBytes) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=size expected=0x%-8.8Lx actual=0x%-8.8Lx\n",
-			       chname, &expected_uuid,
-			       (unsigned long long)expected_min_bytes, bytes);
+			       channelName, &expectedTypeGuid,
+			       (unsigned long long)expectedMinBytes, bytes);
 			return 0;
 		}
 	}
-	if (expected_version > 0) {	/* caller wants us to verify
+	if (expectedVersionId > 0) {	/* caller wants us to verify
 					 * channel version */
-		unsigned long ver = readl(&((struct channel_header __iomem *)
-				    (ch))->version_id);
-		if (ver != expected_version) {
+		unsigned long ver = readl(&((CHANNEL_HEADER __iomem *)
+				    (pChannel))->VersionId);
+		if (ver != expectedVersionId) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=version expected=0x%-8.8lx actual=0x%-8.8lx\n",
-			       chname, &expected_uuid,
-			       (unsigned long)expected_version, ver);
+			       channelName, &expectedTypeGuid,
+			       (unsigned long)expectedVersionId, ver);
 			return 0;
 		}
 	}
-	if (expected_signature > 0) {	/* caller wants us to verify
+	if (expectedSignature > 0) {	/* caller wants us to verify
 					 * channel signature */
-		unsigned long long sig =
-				readq(&((struct channel_header __iomem *)
-					(ch))->signature);
-		if (sig != expected_signature) {
+		unsigned long long sig = readq(&((CHANNEL_HEADER __iomem *)
+					 (pChannel))->Signature);
+		if (sig != expectedSignature) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=signature expected=0x%-8.8llx actual=0x%-8.8llx\n",
-			       chname, &expected_uuid,
-			       expected_signature, sig);
+			       channelName, &expectedTypeGuid,
+			       expectedSignature, sig);
 			return 0;
 		}
 	}
@@ -359,10 +361,10 @@ static inline int spar_check_channel_server(uuid_le typeuuid, char *name,
 {
 	if (expected_min_bytes > 0)	/* caller wants us to verify
 					 * channel size */
-		if (actual_bytes < expected_min_bytes) {
+		if (actualBytes < expectedMinBytes) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=size expected=0x%-8.8llx actual=0x%-8.8llx\n",
-			       name, &typeuuid, expected_min_bytes,
-			       actual_bytes);
+			       channelName, &typeGuid, expectedMinBytes,
+			       actualBytes);
 			return 0;
 		}
 	return 1;
