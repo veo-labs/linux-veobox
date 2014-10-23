@@ -398,7 +398,7 @@ int ipu_csi_init_interface(struct ipu_csi *csi,
 		ipu_csi_write(csi, 0xFF0000, CSI_CCIR_CODE_3);
 		break;
 	case IPU_CSI_CLK_MODE_CCIR656_INTERLACED:
-		if (mbus_fmt->width == 720 && mbus_fmt->height == 576) {
+		if (mbus_fmt->width == 720 && mbus_fmt->height == 625) {
 			/*
 			 * PAL case
 			 *
@@ -412,7 +412,7 @@ int ipu_csi_init_interface(struct ipu_csi *csi,
 			ipu_csi_write(csi, 0xD07DF, CSI_CCIR_CODE_2);
 			ipu_csi_write(csi, 0xFF0000, CSI_CCIR_CODE_3);
 
-		} else if (mbus_fmt->width == 720 && mbus_fmt->height == 480) {
+		} else if (mbus_fmt->width == 720 && mbus_fmt->height == 525) {
 			/*
 			 * NTSC case
 			 *
