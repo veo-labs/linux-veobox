@@ -388,8 +388,8 @@ static ssize_t boottotool_show(struct device *dev,
 	struct efi_spar_indication efiSparIndication;
 
 	visorchannel_read(ControlVm_channel,
-		offsetof(struct spar_controlvm_channel_protocol,
-			efi_spar_ind), &efiSparIndication,
+		offsetof(ULTRA_CONTROLVM_CHANNEL_PROTOCOL,
+			EfiSparIndication), &efiSparIndication,
 		sizeof(struct efi_spar_indication));
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
 			efiSparIndication.boot_to_tool);

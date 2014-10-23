@@ -150,7 +150,7 @@ struct pci_id {
 	u8 reserved[3];	/* Natural alignment purposes */
 };
 
-typedef struct _ULTRA_EFI_SPAR_INDICATION  {
+struct efi_spar_indication  {
 	u64 BootToFirmwareUI:1;	/* Bit 0: Stop in uefi ui */
 	u64 ClearNvram:1;	/* Bit 1: Clear NVRAM */
 	u64 ClearCmos:1;	/* Bit 2: Clear CMOS */
@@ -450,11 +450,11 @@ typedef struct _ULTRA_CONTROLVM_CHANNEL_PROTOCOL  {
 					  * steps (for progress bars) */
 	u8 tool_action;		/* ULTRA_TOOL_ACTIONS Installation Action
 				 * field */
-	u8 reserved;		/* alignment */
-	struct efi_spar_indication efi_spar_ind;
-	struct efi_spar_indication efi_spar_ind_supported;
-	u32 sp_reserved;
-	u8 reserved2[28];	/* Force signals to begin on 128-byte cache
+	u8 Reserved;		/* alignment */
+	struct efi_spar_indication EfiSparIndication;
+	struct efi_spar_indication EfiSparIndicationSupported;
+	u32 SPReserved;
+	u8 Reserved2[28];	/* Force signals to begin on 128-byte cache
 				 * line */
 	struct signal_queue_header RequestQueue;/* Service or guest partition
 						 * uses this queue to send
