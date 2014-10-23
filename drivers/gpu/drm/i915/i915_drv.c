@@ -669,7 +669,23 @@ int i915_suspend(struct drm_device *dev, pm_message_t state)
 	return i915_drm_suspend_late(dev);
 }
 
-static int i915_drm_resume(struct drm_device *dev)
+static int i915_drm_thaw_early(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	int ret;
+
+	ret = intel_resume_prepare(dev_priv, false);
+	if (ret)
+		DRM_ERROR("Resume prepare failed: %d,Continuing resume\n", ret);
+
+	intel_uncore_early_sanitize(dev, true);
+	intel_uncore_sanitize(dev);
+	intel_power_domains_init_hw(dev_priv);
+
+	return ret;
+}
+
+static int __i915_drm_thaw(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
@@ -735,7 +751,7 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	drm_kms_helper_poll_enable(dev);
 
-	return 0;
+	return __i915_drm_thaw(dev);
 }
 
 static int i915_drm_resume_early(struct drm_device *dev)
@@ -774,10 +790,7 @@ static int i915_drm_resume(struct drm_device *dev)
 {
 	int ret;
 
-	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
-		return 0;
-
-	ret = i915_drm_resume_early(dev);
+	ret = __i915_drm_thaw(dev);
 	if (ret)
 		return ret;
 
