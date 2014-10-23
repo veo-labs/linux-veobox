@@ -486,8 +486,8 @@ static int create_device(struct controlvm_message *msg, char *buf)
 							__iomem *) (dev->
 								  chanptr))->
 							    chtype);
-					if (!SPAR_VHBA_CHANNEL_OK_CLIENT
-					    (dev->chanptr)) {
+					if (!ULTRA_VHBA_CHANNEL_OK_CLIENT
+					    (dev->chanptr, NULL)) {
 						LOGERR("CONTROLVM_DEVICE_CREATE Failed:[CLIENT]VHBA dev %d chan invalid.",
 						     devNo);
 						POSTCODE_LINUX_4
@@ -512,8 +512,8 @@ static int create_device(struct controlvm_message *msg, char *buf)
 							__iomem *) (dev->
 								  chanptr))->
 							    chtype);
-					if (!SPAR_VNIC_CHANNEL_OK_CLIENT
-					    (dev->chanptr)) {
+					if (!ULTRA_VNIC_CHANNEL_OK_CLIENT
+					    (dev->chanptr, NULL)) {
 						LOGERR("CONTROLVM_DEVICE_CREATE Failed: VNIC[CLIENT] dev %d chan invalid.",
 						     devNo);
 						POSTCODE_LINUX_4

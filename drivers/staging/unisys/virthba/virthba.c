@@ -445,10 +445,10 @@ virthba_isr(int irq, void *dev_id)
 		return IRQ_NONE;
 	}
 	pqhdr = (struct signal_queue_header __iomem *)
-		((char __iomem *)channel_header +
-		 readq(&channel_header->ch_space_offset)) + IOCHAN_FROM_IOPART;
-	writeq(readq(&pqhdr->num_irq_received) + 1,
-	       &pqhdr->num_irq_received);
+		((char __iomem *) pChannelHeader +
+		 readq(&pChannelHeader->ch_space_offset)) + IOCHAN_FROM_IOPART;
+	writeq(readq(&pqhdr->NumInterruptsReceived) + 1,
+	       &pqhdr->NumInterruptsReceived);
 	atomic_set(&virthbainfo->interrupt_rcvd, 1);
 	wake_up_interruptible(&virthbainfo->rsp_queue);
 	return IRQ_HANDLED;
@@ -589,9 +589,9 @@ virthba_probe(struct virtpci_dev *virtpcidev, const struct pci_device_id *id)
 
 	channel_header = virthbainfo->chinfo.queueinfo->chan;
 	pqhdr = (struct signal_queue_header __iomem *)
-		((char __iomem *)channel_header +
-		 readq(&channel_header->ch_space_offset)) + IOCHAN_FROM_IOPART;
-	virthbainfo->flags_addr = &pqhdr->features;
+		((char __iomem *)pChannelHeader +
+		 readq(&pChannelHeader->ch_space_offset)) + IOCHAN_FROM_IOPART;
+	virthbainfo->flags_addr = &pqhdr->FeatureFlags;
 
 	if (!uisthread_start(&virthbainfo->chinfo.threadinfo,
 			     process_incoming_rsps,

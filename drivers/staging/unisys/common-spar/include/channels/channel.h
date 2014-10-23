@@ -93,8 +93,9 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 	return (const u8 *)("?");
 }
 
-#define SPAR_CHANNEL_SERVER_READY(ch) \
-	(readl(&(ch)->srv_state) == CHANNELSRV_READY)
+#define ULTRA_CHANNELSRV_IS_READY(x)     ((x) == CHANNELSRV_READY)
+#define ULTRA_CHANNEL_SERVER_READY(pChannel) \
+	(ULTRA_CHANNELSRV_IS_READY(readl(&(pChannel)->srv_state)))
 
 #define ULTRA_VALID_CHANNELCLI_TRANSITION(o, n)				\
 	(((((o) == CHANNELCLI_DETACHED) && ((n) == CHANNELCLI_DISABLED)) || \
@@ -132,21 +133,21 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 	do {								\
 		ULTRA_CHANNEL_CLIENT_CHK_TRANSITION(			\
 			readl(&(((struct channel_header __iomem *) \
-				 (pChan))->CliStateOS)),		\
+				 (pChan))->cli_state_os)),		\
 			newstate,					\
 			chanId, logCtx, __FILE__, __LINE__);		\
 			pr_info("%s Channel StateTransition (%s) %s(%d)-->%s(%d) @%s:%d\n", \
 				chanId, "CliStateOS",			\
 				ULTRA_CHANNELCLI_STRING( \
 				      readl(&((struct channel_header __iomem *)\
-					      (pChan))->CliStateOS)),	\
+					      (pChan))->cli_state_os)),	\
 				readl(&((struct channel_header __iomem *) \
-				      (pChan))->CliStateOS),		\
+				      (pChan))->cli_state_os),		\
 				ULTRA_CHANNELCLI_STRING(newstate),	\
 				newstate,				\
 				PathName_Last_N_Nodes(__FILE__, 4), __LINE__); \
 		writel(newstate, &((struct channel_header __iomem *) \
-				   (pChan))->CliStateOS);		\
+				   (pChan))->cli_state_os);		\
 		mb(); /* required for channel synch */			\
 	} while (0)
 
@@ -191,20 +192,20 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 #pragma pack(push, 1)		/* both GCC and VC now allow this pragma */
 /* Common Channel Header */
 struct channel_header {
-	u64 Signature;		/* Signature */
-	u32 LegacyState;	/* DEPRECATED - being replaced by */
+	u64 signature;		/* Signature */
+	u32 legacy_state;	/* DEPRECATED - being replaced by */
 	/* /              SrvState, CliStateBoot, and CliStateOS below */
-	u32 HeaderSize;		/* sizeof(struct channel_header) */
-	u64 Size;		/* Total size of this channel in bytes */
-	u64 Features;		/* Flags to modify behavior */
-	uuid_le Type;		/* Channel type: data, bus, control, etc. */
-	u64 PartitionHandle;	/* ID of guest partition */
-	u64 Handle;		/* Device number of this channel in client */
-	u64 oChannelSpace;	/* Offset in bytes to channel specific area */
-	u32 VersionId;		/* struct channel_header Version ID */
-	u32 PartitionIndex;	/* Index of guest partition */
-	uuid_le ZoneGuid;		/* Guid of Channel's zone */
-	u32 oClientString;	/* offset from channel header to
+	u32 header_size;	/* sizeof(struct channel_header) */
+	u64 size;		/* Total size of this channel in bytes */
+	u64 features;		/* Flags to modify behavior */
+	uuid_le chtype;		/* Channel type: data, bus, control, etc. */
+	u64 partition_handle;	/* ID of guest partition */
+	u64 handle;		/* Device number of this channel in client */
+	u64 ch_space_offset;	/* Offset in bytes to channel specific area */
+	u32 version_id;		/* struct channel_header Version ID */
+	u32 partition_index;	/* Index of guest partition */
+	uuid_le zone_uuid;	/* Guid of Channel's zone */
+	u32 cli_str_offset;	/* offset from channel header to
 				 * nul-terminated ClientString (0 if
 				 * ClientString not present) */
 	u32 cli_state_boot;	/* CHANNEL_CLIENTSTATE of pre-boot
@@ -227,7 +228,7 @@ struct channel_header {
 				 * throttled */
 	u8 filler[1];		/* Pad out to 128 byte cacheline */
 	/* Please add all new single-byte values below here */
-	u8 RecoverChannel;
+	u8 recover_channel;
 };
 
 #define ULTRA_CHANNEL_ENABLE_INTS (0x1ULL << 0)
@@ -301,9 +302,8 @@ spar_check_channel_client(void __iomem *ch,
 		uuid_le guid;
 
 		memcpy_fromio(&guid,
-			      &((struct channel_header __iomem *)
-					(pChannel))->Type,
-			      sizeof(guid));
+			&((struct channel_header __iomem *)(pChannel))->chtype,
+			sizeof(guid));
 		/* caller wants us to verify type GUID */
 		if (uuid_le_cmp(guid, expectedTypeGuid) != 0) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=type expected=%pUL actual=%pUL\n",
@@ -316,7 +316,7 @@ spar_check_channel_client(void __iomem *ch,
 					 * channel size */
 		unsigned long long bytes =
 				readq(&((struct channel_header __iomem *)
-					(pChannel))->Size);
+					(pChannel))->size);
 		if (bytes < expectedMinBytes) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=size expected=0x%-8.8Lx actual=0x%-8.8Lx\n",
 			       channelName, &expectedTypeGuid,
@@ -327,7 +327,7 @@ spar_check_channel_client(void __iomem *ch,
 	if (expectedVersionId > 0) {	/* caller wants us to verify
 					 * channel version */
 		unsigned long ver = readl(&((struct channel_header __iomem *)
-				    (pChannel))->VersionId);
+				    (pChannel))->version_id);
 		if (ver != expectedVersionId) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=version expected=0x%-8.8lx actual=0x%-8.8lx\n",
 			       channelName, &expectedTypeGuid,
@@ -339,7 +339,7 @@ spar_check_channel_client(void __iomem *ch,
 					 * channel signature */
 		unsigned long long sig =
 				readq(&((struct channel_header __iomem *)
-					(pChannel))->Signature);
+					(pChannel))->signature);
 		if (sig != expectedSignature) {
 			pr_err("Channel mismatch on channel=%s(%pUL) field=signature expected=0x%-8.8llx actual=0x%-8.8llx\n",
 			       channelName, &expectedTypeGuid,
@@ -406,13 +406,13 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 {
 	struct channel_header __iomem *pChan = pChannel;
 
-	if (readl(&hdr->cli_state_os) == CHANNELCLI_DISABLED) {
-		if ((readb(&hdr->cli_error_os)
+	if (readl(&pChan->cli_state_os) == CHANNELCLI_DISABLED) {
+		if ((readb(&pChan->cli_error_os)
 		     & ULTRA_CLIERROROS_THROTTLEMSG_DISABLED) == 0) {
 			/* we are NOT throttling this message */
-			writeb(readb(&hdr->cli_error_os) |
+			writeb(readb(&pChan->cli_error_os) |
 			       ULTRA_CLIERROROS_THROTTLEMSG_DISABLED,
-			       &hdr->cli_error_os);
+			       &pChan->cli_error_os);
 			/* throttle until acquire successful */
 
 			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client DISABLED @%s:%d\n",
@@ -421,27 +421,27 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 		}
 		return 0;
 	}
-	if ((readl(&hdr->cli_state_os) != CHANNELCLI_OWNED) &&
-	    (readl(&hdr->cli_state_boot) == CHANNELCLI_DISABLED)) {
+	if ((readl(&pChan->cli_state_os) != CHANNELCLI_OWNED)
+	    && (readl(&pChan->cli_state_boot) == CHANNELCLI_DISABLED)) {
 		/* Our competitor is DISABLED, so we can transition to OWNED */
 		pr_info("%s Channel StateTransition (%s) %s(%d)-->%s(%d) @%s:%d\n",
-			chanId, "CliStateOS",
-			ULTRA_CHANNELCLI_STRING(readl(&pChan->CliStateOS)),
-			readl(&pChan->CliStateOS),
+			chanId, "cli_state_os",
+			ULTRA_CHANNELCLI_STRING(readl(&pChan->cli_state_os)),
+			readl(&pChan->cli_state_os),
 			ULTRA_CHANNELCLI_STRING(CHANNELCLI_OWNED),
 			CHANNELCLI_OWNED,
 			PathName_Last_N_Nodes((u8 *) file, 4), line);
-		writel(CHANNELCLI_OWNED, &pChan->CliStateOS);
+		writel(CHANNELCLI_OWNED, &pChan->cli_state_os);
 		mb(); /* required for channel synch */
 	}
-	if (readl(&hdr->cli_state_os) == CHANNELCLI_OWNED) {
-		if (readb(&hdr->cli_error_os) != 0) {
+	if (readl(&pChan->cli_state_os) == CHANNELCLI_OWNED) {
+		if (readb(&pChan->cli_error_os) != 0) {
 			/* we are in an error msg throttling state;
 			 * come out of it */
 			pr_info("%s Channel OS client acquire now successful @%s:%d\n",
 				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
 				line);
-			writeb(0, &pChan->CliErrorOS);
+			writeb(0, &pChan->cli_error_os);
 		}
 		return 1;
 	}
@@ -449,48 +449,48 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 	/* We have to do it the "hard way".  We transition to BUSY,
 	* and can use the channel iff our competitor has not also
 	* transitioned to BUSY. */
-	if (readl(&hdr->cli_state_os) != CHANNELCLI_ATTACHED) {
-		if ((readb(&hdr->cli_error_os)
+	if (readl(&pChan->cli_state_os) != CHANNELCLI_ATTACHED) {
+		if ((readb(&pChan->cli_error_os)
 		     & ULTRA_CLIERROROS_THROTTLEMSG_NOTATTACHED) == 0) {
 			/* we are NOT throttling this message */
-			writeb(readb(&hdr->cli_error_os) |
+			writeb(readb(&pChan->cli_error_os) |
 			       ULTRA_CLIERROROS_THROTTLEMSG_NOTATTACHED,
-			       &hdr->cli_error_os);
+			       &pChan->cli_error_os);
 			/* throttle until acquire successful */
 			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client NOT ATTACHED (state=%s(%d)) @%s:%d\n",
 				chanId, ULTRA_CHANNELCLI_STRING(
-						readl(&pChan->CliStateOS)),
-				readl(&pChan->CliStateOS),
+						readl(&pChan->cli_state_os)),
+				readl(&pChan->cli_state_os),
 				PathName_Last_N_Nodes((u8 *) file, 4),
 				line);
 		}
 		return 0;
 	}
-	writel(CHANNELCLI_BUSY, &hdr->cli_state_os);
+	writel(CHANNELCLI_BUSY, &pChan->cli_state_os);
 	mb(); /* required for channel synch */
-	if (readl(&hdr->cli_state_boot) == CHANNELCLI_BUSY) {
-		if ((readb(&hdr->cli_error_os)
+	if (readl(&pChan->cli_state_boot) == CHANNELCLI_BUSY) {
+		if ((readb(&pChan->cli_error_os)
 		     & ULTRA_CLIERROROS_THROTTLEMSG_BUSY) == 0) {
 			/* we are NOT throttling this message */
-			writeb(readb(&hdr->cli_error_os) |
+			writeb(readb(&pChan->cli_error_os) |
 			       ULTRA_CLIERROROS_THROTTLEMSG_BUSY,
-			       &hdr->cli_error_os);
+			       &pChan->cli_error_os);
 			/* throttle until acquire successful */
 			pr_info("%s Channel StateTransition failed - host OS acquire failed because boot BUSY @%s:%d\n",
 				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
 				line);
 		}
 		/* reset busy */
-		writel(CHANNELCLI_ATTACHED, &hdr->cli_state_os);
+		writel(CHANNELCLI_ATTACHED, &pChan->cli_state_os);
 		mb(); /* required for channel synch */
 		return 0;
 	}
-	if (readb(&hdr->cli_error_os) != 0) {
+	if (readb(&pChan->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
 		pr_info("%s Channel OS client acquire now successful @%s:%d\n",
 			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
 			line);
-		writeb(0, &pChan->CliErrorOS);
+		writeb(0, &pChan->cli_error_os);
 	}
 	return 1;
 }
@@ -500,24 +500,24 @@ spar_channel_client_release_os(void __iomem *ch, u8 *id)
 {
 	struct channel_header __iomem *pChan = pChannel;
 
-	if (readb(&hdr->cli_error_os) != 0) {
+	if (readb(&pChan->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
 		pr_info("%s Channel OS client error state cleared @%s:%d\n",
 			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
 			line);
-		writeb(0, &pChan->CliErrorOS);
+		writeb(0, &pChan->cli_error_os);
 	}
-	if (readl(&hdr->cli_state_os) == CHANNELCLI_OWNED)
+	if (readl(&pChan->cli_state_os) == CHANNELCLI_OWNED)
 		return;
-	if (readl(&pChan->CliStateOS) != CHANNELCLI_BUSY) {
+	if (readl(&pChan->cli_state_os) != CHANNELCLI_BUSY) {
 		pr_info("%s Channel StateTransition INVALID! - release failed because OS client NOT BUSY (state=%s(%d)) @%s:%d\n",
 			chanId, ULTRA_CHANNELCLI_STRING(
-					readl(&pChan->CliStateOS)),
-			readl(&pChan->CliStateOS),
+					readl(&pChan->cli_state_os)),
+			readl(&pChan->cli_state_os),
 			PathName_Last_N_Nodes((u8 *) file, 4), line);
 		/* return; */
 	}
-	writel(CHANNELCLI_ATTACHED, &hdr->cli_state_os); /* release busy */
+	writel(CHANNELCLI_ATTACHED, &pChan->cli_state_os); /* release busy */
 }
 
 /*
