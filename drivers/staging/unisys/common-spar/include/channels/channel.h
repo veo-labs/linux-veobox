@@ -50,10 +50,6 @@
 
 #define ULTRA_CHANNEL_PROTOCOL_SIGNATURE  SIGNATURE_32('E', 'C', 'N', 'L')
 
-#define UltraLogEvent(logCtx, EventId, Severity, SubsystemMask, pFunctionName, \
-		      LineNumber, Str, args...)				\
-	pr_info(Str, ## args)
-
 typedef enum {
 	CHANNELSRV_UNINITIALIZED = 0,	/* channel is in an undefined state */
 	CHANNELSRV_READY = 1	/* channel has been initialized by server */
@@ -123,33 +119,34 @@ ULTRA_CHANNELCLI_STRING(u32 v)
 	do {								\
 		if (!ULTRA_VALID_CHANNELCLI_TRANSITION(old, new))	\
 			pr_info("%s Channel StateTransition INVALID! (%s) %s(%d)-->%s(%d) @%s:%d\n", \
-				id, "CliState<x>",		\
+				chanId, "CliState<x>",		\
 				ULTRA_CHANNELCLI_STRING(old),	\
 				old,				\
 				ULTRA_CHANNELCLI_STRING(new),	\
 				new,				\
-				pathname_last_n_nodes((u8 *)file, 4), \
+				PathName_Last_N_Nodes((u8 *)file, 4), \
 				line);				\
 	} while (0)
 
 #define SPAR_CHANNEL_CLIENT_TRANSITION(ch, id, newstate, log)		\
 	do {								\
-		SPAR_CHANNEL_CLIENT_CHK_TRANSITION(			\
-			readl(&(((struct channel_header __iomem *)\
-				 (ch))->cli_state_os)),		\
-			newstate, id, log, __FILE__, __LINE__);		\
+		ULTRA_CHANNEL_CLIENT_CHK_TRANSITION(			\
+			readl(&(((CHANNEL_HEADER __iomem *) \
+				 (pChan))->CliStateOS)),		\
+			newstate,					\
+			chanId, logCtx, __FILE__, __LINE__);		\
 			pr_info("%s Channel StateTransition (%s) %s(%d)-->%s(%d) @%s:%d\n", \
-				id, "CliStateOS",			\
+				chanId, "CliStateOS",			\
 				ULTRA_CHANNELCLI_STRING( \
-				      readl(&((struct channel_header __iomem *)\
-					      (ch))->cli_state_os)),	\
-				readl(&((struct channel_header __iomem *)\
-				      (ch))->cli_state_os),		\
+				      readl(&((CHANNEL_HEADER __iomem *) \
+					      (pChan))->CliStateOS)),	\
+				readl(&((CHANNEL_HEADER __iomem *) \
+				      (pChan))->CliStateOS),		\
 				ULTRA_CHANNELCLI_STRING(newstate),	\
 				newstate,				\
-				pathname_last_n_nodes(__FILE__, 4), __LINE__); \
-		writel(newstate, &((struct channel_header __iomem *)\
-				   (ch))->cli_state_os);		\
+				PathName_Last_N_Nodes(__FILE__, 4), __LINE__); \
+		writel(newstate, &((CHANNEL_HEADER __iomem *) \
+				   (pChan))->CliStateOS);		\
 		mb(); /* required for channel synch */			\
 	} while (0)
 
@@ -415,30 +412,33 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			       &hdr->cli_error_os);
 			/* throttle until acquire successful */
 
-			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client DISABLED\n",
-				id);
+			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client DISABLED @%s:%d\n",
+				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				line);
 		}
 		return 0;
 	}
 	if ((readl(&hdr->cli_state_os) != CHANNELCLI_OWNED) &&
 	    (readl(&hdr->cli_state_boot) == CHANNELCLI_DISABLED)) {
 		/* Our competitor is DISABLED, so we can transition to OWNED */
-		pr_info("%s Channel StateTransition (%s) %s(%d)-->%s(%d)\n",
-			id, "cli_state_os",
-			ULTRA_CHANNELCLI_STRING(readl(&hdr->cli_state_os)),
-			readl(&hdr->cli_state_os),
+		pr_info("%s Channel StateTransition (%s) %s(%d)-->%s(%d) @%s:%d\n",
+			chanId, "CliStateOS",
+			ULTRA_CHANNELCLI_STRING(readl(&pChan->CliStateOS)),
+			readl(&pChan->CliStateOS),
 			ULTRA_CHANNELCLI_STRING(CHANNELCLI_OWNED),
-			CHANNELCLI_OWNED);
-		writel(CHANNELCLI_OWNED, &hdr->cli_state_os);
+			CHANNELCLI_OWNED,
+			PathName_Last_N_Nodes((u8 *) file, 4), line);
+		writel(CHANNELCLI_OWNED, &pChan->CliStateOS);
 		mb(); /* required for channel synch */
 	}
 	if (readl(&hdr->cli_state_os) == CHANNELCLI_OWNED) {
 		if (readb(&hdr->cli_error_os) != 0) {
 			/* we are in an error msg throttling state;
 			 * come out of it */
-			pr_info("%s Channel OS client acquire now successful\n",
-				id);
-			writeb(0, &hdr->cli_error_os);
+			pr_info("%s Channel OS client acquire now successful @%s:%d\n",
+				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				line);
+			writeb(0, &pChan->CliErrorOS);
 		}
 		return 1;
 	}
@@ -454,10 +454,12 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			       ULTRA_CLIERROROS_THROTTLEMSG_NOTATTACHED,
 			       &hdr->cli_error_os);
 			/* throttle until acquire successful */
-			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client NOT ATTACHED (state=%s(%d))\n",
-				id, ULTRA_CHANNELCLI_STRING(
-						readl(&hdr->cli_state_os)),
-				readl(&hdr->cli_state_os));
+			pr_info("%s Channel StateTransition INVALID! - acquire failed because OS client NOT ATTACHED (state=%s(%d)) @%s:%d\n",
+				chanId, ULTRA_CHANNELCLI_STRING(
+						readl(&pChan->CliStateOS)),
+				readl(&pChan->CliStateOS),
+				PathName_Last_N_Nodes((u8 *) file, 4),
+				line);
 		}
 		return 0;
 	}
@@ -471,8 +473,9 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 			       ULTRA_CLIERROROS_THROTTLEMSG_BUSY,
 			       &hdr->cli_error_os);
 			/* throttle until acquire successful */
-			pr_info("%s Channel StateTransition failed - host OS acquire failed because boot BUSY\n",
-				id);
+			pr_info("%s Channel StateTransition failed - host OS acquire failed because boot BUSY @%s:%d\n",
+				chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+				line);
 		}
 		/* reset busy */
 		writel(CHANNELCLI_ATTACHED, &hdr->cli_state_os);
@@ -481,8 +484,10 @@ spar_channel_client_acquire_os(void __iomem *ch, u8 *id)
 	}
 	if (readb(&hdr->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
-		pr_info("%s Channel OS client acquire now successful\n", id);
-		writeb(0, &hdr->cli_error_os);
+		pr_info("%s Channel OS client acquire now successful @%s:%d\n",
+			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+			line);
+		writeb(0, &pChan->CliErrorOS);
 	}
 	return 1;
 }
@@ -494,16 +499,19 @@ spar_channel_client_release_os(void __iomem *ch, u8 *id)
 
 	if (readb(&hdr->cli_error_os) != 0) {
 		/* we are in an error msg throttling state; come out of it */
-		pr_info("%s Channel OS client error state cleared\n", id);
-		writeb(0, &hdr->cli_error_os);
+		pr_info("%s Channel OS client error state cleared @%s:%d\n",
+			chanId, PathName_Last_N_Nodes((u8 *) file, 4),
+			line);
+		writeb(0, &pChan->CliErrorOS);
 	}
 	if (readl(&hdr->cli_state_os) == CHANNELCLI_OWNED)
 		return;
-	if (readl(&hdr->cli_state_os) != CHANNELCLI_BUSY) {
-		pr_info("%s Channel StateTransition INVALID! - release failed because OS client NOT BUSY (state=%s(%d))\n",
-			id, ULTRA_CHANNELCLI_STRING(
-					readl(&hdr->cli_state_os)),
-			readl(&hdr->cli_state_os));
+	if (readl(&pChan->CliStateOS) != CHANNELCLI_BUSY) {
+		pr_info("%s Channel StateTransition INVALID! - release failed because OS client NOT BUSY (state=%s(%d)) @%s:%d\n",
+			chanId, ULTRA_CHANNELCLI_STRING(
+					readl(&pChan->CliStateOS)),
+			readl(&pChan->CliStateOS),
+			PathName_Last_N_Nodes((u8 *) file, 4), line);
 		/* return; */
 	}
 	writel(CHANNELCLI_ATTACHED, &hdr->cli_state_os); /* release busy */
