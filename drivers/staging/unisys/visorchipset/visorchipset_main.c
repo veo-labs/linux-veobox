@@ -1034,8 +1034,9 @@ device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
 			break;
 		case CONTROLVM_DEVICE_CHANGESTATE:
 			/* ServerReady / ServerRunning / SegmentStateRunning */
-			if (state.alive == SegmentStateRunning.alive &&
-			    state.operating == SegmentStateRunning.operating) {
+			if (state.alive == segment_state_running.alive &&
+			    state.operating ==
+				segment_state_running.operating) {
 				if (notifiers->device_resume) {
 					(*notifiers->device_resume) (busNo,
 								     devNo);
@@ -1043,9 +1044,9 @@ device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
 				}
 			}
 			/* ServerNotReady / ServerLost / SegmentStateStandby */
-			else if (state.alive == SegmentStateStandby.alive &&
+			else if (state.alive == segment_state_standby.alive &&
 				 state.operating ==
-				 SegmentStateStandby.operating) {
+				 segment_state_standby.operating) {
 				/* technically this is standby case
 				 * where server is lost
 				 */
@@ -1054,9 +1055,9 @@ device_epilog(u32 busNo, u32 devNo, struct spar_segment_state state, u32 cmd,
 								    devNo);
 					notified = TRUE;
 				}
-			} else if (state.alive == SegmentStatePaused.alive &&
+			} else if (state.alive == segment_state_paused.alive &&
 				   state.operating ==
-				   SegmentStatePaused.operating) {
+				   segment_state_paused.operating) {
 				/* this is lite pause where channel is
 				 * still valid just 'pause' of it
 				 */
@@ -2178,7 +2179,7 @@ visorchipset_device_pause_response(ulong bus_no, ulong dev_no, int response)
 {
 
 	device_changestate_responder(CONTROLVM_DEVICE_CHANGESTATE,
-				     bus_no, dev_no, response,
+				     busNo, devNo, response,
 				     segment_state_standby);
 }
 EXPORT_SYMBOL_GPL(visorchipset_device_pause_response);
