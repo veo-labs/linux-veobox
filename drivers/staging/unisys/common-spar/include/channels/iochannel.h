@@ -725,7 +725,8 @@ typedef struct _ULTRA_IO_CHANNEL_PROTOCOL {
 * INLINE functions for initializing and accessing I/O data channels
 */
 
-#define SIZEOF_PROTOCOL (COVER(sizeof(struct spar_io_channel_protocol), 64))
+#define NUMSIGNALS(x, q) (((ULTRA_IO_CHANNEL_PROTOCOL *)(x))->q.MaxSignalSlots)
+#define SIZEOF_PROTOCOL (COVER(sizeof(ULTRA_IO_CHANNEL_PROTOCOL), 64))
 #define SIZEOF_CMDRSP (COVER(sizeof(struct uiscmdrsp), 64))
 
 #define MIN_IO_CHANNEL_SIZE COVER(SIZEOF_PROTOCOL + \
@@ -773,7 +774,6 @@ typedef struct _ULTRA_IO_CHANNEL_PROTOCOL {
 			if (clientStrLen > 0)				\
 				return 0;				\
 	} while (0)
-
 
 #define ULTRA_IO_CHANNEL_SERVER_READY(x, chanId, logCtx) \
 	ULTRA_CHANNEL_SERVER_TRANSITION(x, chanId, SrvState, CHANNELSRV_READY, \
