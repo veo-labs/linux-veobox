@@ -820,7 +820,7 @@ visorchipset_save_message(struct controlvm_message *msg,
 EXPORT_SYMBOL_GPL(visorchipset_save_message);
 
 static void
-bus_responder(enum control_vm_id cmdId, ulong busNo, int response)
+bus_responder(enum controlvm_id cmdId, ulong busNo, int response)
 {
 	struct visorchipset_bus_info *p = NULL;
 	BOOL need_clear = FALSE;
@@ -859,7 +859,7 @@ bus_responder(enum control_vm_id cmdId, ulong busNo, int response)
 }
 
 static void
-device_changestate_responder(enum control_vm_id cmdId,
+device_changestate_responder(enum controlvm_id cmdId,
 			     ulong busNo, ulong devNo, int response,
 			     struct spar_segment_state responseState)
 {
@@ -896,7 +896,8 @@ device_changestate_responder(enum control_vm_id cmdId,
 }
 
 static void
-device_responder(enum control_vm_id cmdId, ulong busNo, ulong devNo, int response)
+device_responder(enum controlvm_id cmdId, ulong busNo, ulong devNo,
+		 int response)
 {
 	struct visorchipset_device_info *p = NULL;
 	BOOL need_clear = FALSE;
