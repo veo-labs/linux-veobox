@@ -281,27 +281,27 @@ struct controlvm_message_packet  {
 				 * sendBusInterruptHandle is kept in CP. */
 		} configure_bus;	/* for CONTROLVM_BUS_CONFIGURE */
 		/* for CONTROLVM_DEVICE_CREATE */
-		struct controlvm_packet_device_create create_device;
+		CONTROLVM_PACKET_DEVICE_CREATE create_device;
 		struct  {
 			u32 bus_no;	/* bus # (0..n-1) from the msg
 					 * receiver's perspective */
 			u32 dev_no;	/* bus-relative (0..n-1) device # */
 		} destroy_device;	/* for CONTROLVM_DEVICE_DESTROY */
 		/* for CONTROLVM_DEVICE_CONFIGURE */
-		struct controlvm_packet_device_configure configure_device;
+		CONTROLVM_PACKET_DEVICE_CONFIGURE configure_device;
 		struct  {
 			u32 bus_no;	/* bus # (0..n-1) from the msg
 					 * receiver's perspective */
 			u32 dev_no;	/* bus-relative (0..n-1) device # */
 		} reconfigure_device;	/* for CONTROLVM_DEVICE_RECONFIGURE */
 		struct  {
-			u32 busNo;
+			u32 bus_no;
 			struct spar_segment_state state;
 			u8 reserved[2];	/* Natural alignment purposes */
 		} bus_change_state;	/* for CONTROLVM_BUS_CHANGESTATE */
 		struct  {
-			u32 busNo;
-			u32 devNo;
+			u32 bus_no;
+			u32 dev_no;
 			struct spar_segment_state state;
 			struct  {
 				u32 phys_device:1;	/* =1 if message is for
@@ -310,20 +310,19 @@ struct controlvm_message_packet  {
 			u8 reserved[2];	/* Natural alignment purposes */
 		} device_change_state;	/* for CONTROLVM_DEVICE_CHANGESTATE */
 		struct  {
-			u32 busNo;
-			u32 devNo;
+			u32 bus_no;
+			u32 dev_no;
 			struct spar_segment_state state;
 			u8 reserved[6];	/* Natural alignment purposes */
 		} device_change_state_event;
 			/* for CONTROLVM_DEVICE_CHANGESTATE_EVENT */
 		struct  {
-			u32 busCount; /*< indicates the max number of busses */
-			u32 switchCount; /*< indicates the max number of
-					  *   switches (applicable for service
-					  *   partition only) */
+			u32 bus_count;	/* indicates the max number of busses */
+			u32 switch_count; /* indicates the max number of
+					   * switches if a service partition */
 			enum ultra_chipset_feature features;
-			u32 platformNumber;	/* Platform Number */
-		} initChipset;	/* for CONTROLVM_CHIPSET_INIT */
+			u32 platform_number;	/* Platform Number */
+		} init_chipset;	/* for CONTROLVM_CHIPSET_INIT */
 		struct  {
 			u32 options;	/* reserved */
 			u32 test;	/* bit 0 set to run embedded selftest */
@@ -337,33 +336,9 @@ struct controlvm_message_packet  {
 };
 
 /* All messages in any ControlVm queue have this layout. */
-struct controlvm_message {
-	struct controlvm_message_header hdr;
-	struct controlvm_message_packet cmd;
-};
-
-struct device_map {
-	GUEST_PHYSICAL_ADDRESS device_channel_address;
-	u64 device_channel_size;
-	u32 ca_index;
-	u32 reserved;		/* natural alignment */
-	u64 reserved2;		/* Align structure on 32-byte boundary */
-};
-
-struct guest_devices  {
-	struct device_map video_channel;
-	struct device_map keyboard_channel;
-	struct device_map network_channel;
-	struct device_map storage_channel;
-	struct device_map console_channel;
-	u32 partition_index;
-	u32 pad;
-};
-
-/* All messages in any ControlVm queue have this layout. */
 typedef struct _CONTROLVM_MESSAGE  {
 	CONTROLVM_MESSAGE_HEADER hdr;
-	CONTROLVM_MESSAGE_PACKET cmd;
+	struct controlvm_message_packet cmd;
 } CONTROLVM_MESSAGE;
 
 typedef struct _DEVICE_MAP  {
