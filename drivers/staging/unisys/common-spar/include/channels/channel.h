@@ -264,7 +264,7 @@ struct signal_queue_header {
 	u32 errorflags;		/* Error bits set during SignalReinit
 				 * to denote trouble with client's
 				 * fields */
-	u8 filler[12];		/* Pad out to 64 byte cacheline */
+	u8 Filler[12];		/* Pad out to 64 byte cacheline */
 };
 
 #pragma pack(pop)

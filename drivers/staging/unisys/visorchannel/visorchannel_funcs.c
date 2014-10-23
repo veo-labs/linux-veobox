@@ -298,7 +298,8 @@ EXPORT_SYMBOL_GPL(visorchannel_get_header);
  *  channel header
  */
 #define SIG_QUEUE_OFFSET(chan_hdr, q) \
-	((chan_hdr)->ch_space_offset + ((q) * sizeof(SIGNAL_QUEUE_HEADER)))
+	((chan_hdr)->ch_space_offset + \
+	 ((q) * sizeof(struct signal_queue_header)))
 
 /** Return offset of a specific queue entry (data) from the beginning of a
  *  channel header
