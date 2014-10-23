@@ -156,13 +156,13 @@ enum spar_component_types  {
  * Reserved: Padding to align structure on a 64-byte cache line boundary.
  * AdditionalInfo: Array of characters for additional event info (may be
  * empty).  */
-typedef struct _DIAG_CHANNEL_EVENT  {
-	u32 EventId;
-	u32 Severity;
-	u8 ModuleName[MAX_MODULE_NAME_SIZE];
-	u32 LineNumber;
-	struct diag_efi_time Timestamp;	/* Size = 16 bytes */
-	u32 PartitionNumber;	/* Filled in by Diag Switch as pool blocks are
+struct diag_channel_event {
+	u32 event_id;
+	u32 severity;
+	u8 module_name[MAX_MODULE_NAME_SIZE];
+	u32 line_number;
+	struct diag_efi_time timestamp;	/* Size = 16 bytes */
+	u32 partition_number;	/* Filled in by Diag Switch as pool blocks are
 				 * filled */
 	u16 vcpu_number;
 	u16 lcpu_number;
@@ -420,8 +420,8 @@ typedef struct _ULTRA_DIAG_CHANNEL_PROTOCOL  {
 	struct channel_header CommonChannelHeader;
 	struct signal_queue_header QueueHeader;
 	DIAG_CHANNEL_PROTOCOL_HEADER DiagChannelHeader;
-	DIAG_CHANNEL_EVENT Events[(DIAG_CH_SIZE - DIAG_CH_EVENT_OFFSET) /
-				   sizeof(DIAG_CHANNEL_EVENT)];
+	struct diag_channel_event Events[(DIAG_CH_SIZE - DIAG_CH_EVENT_OFFSET) /
+				   sizeof(struct diag_channel_event)];
 }
 ULTRA_DIAG_CHANNEL_PROTOCOL;
 
