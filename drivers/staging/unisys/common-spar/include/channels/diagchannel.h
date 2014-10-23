@@ -419,7 +419,7 @@ struct diag_channel_protocol_header {
 typedef struct _ULTRA_DIAG_CHANNEL_PROTOCOL  {
 	struct channel_header CommonChannelHeader;
 	struct signal_queue_header QueueHeader;
-	DIAG_CHANNEL_PROTOCOL_HEADER DiagChannelHeader;
+	struct diag_channel_protocol_header DiagChannelHeader;
 	struct diag_channel_event Events[(DIAG_CH_SIZE - DIAG_CH_EVENT_OFFSET) /
 				   sizeof(struct diag_channel_event)];
 }
