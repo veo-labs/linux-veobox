@@ -138,7 +138,7 @@ static __iomem void *init_vbus_channel(u64 ch_addr, u32 ch_bytes)
 		       (unsigned long long)ch_bytes);
 		return NULL;
 	}
-	if (!SPAR_VBUS_CHANNEL_OK_CLIENT(pChan, NULL)) {
+	if (!SPAR_VBUS_CHANNEL_OK_CLIENT(pChan)) {
 		ERRDRV("%s channel cannot be used", __func__);
 		uislib_iounmap(ch);
 		return NULL;
