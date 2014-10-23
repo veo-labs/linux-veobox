@@ -43,27 +43,13 @@ static const uuid_le spar_vbus_channel_protocol_uuid =
 * increment this. */
 #define SPAR_VBUS_CHANNEL_PROTOCOL_VERSIONID 1
 
-#define ULTRA_VBUS_CHANNEL_OK_CLIENT(pChannel, logCtx)       \
-	(ULTRA_check_channel_client(pChannel,				\
-				    UltraVbusChannelProtocolGuid,	\
-				    "vbus",				\
-				    sizeof(struct ultra_vbus_channel_protocol),\
-				    ULTRA_VBUS_CHANNEL_PROTOCOL_VERSIONID, \
-				    ULTRA_VBUS_CHANNEL_PROTOCOL_SIGNATURE, \
-				    __FILE__, __LINE__, logCtx))
-
-#define ULTRA_VBUS_CHANNEL_OK_SERVER(actualBytes, logCtx)    \
-	(ULTRA_check_channel_server(UltraVbusChannelProtocolGuid,	\
-				    "vbus",				\
-				    sizeof(struct ultra_vbus_channel_protocol),\
-				    actualBytes,			\
-				    __FILE__, __LINE__, logCtx))
-
-#define SPAR_VBUS_CHANNEL_OK_SERVER(actual_bytes)    \
-	(spar_check_channel_server(spar_vbus_channel_protocol_uuid,	\
+#define SPAR_VBUS_CHANNEL_OK_CLIENT(pChannel, logCtx)       \
+	(spar_check_channel_client(pChannel,				\
+				   UltraVbusChannelProtocolGuid,	\
 				   "vbus",				\
 				   sizeof(struct ultra_vbus_channel_protocol),\
-				   actual_bytes))
+				    ULTRA_VBUS_CHANNEL_PROTOCOL_VERSIONID, \
+				    ULTRA_VBUS_CHANNEL_PROTOCOL_SIGNATURE)) \
 
 #pragma pack(push, 1)		/* both GCC and VC now allow this pragma */
 struct spar_vbus_headerinfo {
