@@ -29,10 +29,6 @@
 #define SKEIN512_DIGEST_BIT_SIZE 512
 #define SKEIN1024_DIGEST_BIT_SIZE 1024
 
-#ifndef rotl_64
-#define rotl_64(x, N)    (((x) << (N)) | ((x) >> (64-(N))))
-#endif
-
 /* below two prototype assume we are handed aligned data */
 #define skein_put64_lsb_first(dst08, src64, b_cnt) memcpy(dst08, src64, b_cnt)
 #define skein_get64_lsb_first(dst64, src08, w_cnt) \
@@ -88,7 +84,7 @@ struct skein_1024_ctx { /* 1024-bit Skein hash context structure */
 	u8 b[SKEIN_1024_BLOCK_BYTES];	/* partial block buf (8-byte aligned) */
 };
 
-static inline u64 rotl_64(u64 x, u8 N)
+static inline int rotl_64(int x, int N)
 {
 	return (x << N) | (x >> (64 - N));
 }
