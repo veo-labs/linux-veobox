@@ -16,7 +16,6 @@
  */
 #include <linux/types.h>
 #include <linux/init.h>
-#include <linux/module.h>
 #include <crypto/internal/hash.h>
 #include "skein_base.h"
 
@@ -27,7 +26,7 @@ static int skein256_init(struct shash_desc *desc)
 			SKEIN256_DIGEST_BIT_SIZE);
 }
 
-static int skein256_update(struct shash_desc *desc, const u8 *data,
+int skein256_update(struct shash_desc *desc, const u8 *data,
 			unsigned int len)
 {
 	return skein_256_update((struct skein_256_ctx *)shash_desc_ctx(desc),
@@ -62,7 +61,7 @@ static int skein512_init(struct shash_desc *desc)
 				SKEIN512_DIGEST_BIT_SIZE);
 }
 
-static int skein512_update(struct shash_desc *desc, const u8 *data,
+int skein512_update(struct shash_desc *desc, const u8 *data,
 			unsigned int len)
 {
 	return skein_512_update((struct skein_512_ctx *)shash_desc_ctx(desc),
@@ -97,7 +96,7 @@ static int skein1024_init(struct shash_desc *desc)
 				SKEIN1024_DIGEST_BIT_SIZE);
 }
 
-static int skein1024_update(struct shash_desc *desc, const u8 *data,
+int skein1024_update(struct shash_desc *desc, const u8 *data,
 			unsigned int len)
 {
 	return skein_1024_update((struct skein_1024_ctx *)shash_desc_ctx(desc),
@@ -140,7 +139,6 @@ static struct shash_alg alg256 = {
 		.cra_driver_name	=	"skein",
 		.cra_flags		=	CRYPTO_ALG_TYPE_SHASH,
 		.cra_blocksize		=	SKEIN_256_BLOCK_BYTES,
-		.cra_module		=	THIS_MODULE,
 	}
 };
 
@@ -158,7 +156,6 @@ static struct shash_alg alg512 = {
 		.cra_driver_name	=	"skein",
 		.cra_flags		=	CRYPTO_ALG_TYPE_SHASH,
 		.cra_blocksize		=	SKEIN_512_BLOCK_BYTES,
-		.cra_module		=	THIS_MODULE,
 	}
 };
 
@@ -176,7 +173,6 @@ static struct shash_alg alg1024 = {
 		.cra_driver_name	=	"skein",
 		.cra_flags		=	CRYPTO_ALG_TYPE_SHASH,
 		.cra_blocksize		=	SKEIN_1024_BLOCK_BYTES,
-		.cra_module		=	THIS_MODULE,
 	}
 };
 
@@ -199,17 +195,4 @@ out:
 	return -1;
 }
 
-static void __exit skein_generic_fini(void)
-{
-	crypto_unregister_shash(&alg256);
-	crypto_unregister_shash(&alg512);
-	crypto_unregister_shash(&alg1024);
-}
-
-module_init(skein_generic_init);
-module_exit(skein_generic_fini);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Skein Hash Algorithm");
-
-MODULE_ALIAS("skein");
+device_initcall(skein_generic_init);
