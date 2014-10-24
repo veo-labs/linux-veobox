@@ -75,7 +75,8 @@ static int apci1564_timer_config(struct comedi_device *dev,
 				 unsigned int *data)
 {
 	struct apci1564_private *devpriv = dev->private;
-	unsigned int ctrl;
+	unsigned int chan = CR_CHAN(insn->chanspec);
+	unsigned int ul_Command1 = 0;
 
 	devpriv->tsk_current = current;
 	if (data[0] == ADDIDATA_TIMER) {
@@ -118,11 +119,48 @@ static int apci1564_timer_config(struct comedi_device *dev,
 		if (devpriv->counters) {
 			unsigned long iobase;
 
-			iobase = devpriv->counters + ADDI_TCW_IRQ_REG;
-			outl(0x0, iobase + APCI1564_COUNTER(0));
-			outl(0x0, iobase + APCI1564_COUNTER(1));
-			outl(0x0, iobase + APCI1564_COUNTER(2));
-		}
+		ul_Command1 = inl(devpriv->amcc_iobase + APCI1564_TIMER_CTRL_REG);
+		ul_Command1 = (ul_Command1 & 0xFFF719E2UL) | 2UL << 13UL | 0x10UL;
+		/* mode 2 */
+		outl(ul_Command1, devpriv->amcc_iobase + APCI1564_TIMER_CTRL_REG);
+	} else if (data[0] == ADDIDATA_COUNTER) {
+		devpriv->timer_select_mode = ADDIDATA_COUNTER;
+
+		/* First Stop The Counter */
+		ul_Command1 = inl(dev->iobase +
+				 APCI1564_COUNTER_CTRL_REG(chan));
+		ul_Command1 = ul_Command1 & 0xFFFFF9FEUL;
+		/* Stop The Timer */
+		outl(ul_Command1, dev->iobase +
+					APCI1564_COUNTER_CTRL_REG(chan));
+
+		/* Set the reload value */
+		outl(data[3], dev->iobase +
+					APCI1564_COUNTER_RELOAD_REG(chan));
+
+		/* Set the mode :             */
+		/* - Disable the hardware     */
+		/* - Disable the counter mode */
+		/* - Disable the warning      */
+		/* - Disable the reset        */
+		/* - Disable the timer mode   */
+		/* - Enable the counter mode  */
+
+		ul_Command1 =
+			(ul_Command1 & 0xFFFC19E2UL) | 0x80000UL |
+			(unsigned int) ((unsigned int) data[4] << 16UL);
+		outl(ul_Command1, dev->iobase +
+					APCI1564_COUNTER_CTRL_REG(chan));
+
+		/*  Enable or Disable Interrupt */
+		ul_Command1 = (ul_Command1 & 0xFFFFF9FD) | (data[1] << 1);
+		outl(ul_Command1, dev->iobase +
+					APCI1564_COUNTER_CTRL_REG(chan));
+
+		/* Set the Up/Down selection */
+		ul_Command1 = (ul_Command1 & 0xFFFBF9FFUL) | (data[6] << 18);
+		outl(ul_Command1, dev->iobase +
+					APCI1564_COUNTER_CTRL_REG(chan));
 	} else {
 		/* disable Timer interrupt */
 		outl(0x0, devpriv->timer + ADDI_TCW_CTRL_REG);
@@ -149,7 +187,8 @@ static int apci1564_timer_insn_write(struct comedi_device *dev,
 				     unsigned int *data)
 {
 	struct apci1564_private *devpriv = dev->private;
-	unsigned int ctrl;
+	unsigned int chan = CR_CHAN(insn->chanspec);
+	unsigned int ul_Command1 = 0;
 
 	ctrl = inl(devpriv->timer + ADDI_TCW_CTRL_REG);
 	switch (data[1]) {
@@ -179,6 +218,30 @@ static int apci1564_timer_insn_read(struct comedi_device *dev,
 	/* Stores the Actual value of the Timer */
 	data[1] = inl(devpriv->timer + ADDI_TCW_VAL_REG);
 
+			ul_Command1 = inl(devpriv->amcc_iobase + APCI1564_TIMER_CTRL_REG);
+			ul_Command1 = ul_Command1 & 0xFFFFF9FEUL;
+			outl(ul_Command1, devpriv->amcc_iobase + APCI1564_TIMER_CTRL_REG);
+		}
+	} else if (devpriv->timer_select_mode == ADDIDATA_COUNTER) {
+		ul_Command1 =
+			inl(dev->iobase +
+			   APCI1564_COUNTER_CTRL_REG(chan));
+		if (data[1] == 1) {
+			/* Start the Counter subdevice */
+			ul_Command1 = (ul_Command1 & 0xFFFFF9FFUL) | 0x1UL;
+		} else if (data[1] == 0) {
+			/*  Stops the Counter subdevice */
+			ul_Command1 = 0;
+
+		} else if (data[1] == 2) {
+			/*  Clears the Counter subdevice */
+			ul_Command1 = (ul_Command1 & 0xFFFFF9FFUL) | 0x400;
+		}
+		outl(ul_Command1, dev->iobase +
+		     APCI1564_COUNTER_CTRL_REG(chan));
+	} else {
+		dev_err(dev->class_dev, "Invalid subdevice.\n");
+	}
 	return insn->n;
 }
 
@@ -189,68 +252,36 @@ static int apci1564_counter_insn_config(struct comedi_device *dev,
 {
 	struct apci1564_private *devpriv = dev->private;
 	unsigned int chan = CR_CHAN(insn->chanspec);
-	unsigned long iobase = devpriv->counters + APCI1564_COUNTER(chan);
-	unsigned int ctrl;
+	unsigned int ul_Command1 = 0;
 
-	devpriv->tsk_current = current;
+	if (devpriv->timer_select_mode == ADDIDATA_TIMER) {
+		/*  Stores the status of the Timer */
+		data[0] = inl(devpriv->amcc_iobase + APCI1564_TIMER_STATUS_REG) & 0x1;
 
-	/* First Stop The Counter */
-	ctrl = inl(iobase + ADDI_TCW_CTRL_REG);
-	ctrl &= 0xfffff9fe;
-	/* Stop The Timer */
-	outl(ctrl, iobase + ADDI_TCW_CTRL_REG);
+		/*  Stores the Actual value of the Timer */
+		data[1] = inl(devpriv->amcc_iobase + APCI1564_TIMER_REG);
+	} else if (devpriv->timer_select_mode == ADDIDATA_COUNTER) {
+		/*  Read the Counter Actual Value. */
+		data[0] =
+			inl(dev->iobase +
+			    APCI1564_COUNTER_REG(chan));
+		ul_Command1 =
+			inl(dev->iobase +
+			    APCI1564_COUNTER_STATUS_REG(chan));
 
-	/* Set the reload value */
-	outl(data[3], iobase + ADDI_TCW_RELOAD_REG);
+		/* Get the software trigger status */
+		data[1] = (unsigned char) ((ul_Command1 >> 1) & 1);
 
-	/* Set the mode :             */
-	/* - Disable the hardware     */
-	/* - Disable the counter mode */
-	/* - Disable the warning      */
-	/* - Disable the reset        */
-	/* - Disable the timer mode   */
-	/* - Enable the counter mode  */
+		/* Get the hardware trigger status */
+		data[2] = (unsigned char) ((ul_Command1 >> 2) & 1);
 
-	ctrl &= 0xfffc19e2;
-	ctrl |= 0x80000 | (data[4] << 16);
-	outl(ctrl, iobase + ADDI_TCW_CTRL_REG);
+		/* Get the software clear status */
+		data[3] = (unsigned char) ((ul_Command1 >> 3) & 1);
 
-	/* Enable or Disable Interrupt */
-	ctrl &= 0xfffff9fd;
-	ctrl |= (data[1] << 1);
-	outl(ctrl, iobase + ADDI_TCW_CTRL_REG);
-
-	/* Set the Up/Down selection */
-	ctrl &= 0xfffbf9ff;
-	ctrl |= (data[6] << 18);
-	outl(ctrl, iobase + ADDI_TCW_CTRL_REG);
-
-	return insn->n;
-}
-
-static int apci1564_counter_insn_write(struct comedi_device *dev,
-				       struct comedi_subdevice *s,
-				       struct comedi_insn *insn,
-				       unsigned int *data)
-{
-	struct apci1564_private *devpriv = dev->private;
-	unsigned int chan = CR_CHAN(insn->chanspec);
-	unsigned long iobase = devpriv->counters + APCI1564_COUNTER(chan);
-	unsigned int ctrl;
-
-	ctrl = inl(iobase + ADDI_TCW_CTRL_REG);
-	switch (data[1]) {
-	case 0:	/* Stops the Counter subdevice */
-		ctrl = 0;
-		break;
-	case 1:	/* Start the Counter subdevice */
-		ctrl &= 0xfffff9ff;
-		ctrl |= 0x1;
-		break;
-	case 2:	/* Clears the Counter subdevice */
-		ctrl &= 0xfffff9ff;
-		ctrl |= 0x400;
-		break;
+		/* Get the overflow status */
+		data[4] = (unsigned char) ((ul_Command1 >> 0) & 1);
+	} else {
+		dev_err(dev->class_dev, "Invalid subdevice.\n");
 	}
 	outl(ctrl, iobase + ADDI_TCW_CTRL_REG);
 
