@@ -169,8 +169,6 @@
 #define CheckPerm   ((u64)1 << 49)  /* Has valid check_perm field */
 #define PrivUD      ((u64)1 << 51)  /* #UD instead of #GP on CPL > 0 */
 #define NearBranch  ((u64)1 << 52)  /* Near branches */
-#define No16	    ((u64)1 << 53)  /* No 16 bit operand */
-#define IncSP       ((u64)1 << 54)  /* SP is incremented before ModRM calc */
 
 #define DstXacc     (DstAccLo | SrcAccHi | SrcWrite)
 
@@ -3842,9 +3840,9 @@ static const struct opcode group4[] = {
 static const struct opcode group5[] = {
 	F(DstMem | SrcNone | Lock,		em_inc),
 	F(DstMem | SrcNone | Lock,		em_dec),
-	I(SrcMem | Stack,			em_call_near_abs),
+	I(SrcMem | NearBranch,			em_call_near_abs),
 	I(SrcMemFAddr | ImplicitOps | Stack,	em_call_far),
-	I(SrcMem | Stack,			em_jmp_abs),
+	I(SrcMem | NearBranch,			em_jmp_abs),
 	I(SrcMemFAddr | ImplicitOps,		em_jmp_far),
 	I(SrcMem | Stack,			em_push), D(Undefined),
 };
@@ -4663,8 +4661,7 @@ done_prefixes:
 		return EMULATION_FAILED;
 
 	if (unlikely(ctxt->d &
-	    (NotImpl|Stack|Op3264|Sse|Mmx|Intercept|CheckPerm|NearBranch|
-	     No16))) {
+	    (NotImpl|Stack|Op3264|Sse|Mmx|Intercept|CheckPerm|NearBranch))) {
 		/*
 		 * These are copied unconditionally here, and checked unconditionally
 		 * in x86_emulate_insn.
