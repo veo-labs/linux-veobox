@@ -12015,19 +12015,16 @@ intel_check_primary_plane(struct drm_plane *plane,
 }
 
 static int
-intel_commit_primary_plane(struct drm_plane *plane,
-			   struct intel_plane_state *state)
+intel_prepare_primary_plane(struct drm_plane *plane,
+			    struct intel_plane_state *state)
 {
 	struct drm_crtc *crtc = state->crtc;
 	struct drm_framebuffer *fb = state->fb;
 	struct drm_device *dev = crtc->dev;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	enum pipe pipe = intel_crtc->pipe;
-	struct drm_framebuffer *old_fb = plane->fb;
 	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
 	struct drm_i915_gem_object *old_obj = intel_fb_obj(plane->fb);
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	struct drm_rect *src = &state->src;
 	int ret;
 
 	intel_crtc_wait_for_pending_flips(crtc);
@@ -12037,7 +12034,7 @@ intel_commit_primary_plane(struct drm_plane *plane,
 		return -EBUSY;
 	}
 
-	if (plane->fb != fb) {
+	if (old_obj != obj) {
 		mutex_lock(&dev->struct_mutex);
 		ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
 		if (ret == 0)
@@ -12049,6 +12046,25 @@ intel_commit_primary_plane(struct drm_plane *plane,
 			return ret;
 		}
 	}
+
+	return 0;
+}
+
+static void
+intel_commit_primary_plane(struct drm_plane *plane,
+			   struct intel_plane_state *state)
+{
+	struct drm_crtc *crtc = state->crtc;
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_device *dev = crtc->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	enum pipe pipe = intel_crtc->pipe;
+	struct drm_framebuffer *old_fb = plane->fb;
+	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
+	struct drm_i915_gem_object *old_obj = intel_fb_obj(plane->fb);
+	struct intel_plane *intel_plane = to_intel_plane(plane);
+	struct drm_rect *src = &state->src;
 
 	crtc->primary->fb = fb;
 	crtc->x = src->x1;
@@ -12125,8 +12141,6 @@ static void intel_begin_crtc_commit(struct drm_crtc *crtc)
 		intel_unpin_fb_obj(old_obj);
 		mutex_unlock(&dev->struct_mutex);
 	}
-
-	return 0;
 }
 
 static void intel_finish_crtc_commit(struct drm_crtc *crtc)
@@ -12152,6 +12166,10 @@ static void intel_finish_crtc_commit(struct drm_crtc *crtc)
 		intel_fbc_update(dev);
 		mutex_unlock(&dev->struct_mutex);
 	}
+
+	ret = intel_prepare_primary_plane(plane, &state);
+	if (ret)
+		return ret;
 
 	intel_commit_primary_plane(plane, &state);
 
