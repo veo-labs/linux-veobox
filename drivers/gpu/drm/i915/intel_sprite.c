@@ -1210,6 +1210,40 @@ finish:
 	WARN_ON(state->hides_primary && !state->visible && intel_crtc->active);
 
 static int
+intel_prepare_sprite_plane(struct drm_plane *plane,
+			   struct intel_plane_state *state)
+{
+	struct drm_device *dev = plane->dev;
+	struct drm_crtc *crtc = state->crtc;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	enum pipe pipe = intel_crtc->pipe;
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
+	struct drm_i915_gem_object *old_obj = intel_fb_obj(plane->fb);
+	int ret;
+
+	if (old_obj != obj) {
+		mutex_lock(&dev->struct_mutex);
+
+		/* Note that this will apply the VT-d workaround for scanouts,
+		 * which is more restrictive than required for sprites. (The
+		 * primary plane requires 256KiB alignment with 64 PTE padding,
+		 * the sprite planes only require 128KiB alignment and 32 PTE
+		 * padding.
+		 */
+		ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
+		if (ret == 0)
+			i915_gem_track_fb(old_obj, obj,
+					  INTEL_FRONTBUFFER_SPRITE(pipe));
+		mutex_unlock(&dev->struct_mutex);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static void
 intel_commit_sprite_plane(struct drm_plane *plane,
 			  struct intel_plane_state *state)
 {
@@ -1228,7 +1262,6 @@ intel_commit_sprite_plane(struct drm_plane *plane,
 	struct drm_rect *dst = &state->dst;
 	const struct drm_rect *clip = &state->clip;
 	bool primary_enabled;
-	int ret;
 
 	/*
 	 * If the sprite is completely covering the primary plane,
@@ -1236,25 +1269,6 @@ intel_commit_sprite_plane(struct drm_plane *plane,
 	 */
 	primary_enabled = !drm_rect_equals(dst, clip) || colorkey_enabled(intel_plane);
 	WARN_ON(!primary_enabled && !state->visible && intel_crtc->active);
-
-
-		if (intel_crtc->primary_enabled && state->hides_primary)
-			intel_crtc->atomic.pre_disable_primary = true;
-
-		/* Note that this will apply the VT-d workaround for scanouts,
-		 * which is more restrictive than required for sprites. (The
-		 * primary plane requires 256KiB alignment with 64 PTE padding,
-		 * the sprite planes only require 128KiB alignment and 32 PTE
-		 * padding.
-		 */
-		ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
-		if (ret == 0)
-			i915_gem_track_fb(old_obj, obj,
-					  INTEL_FRONTBUFFER_SPRITE(pipe));
-		mutex_unlock(&dev->struct_mutex);
-		if (ret)
-			return ret;
-	}
 
 	intel_plane->crtc_x = state->orig_dst.x1;
 	intel_plane->crtc_y = state->orig_dst.y1;
@@ -1330,46 +1344,6 @@ intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
 
 	intel_commit_sprite_plane(plane, &state);
 	return 0;
-}
-
-static int
-intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
-		   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
-		   unsigned int crtc_w, unsigned int crtc_h,
-		   uint32_t src_x, uint32_t src_y,
-		   uint32_t src_w, uint32_t src_h)
-{
-	struct intel_plane_state state;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	int ret;
-
-	state.crtc = crtc;
-	state.fb = fb;
-
-	/* sample coordinates in 16.16 fixed point */
-	state.src.x1 = src_x;
-	state.src.x2 = src_x + src_w;
-	state.src.y1 = src_y;
-	state.src.y2 = src_y + src_h;
-
-	/* integer pixels */
-	state.dst.x1 = crtc_x;
-	state.dst.x2 = crtc_x + crtc_w;
-	state.dst.y1 = crtc_y;
-	state.dst.y2 = crtc_y + crtc_h;
-
-	state.clip.x1 = 0;
-	state.clip.y1 = 0;
-	state.clip.x2 = intel_crtc->active ? intel_crtc->config.pipe_src_w : 0;
-	state.clip.y2 = intel_crtc->active ? intel_crtc->config.pipe_src_h : 0;
-	state.orig_src = state.src;
-	state.orig_dst = state.dst;
-
-	ret = intel_check_sprite_plane(plane, &state);
-	if (ret)
-		return ret;
-
-	return intel_commit_sprite_plane(plane, &state);
 }
 
 static int
