@@ -142,11 +142,11 @@ static int apci1564_reset(struct comedi_device *dev)
 	if (devpriv->counters) {
 		unsigned long iobase = devpriv->counters + ADDI_TCW_CTRL_REG;
 
-		/* Reset the counter registers */
-		outl(0x0, iobase + APCI1564_COUNTER(0));
-		outl(0x0, iobase + APCI1564_COUNTER(1));
-		outl(0x0, iobase + APCI1564_COUNTER(2));
-	}
+	/* Reset the counter registers */
+	outl(0x0, dev->iobase + APCI1564_COUNTER_CTRL_REG(0));
+	outl(0x0, dev->iobase + APCI1564_COUNTER_CTRL_REG(1));
+	outl(0x0, dev->iobase + APCI1564_COUNTER_CTRL_REG(2));
+	outl(0x0, dev->iobase + APCI1564_COUNTER_CTRL_REG(3));
 
 	return 0;
 }
