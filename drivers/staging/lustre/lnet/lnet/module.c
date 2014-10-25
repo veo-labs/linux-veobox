@@ -110,7 +110,7 @@ lnet_ioctl(unsigned int cmd, struct libcfs_ioctl_data *data)
 
 static DECLARE_IOCTL_HANDLER(lnet_ioctl_handler, lnet_ioctl);
 
-static int __init
+static int
 init_lnet(void)
 {
 	int		  rc;
@@ -135,7 +135,7 @@ init_lnet(void)
 	return 0;
 }
 
-static void __exit
+static void
 fini_lnet(void)
 {
 	int rc;
