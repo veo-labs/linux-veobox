@@ -49,6 +49,15 @@ MODULE_AUTHOR("Digi International, http://www.digi.com");
 MODULE_DESCRIPTION("Driver for the Digi International Neo and Classic PCI based product line");
 MODULE_SUPPORTED_DEVICE("dgnc");
 
+/*
+ * insmod command line overrideable parameters
+ *
+ * NOTE: we use a set of macros to create the variables, which allows
+ * us to specify the variable type, name, initial value, and description.
+ */
+PARM_INT(debug,		0x00,		0644,	"Driver debugging level");
+PARM_INT(rawreadok,	1,		0644,	"Bypass flip buffers on input");
+
 /**************************************************************************
  *
  * protos for this file
@@ -752,6 +761,8 @@ static void dgnc_init_globals(void)
 {
 	int i = 0;
 
+	dgnc_rawreadok		= rawreadok;
+	dgnc_debug		= debug;
 	dgnc_NumBoards		= 0;
 
 	for (i = 0; i < MAXBOARDS; i++)
