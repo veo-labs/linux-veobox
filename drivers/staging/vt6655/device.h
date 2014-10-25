@@ -136,8 +136,6 @@
 #define RUN_AT(x)                       (jiffies+(x))
 #endif
 
-#define MAKE_BEACON_RESERVED	10  /* (us) */
-
 /* DMA related */
 #define RESERV_AC0DMA                   4
 
@@ -147,16 +145,106 @@
 
 #define	NUM				64
 
-/* 0:11A 1:11B 2:11G */
-#define BB_TYPE_11A    0
-#define BB_TYPE_11B    1
-#define BB_TYPE_11G    2
+#define PRIVATE_Message                 0
 
-/* 0:11a, 1:11b, 2:11gb (only CCK in BasicRate), 3:11ga (OFDM in BasicRate) */
-#define PK_TYPE_11A     0
-#define PK_TYPE_11B     1
-#define PK_TYPE_11GB    2
-#define PK_TYPE_11GA    3
+/*---------------------  Export Types  ------------------------------*/
+
+#define PRINT_K(p, args...)		\
+do {					\
+	if (PRIVATE_Message)		\
+		printk(p, ##args);	\
+} while (0)
+
+/* 0:11A 1:11B 2:11G */
+typedef enum _VIA_BB_TYPE
+{
+	BB_TYPE_11A = 0,
+	BB_TYPE_11B,
+	BB_TYPE_11G
+} VIA_BB_TYPE, *PVIA_BB_TYPE;
+
+/* 0:11a,1:11b,2:11gb(only CCK in BasicRate),3:11ga(OFDM in Basic Rate) */
+typedef enum _VIA_PKT_TYPE
+{
+	PK_TYPE_11A = 0,
+	PK_TYPE_11B,
+	PK_TYPE_11GB,
+	PK_TYPE_11GA
+} VIA_PKT_TYPE, *PVIA_PKT_TYPE;
+
+typedef enum __device_msg_level {
+	MSG_LEVEL_ERR = 0,	/* Errors that will cause abnormal operation. */
+	MSG_LEVEL_NOTICE = 1,	/* Some errors need users to be notified. */
+	MSG_LEVEL_INFO = 2,	/* Normal message. */
+	MSG_LEVEL_VERBOSE = 3,	/* Will report all trival errors. */
+	MSG_LEVEL_DEBUG = 4	/* Only for debug purpose. */
+} DEVICE_MSG_LEVEL, *PDEVICE_MSG_LEVEL;
+
+/* NDIS related */
+#define MAX_BSSIDINFO_4_PMKID   16
+#define MAX_PMKIDLIST           5
+/* Flags for PMKID Candidate list structure */
+#define NDIS_802_11_PMKID_CANDIDATE_PREAUTH_ENABLED	0x01
+
+/* PMKID Structures */
+typedef unsigned char NDIS_802_11_PMKID_VALUE[16];
+
+typedef enum _NDIS_802_11_WEP_STATUS {
+	Ndis802_11WEPEnabled,
+	Ndis802_11Encryption1Enabled = Ndis802_11WEPEnabled,
+	Ndis802_11WEPDisabled,
+	Ndis802_11EncryptionDisabled = Ndis802_11WEPDisabled,
+	Ndis802_11WEPKeyAbsent,
+	Ndis802_11Encryption1KeyAbsent = Ndis802_11WEPKeyAbsent,
+	Ndis802_11WEPNotSupported,
+	Ndis802_11EncryptionNotSupported = Ndis802_11WEPNotSupported,
+	Ndis802_11Encryption2Enabled,
+	Ndis802_11Encryption2KeyAbsent,
+	Ndis802_11Encryption3Enabled,
+	Ndis802_11Encryption3KeyAbsent
+} NDIS_802_11_WEP_STATUS, *PNDIS_802_11_WEP_STATUS,
+	NDIS_802_11_ENCRYPTION_STATUS, *PNDIS_802_11_ENCRYPTION_STATUS;
+
+typedef enum _NDIS_802_11_STATUS_TYPE {
+	Ndis802_11StatusType_Authentication,
+	Ndis802_11StatusType_MediaStreamMode,
+	Ndis802_11StatusType_PMKID_CandidateList,
+	Ndis802_11StatusTypeMax    /* defined as an upper bound */
+} NDIS_802_11_STATUS_TYPE, *PNDIS_802_11_STATUS_TYPE;
+
+/* Added new types for PMKID Candidate lists. */
+struct pmkid_candidate {
+	NDIS_802_11_MAC_ADDRESS BSSID;
+	unsigned long Flags;
+};
+
+typedef struct _BSSID_INFO {
+	NDIS_802_11_MAC_ADDRESS BSSID;
+	NDIS_802_11_PMKID_VALUE PMKID;
+} BSSID_INFO, *PBSSID_INFO;
+
+typedef struct tagSPMKID {
+	unsigned long Length;
+	unsigned long BSSIDInfoCount;
+	BSSID_INFO BSSIDInfo[MAX_BSSIDINFO_4_PMKID];
+} SPMKID, *PSPMKID;
+
+typedef struct tagSPMKIDCandidateEvent {
+	NDIS_802_11_STATUS_TYPE     StatusType;
+	unsigned long Version;       /* Version of the structure */
+	unsigned long NumCandidates; /* No. of pmkid candidates */
+	struct pmkid_candidate CandidateList[MAX_PMKIDLIST];
+} SPMKIDCandidateEvent, *PSPMKIDCandidateEvent;
+
+/* 802.11h related */
+#define MAX_QUIET_COUNT     8
+
+typedef struct tagSQuietControl {
+	bool bEnable;
+	unsigned long dwStartTime;
+	unsigned char byPeriod;
+	unsigned short wDuration;
+} SQuietControl, *PSQuietControl;
 
 typedef struct __chip_info_tbl {
 	CHIP_TYPE   chip_id;
@@ -170,6 +258,33 @@ typedef enum {
 	OWNED_BY_HOST = 0,
 	OWNED_BY_NIC = 1
 } DEVICE_OWNER_TYPE, *PDEVICE_OWNER_TYPE;
+
+/* The receive duplicate detection cache entry */
+typedef struct tagSCacheEntry {
+	unsigned short wFmSequence;
+	unsigned char abyAddr2[ETH_ALEN];
+} SCacheEntry, *PSCacheEntry;
+
+typedef struct tagSCache {
+/* The receive cache is updated circularly. The next entry to be written is
+ * indexed by the "InPtr".
+ */
+	unsigned int uInPtr;         /* Place to use next */
+	SCacheEntry     asCacheEntry[DUPLICATE_RX_CACHE_LENGTH];
+} SCache, *PSCache;
+
+#define CB_MAX_RX_FRAG                 64
+/* DeFragment Control Block, used for collecting fragments prior to reassembly */
+typedef struct tagSDeFragControlBlock {
+	unsigned short wSequence;
+	unsigned short wFragNum;
+	unsigned char abyAddr2[ETH_ALEN];
+	unsigned int uLifetime;
+	struct sk_buff *skb;
+	unsigned char *pbyRxBuffer;
+	unsigned int cbFrameLength;
+	bool bInUse;
+} SDeFragControlBlock, *PSDeFragControlBlock;
 
 /* flags for options */
 #define     DEVICE_FLAGS_IP_ALIGN        0x00000001UL
@@ -203,6 +318,10 @@ typedef struct __device_opt {
 	int         nRxDescs1;		/* Number of RX descriptors1 */
 	int         nTxDescs[2];	/* Number of TX descriptors 0, 1 */
 	int         int_works;		/* interrupt limits */
+	int         rts_thresh;		/* rts threshold */
+	int         frag_thresh;
+	int         data_rate;
+	int         channel_num;
 	int         short_retry;
 	int         long_retry;
 	int         bbp_type;
@@ -211,14 +330,9 @@ typedef struct __device_opt {
 
 struct vnt_private {
 	struct pci_dev *pcid;
-	/* mac80211 */
-	struct ieee80211_hw *hw;
-	struct ieee80211_vif *vif;
-	unsigned long key_entry_inuse;
-	u32 basic_rates;
-	u16 current_aid;
-	int mc_list_count;
-	u8 mac_hw;
+
+/* netdev */
+	struct net_device *dev;
 
 /* dma addr, rx/tx pool */
 	dma_addr_t                  pool_dma;
@@ -288,9 +402,6 @@ struct vnt_private {
 	unsigned char byOriginalZonetype;
 	unsigned char abyMacContext[MAC_MAX_CONTEXT_REG];
 	unsigned char abyCurrentNetAddr[ETH_ALEN];
-	bool bLinkPass;          // link status: OK or fail
-
-	unsigned char abyCurrentNetAddr[ETH_ALEN]; __aligned(2)
 	bool bLinkPass;          /* link status: OK or fail */
 
 	/* Adapter statistics */
@@ -298,6 +409,11 @@ struct vnt_private {
 	/* 802.11 counter */
 	SDot11Counters              s802_11Counter;
 
+	/* 802.11 management */
+	PSMgmtObject                pMgmt;
+	SMgmtObject                 sMgmtObj;
+
+	/* 802.11 MAC specific */
 	unsigned int	uCurrRSSI;
 	unsigned char byCurrSQ;
 
@@ -321,13 +437,14 @@ struct vnt_private {
 	unsigned char byEIFS;
 	unsigned char bySlot;
 	unsigned char byCWMaxMin;
+	CARD_PHY_TYPE		eCurrentPHYType;
 
-	u8		byBBType; /* 0:11A, 1:11B, 2:11G */
-	u8		byPacketType; /*
-				       * 0:11a,1:11b,2:11gb (only CCK
-				       * in BasicRate), 3:11ga (OFDM in
-				       * Basic Rate)
-				       */
+	VIA_BB_TYPE		byBBType; /* 0:11A, 1:11B, 2:11G */
+	VIA_PKT_TYPE            byPacketType; /*
+					       * 0:11a,1:11b,2:11gb (only CCK
+					       * in BasicRate), 3:11ga (OFDM in
+					       * Basic Rate)
+					       */
 	unsigned short wBasicRate;
 	unsigned char byACKRate;
 	unsigned char byTopOFDMBasicRate;
@@ -345,6 +462,14 @@ struct vnt_private {
 	enum nl80211_iftype op_mode;
 	bool bBSSIDFilter;
 	unsigned short wMaxTransmitMSDULifetime;
+	unsigned char abyBSSID[ETH_ALEN];
+	unsigned char abyDesireBSSID[ETH_ALEN];
+	unsigned short wACKDuration;		/* update while speed change */
+	unsigned short wRTSTransmitLen;		/* update while speed change */
+	unsigned char byRTSServiceField;	/* update while speed change */
+	unsigned char byRTSSignalField;		/* update while speed change */
+
+	unsigned long dwMaxReceiveLifetime;	/* dot11MaxReceiveLifetime */
 
 	bool bEncryptionEnable;
 	bool bLongHeader;
@@ -374,11 +499,67 @@ struct vnt_private {
 	bool bIsBeaconBufReadySet;
 	unsigned int	cbBeaconBufReadySetCnt;
 	bool bFixRate;
-	u16 byCurrentCh;
+	unsigned char byCurrentCh;
+	unsigned int	uScanTime;
+
+	CMD_STATE               eCommandState;
+
+	CMD_CODE                eCommand;
+	bool bBeaconTx;
+
+	bool bStopBeacon;
+	bool bStopDataPkt;
+	bool bStopTx0Pkt;
+	unsigned int	uAutoReConnectTime;
+
+	/* 802.11 counter */
+
+	CMD_ITEM                eCmdQueue[CMD_Q_SIZE];
+	unsigned int	uCmdDequeueIdx;
+	unsigned int	uCmdEnqueueIdx;
+	unsigned int	cbFreeCmdQueue;
+	bool bCmdRunning;
+	bool bCmdClear;
+
+	bool bRoaming;
+	unsigned char abyIPAddr[4];
+
+	unsigned long ulTxPower;
+	NDIS_802_11_WEP_STATUS  eEncryptionStatus;
+	bool bTransmitKey;
+	NDIS_802_11_WEP_STATUS  eOldEncryptionStatus;
+
+	SKeyManagement          sKey;
+	unsigned long dwIVCounter;
+
+	u64 qwPacketNumber; /* For CCMP and TKIP as TSC(6 bytes) */
+	unsigned int	uCurrentWEPMode;
+
+	RC4Ext                  SBox;
+	unsigned char abyPRNG[WLAN_WEPMAX_KEYLEN+3];
+	unsigned char byKeyIndex;
+	unsigned int	uKeyLength;
+	unsigned char abyKey[WLAN_WEP232_KEYLEN];
 
 	bool bAES;
+	unsigned char byCntMeasure;
+
+	/* for AP mode */
+	unsigned int	uAssocCount;
+	bool bMoreData;
+
+	/* QoS */
+	bool bGrpAckPolicy;
+
+	/* for OID_802_11_ASSOCIATION_INFORMATION */
+	bool bAssocInfoSet;
 
 	unsigned char byAutoFBCtrl;
+
+	bool bTxMICFail;
+	bool bRxMICFail;
+
+	unsigned int	uRATEIdx;
 
 	/* For Update BaseBand VGA Gain Offset */
 	bool bUpdateBBVGA;
@@ -395,6 +576,16 @@ struct vnt_private {
 
 	/* For FOE Tuning */
 	unsigned char byFOETuning;
+
+	/* For Auto Power Tunning */
+	unsigned char byAutoPwrTunning;
+	short                   sPSetPointCCK;
+	short                   sPSetPointOFDMG;
+	short                   sPSetPointOFDMA;
+	long                    lPFormulaOffset;
+	short                   sPThreshold;
+	char                    cAdjustStep;
+	char                    cMinTxAGC;
 
 	/* For RF Power table */
 	unsigned char byCCKPwr;
@@ -414,9 +605,106 @@ struct vnt_private {
 	unsigned char byBBCR88;
 	unsigned char byBBCR09;
 
+	/* command timer */
+	struct timer_list       sTimerCommand;
+	struct timer_list       sTimerTxData;
+	unsigned long nTxDataTimeCout;
+	bool fTxDataInSleep;
+	bool IsTxDataTrigger;
+
+#ifdef WPA_SM_Transtatus
+	bool fWPA_Authened;     /* is WPA/WPA-PSK or WPA2/WPA2-PSK authen?? */
+#endif
+	unsigned char byReAssocCount;
+	unsigned char byLinkWaitCount;
+
+	unsigned char abyNodeName[17];
+
+	bool bDiversityRegCtlON;
+	bool bDiversityEnable;
+	unsigned long ulDiversityNValue;
+	unsigned long ulDiversityMValue;
+	unsigned char byTMax;
+	unsigned char byTMax2;
+	unsigned char byTMax3;
+	unsigned long ulSQ3TH;
+
+	/* ANT diversity */
+	unsigned long uDiversityCnt;
+	unsigned char byAntennaState;
+	unsigned long ulRatio_State0;
+	unsigned long ulRatio_State1;
+
+	/* SQ3 functions for antenna diversity */
+	struct timer_list           TimerSQ3Tmax1;
+	struct timer_list           TimerSQ3Tmax2;
+	struct timer_list           TimerSQ3Tmax3;
+
+	unsigned long uNumSQ3[MAX_RATE];
+	unsigned short wAntDiversityMaxRate;
+
+	SEthernetHeader         sTxEthHeader;
+	SEthernetHeader         sRxEthHeader;
+	unsigned char abyBroadcastAddr[ETH_ALEN];
+	unsigned char abySNAP_RFC1042[ETH_ALEN];
+	unsigned char abySNAP_Bridgetunnel[ETH_ALEN];
 	unsigned char abyEEPROM[EEP_MAX_CONTEXT_SIZE]; /* unsigned long alignment */
+	/* Pre-Authentication & PMK cache */
+	SPMKID                  gsPMKID;
+	SPMKIDCandidateEvent    gsPMKIDCandidate;
+
+	/* for 802.11h */
+	bool b11hEnable;
+	unsigned char abyCountryCode[3];
+	/* for 802.11h DFS */
+	unsigned int	uNumOfMeasureEIDs;
+	PWLAN_IE_MEASURE_REQ    pCurrMeasureEID;
+	bool bMeasureInProgress;
+	unsigned char byOrgChannel;
+	unsigned char byOrgRCR;
+	unsigned long dwOrgMAR0;
+	unsigned long dwOrgMAR4;
+	unsigned char byBasicMap;
+	unsigned char byCCAFraction;
+	unsigned char abyRPIs[8];
+	unsigned long dwRPIs[8];
+	bool bChannelSwitch;
+	unsigned char byNewChannel;
+	unsigned char byChannelSwitchCount;
+	bool bQuietEnable;
+	bool bEnableFirstQuiet;
+	unsigned char byQuietStartCount;
+	unsigned int	uQuietEnqueue;
+	unsigned long dwCurrentQuietEndTime;
+	SQuietControl           sQuiet[MAX_QUIET_COUNT];
+	/* for 802.11h TPC */
+	bool bCountryInfo5G;
+	bool bCountryInfo24G;
 
 	unsigned short wBeaconInterval;
+
+	/* WPA supplicant deamon */
+	struct net_device       *wpadev;
+	bool bWPADEVUp;
+	struct sk_buff          *skb;
+#ifdef WPA_SUPPLICANT_DRIVER_WEXT_SUPPORT
+	unsigned int	bwextcount;
+	bool bWPASuppWextEnabled;
+#endif
+
+#ifdef HOSTAP
+	/* user space daemon: hostapd, is used for HOSTAP */
+	bool bEnableHostapd;
+	bool bEnable8021x;
+	bool bEnableHostWEP;
+	struct net_device       *apdev;
+	int (*tx_80211)(struct sk_buff *skb, struct net_device *dev);
+#endif
+	unsigned int	uChannel;
+	bool bMACSuspend;
+
+	struct iw_statistics	wstats;		/* wireless stats */
+	bool bCommit;
 };
 
 static inline PDEVICE_RD_INFO alloc_rd_info(void)
