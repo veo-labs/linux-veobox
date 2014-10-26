@@ -701,8 +701,15 @@ static struct cnode *dgap_find_config(int type, int bus, int slot)
  */
 static uint dgap_config_get_num_prts(struct board_t *bd)
 {
-	int count = 0;
-	struct cnode *p;
+	unsigned int i;
+	ulong lock_flags;
+
+	spin_lock_irqsave(&dgap_poll_lock, lock_flags);
+	dgap_poll_stop = 1;
+	spin_unlock_irqrestore(&dgap_poll_lock, lock_flags);
+
+	/* Turn off poller right away. */
+	del_timer_sync(&dgap_poll_timer);
 
 	if (!bd)
 		return 0;
@@ -730,10 +737,7 @@ static uint dgap_config_get_num_prts(struct board_t *bd)
 
 static char *dgap_create_config_string(struct board_t *bd, char *string)
 {
-	char *ptr = string;
-	struct cnode *p;
-	struct cnode *q;
-	int speed;
+	unsigned int i;
 
 	if (!bd) {
 		*ptr = 0xff;
@@ -1105,14 +1109,12 @@ static void dgap_unmap(struct board_t *brd)
 *
 ******************************************************************************/
 
-			s = dgap_getword(in);
-			if (!s) {
-				pr_err("unexpeced end of file");
-				return -1;
-			}
-			p->u.ttyname = kstrdup(s, GFP_KERNEL);
-			if (!p->u.ttyname)
-				return -1;
+static void dgap_poll_handler(ulong dummy)
+{
+	unsigned int i;
+	struct board_t *brd;
+	unsigned long lock_flags;
+	ulong new_time;
 
 			break;
 
@@ -1224,12 +1226,16 @@ static void dgap_unmap(struct board_t *brd)
 			else
 				brd->u.board.module1++;
 
-			module_type = dgap_gettok(in);
-			if (module_type == 0 || (module_type != PORTS &&
-			    module_type != MODEM)) {
-				pr_err("failed to set a type of module");
-				return -1;
-			}
+/*
+ * dgap_init_globals()
+ *
+ * This is where we initialize the globals from the static insmod
+ * configuration variables.  These are declared near the head of
+ * this file.
+ */
+static void dgap_init_globals(void)
+{
+	unsigned int i;
 
 			p->u.module.type = module_type;
 
@@ -1532,7 +1538,45 @@ static void dgap_cleanup_nodes(void)
  * and returns it back to the user.
  * Returns 0 on error.
  */
-static uint dgap_get_custom_baud(struct channel_t *ch)
+static void dgap_cleanup_tty(struct board_t *brd)
+{
+	struct device *dev;
+	unsigned int i;
+
+	dgap_boards_by_major[brd->serial_driver->major] = NULL;
+	brd->dgap_serial_major = 0;
+	for (i = 0; i < brd->nasync; i++) {
+		tty_port_destroy(&brd->serial_ports[i]);
+		dev = brd->channels[i]->ch_tun.un_sysfs;
+		dgap_remove_tty_sysfs(dev);
+		tty_unregister_device(brd->serial_driver, i);
+	}
+	tty_unregister_driver(brd->serial_driver);
+	put_tty_driver(brd->serial_driver);
+	kfree(brd->serial_ports);
+
+	dgap_boards_by_major[brd->print_driver->major] = NULL;
+	brd->dgap_transparent_print_major = 0;
+	for (i = 0; i < brd->nasync; i++) {
+		tty_port_destroy(&brd->printer_ports[i]);
+		dev = brd->channels[i]->ch_pun.un_sysfs;
+		dgap_remove_tty_sysfs(dev);
+		tty_unregister_device(brd->print_driver, i);
+	}
+	tty_unregister_driver(brd->print_driver);
+	put_tty_driver(brd->print_driver);
+	kfree(brd->printer_ports);
+}
+
+/*=======================================================================
+ *
+ *      dgap_input - Process received data.
+ *
+ *              ch      - Pointer to channel structure.
+ *
+ *=======================================================================*/
+
+static void dgap_input(struct channel_t *ch)
 {
 	u8 __iomem *vaddr;
 	ulong offset;
@@ -4234,10 +4278,15 @@ static int dgap_set_modem_info(struct channel_t *ch, struct board_t *bd,
 		else
 			ch->ch_mval &= ~(D_RTS(ch));
 
-		if (arg & TIOCM_DTR)
-			ch->ch_mval |= (D_DTR(ch));
-		else
-			ch->ch_mval &= ~(D_DTR(ch));
+/*
+ * Copies the BIOS code from the user to the board,
+ * and starts the BIOS running.
+ */
+static void dgap_do_bios_load(struct board_t *brd, const u8 *ubios, int len)
+{
+	u8 __iomem *addr;
+	uint offset;
+	unsigned int i;
 
 		break;
 
@@ -4308,8 +4357,15 @@ static int dgap_tty_digiseta(struct channel_t *ch, struct board_t *bd,
 
 	memcpy(&ch->ch_digi, &new_digi, sizeof(struct digi_t));
 
-	if (ch->ch_digi.digi_maxcps < 1)
-		ch->ch_digi.digi_maxcps = 1;
+	/*
+	 * If board is a concentrator product, we need to give
+	 * it its config string describing how the concentrators look.
+	 */
+	if ((brd->type == PCX) || (brd->type == PEPC)) {
+		u8 string[100];
+		u8 __iomem *config;
+		u8 *xconfig;
+		unsigned int i = 0;
 
 	if (ch->ch_digi.digi_maxcps > 10000)
 		ch->ch_digi.digi_maxcps = 10000;
@@ -4387,9 +4443,10 @@ static int dgap_tty_digigetedelay(struct tty_struct *tty, int __user *retinfo)
 static int dgap_tty_digisetedelay(struct channel_t *ch, struct board_t *bd,
 				  struct un_t *un, int __user *new_info)
 {
-	int new_digi;
-	ulong lock_flags;
-	ulong lock_flags2;
+	u8 check;
+	u32 check1;
+	u32 check2;
+	unsigned int i;
 
 	if (copy_from_user(&new_digi, new_info, sizeof(int)))
 		return -EFAULT;
@@ -5362,10 +5419,13 @@ static int dgap_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 		spin_unlock_irqrestore(&bd->bd_lock, lock_flags);
 		return dgap_tty_digigetcustombaud(ch, un, uarg);
 
-	case DIGI_SETCUSTOMBAUD:
-		spin_unlock_irqrestore(&ch->ch_lock, lock_flags2);
-		spin_unlock_irqrestore(&bd->bd_lock, lock_flags);
-		return dgap_tty_digisetcustombaud(ch, bd, un, uarg);
+static ssize_t dgap_ports_state_show(struct device *p,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct board_t *bd;
+	int count = 0;
+	unsigned int i;
 
 	case DIGI_RESET_PORT:
 		dgap_firmware_reset_port(ch);
@@ -5382,28 +5442,13 @@ static int dgap_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 	}
 }
 
-static const struct tty_operations dgap_tty_ops = {
-	.open = dgap_tty_open,
-	.close = dgap_tty_close,
-	.write = dgap_tty_write,
-	.write_room = dgap_tty_write_room,
-	.flush_buffer = dgap_tty_flush_buffer,
-	.chars_in_buffer = dgap_tty_chars_in_buffer,
-	.flush_chars = dgap_tty_flush_chars,
-	.ioctl = dgap_tty_ioctl,
-	.set_termios = dgap_tty_set_termios,
-	.stop = dgap_tty_stop,
-	.start = dgap_tty_start,
-	.throttle = dgap_tty_throttle,
-	.unthrottle = dgap_tty_unthrottle,
-	.hangup = dgap_tty_hangup,
-	.put_char = dgap_tty_put_char,
-	.tiocmget = dgap_tty_tiocmget,
-	.tiocmset = dgap_tty_tiocmset,
-	.break_ctl = dgap_tty_send_break,
-	.wait_until_sent = dgap_tty_wait_until_sent,
-	.send_xchar = dgap_tty_send_xchar
-};
+static ssize_t dgap_ports_baud_show(struct device *p,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct board_t *bd;
+	int count = 0;
+	unsigned int i;
 
 /************************************************************************
  *
