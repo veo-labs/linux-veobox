@@ -113,6 +113,18 @@
 #define DIV_CPU0		0x14500
 #define DIV_CPU1		0x14504
 
+enum exynos4415_plls {
+	apll, epll, g3d_pll, isp_pll, disp_pll,
+	nr_plls,
+};
+
+/*
+ * Support for CMU save/restore across system suspends
+ */
+#ifdef CONFIG_PM_SLEEP
+static struct samsung_clk_reg_dump *exynos4415_clk_regs;
+static struct samsung_clk_provider *exynos4415_ctx;
+
 static unsigned long exynos4415_cmu_clk_regs[] __initdata = {
 	SRC_LEFTBUS,
 	DIV_LEFTBUS,
@@ -962,6 +974,15 @@ CLK_OF_DECLARE(exynos4415_cmu, "samsung,exynos4415-cmu", exynos4415_cmu_init);
 #define BPLL_CON2		0x220
 #define SRC_DMC			0x300
 #define DIV_DMC1		0x504
+
+enum exynos4415_dmc_plls {
+	mpll, bpll,
+	nr_dmc_plls,
+};
+
+#ifdef CONFIG_PM_SLEEP
+static struct samsung_clk_reg_dump *exynos4415_dmc_clk_regs;
+static struct samsung_clk_provider *exynos4415_dmc_ctx;
 
 static unsigned long exynos4415_cmu_dmc_clk_regs[] __initdata = {
 	MPLL_LOCK,
