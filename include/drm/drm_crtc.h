@@ -248,6 +248,24 @@ struct drm_bridge;
 struct drm_atomic_state;
 
 /**
+ * struct drm_crtc_state - mutable crtc state
+ * @enable: whether the CRTC should be enabled, gates all other state
+ * @mode: current mode timings
+ * @event: optional pointer to a DRM event to signal upon completion of the
+ * 	state update
+ * @state: backpointer to global drm_atomic_state
+ */
+struct drm_crtc_state {
+	bool enable        : 1;
+
+	struct drm_display_mode mode;
+
+	struct drm_pending_vblank_event *event;
+
+	struct drm_atomic_state *state;
+};
+
+/**
  * struct drm_crtc_funcs - control CRTCs for a given device
  * @save: save CRTC state
  * @restore: restore CRTC state
@@ -320,7 +338,7 @@ struct drm_crtc_funcs {
 	/* atomic update handling */
 	struct drm_crtc_state *(*atomic_duplicate_state)(struct drm_crtc *crtc);
 	void (*atomic_destroy_state)(struct drm_crtc *crtc,
-				     struct drm_crtc_state *state);
+				     struct drm_crtc_state *cstate);
 	int (*atomic_set_property)(struct drm_crtc *crtc,
 				   struct drm_crtc_state *state,
 				   struct drm_property *property,
@@ -358,6 +376,7 @@ struct drm_crtc_funcs {
  * @pixeldur_ns: precise pixel timing
  * @helper_private: mid-layer private data
  * @properties: property tracking for this CRTC
+ * @state: current atomic state for this CRTC
  * @acquire_ctx: per-CRTC implicit acquire context used by atomic drivers for
  * 	legacy ioctls
  *
@@ -426,17 +445,11 @@ struct drm_crtc {
 
 /**
  * struct drm_connector_state - mutable connector state
- * @connector: backpointer to the connector
- * @crtc: CRTC to connect connector to, NULL if disabled
- * @best_encoder: can be used by helpers and drivers to select the encoder
+ * @crtc: crtc to connect connector to, NULL if disabled
  * @state: backpointer to global drm_atomic_state
  */
 struct drm_connector_state {
-	struct drm_connector *connector;
-
-	struct drm_crtc *crtc;  /* do not write directly, use drm_atomic_set_crtc_for_connector() */
-
-	struct drm_encoder *best_encoder;
+	struct drm_crtc *crtc;
 
 	struct drm_atomic_state *state;
 };
@@ -458,6 +471,7 @@ struct drm_connector_state {
  *    (do not call directly, use drm_atomic_connector_set_property())
  * @atomic_get_property: get a property on an atomic state for this connector
  *    (do not call directly, use drm_atomic_connector_get_property())
+ *
  *
  * Each CRTC may have one or more connectors attached to it.  The functions
  * below allow the core DRM code to control connectors, enumerate available modes,
@@ -486,7 +500,7 @@ struct drm_connector_funcs {
 	/* atomic update handling */
 	struct drm_connector_state *(*atomic_duplicate_state)(struct drm_connector *connector);
 	void (*atomic_destroy_state)(struct drm_connector *connector,
-				     struct drm_connector_state *state);
+				     struct drm_connector_state *cstate);
 	int (*atomic_set_property)(struct drm_connector *connector,
 				   struct drm_connector_state *state,
 				   struct drm_property *property,
@@ -593,6 +607,7 @@ struct drm_encoder {
  * @null_edid_counter: track sinks that give us all zeros for the EDID
  * @bad_edid_counter: track sinks that give us an EDID with invalid checksum
  * @debugfs_entry: debugfs directory for this connector
+ * @state: current atomic state for this connector
  *
  * Each connector may be connected to one or more CRTCs, or may be clonable by
  * another connector if they can share a CRTC.  Each connector also has a specific
@@ -657,23 +672,13 @@ struct drm_connector {
 	struct dentry *debugfs_entry;
 
 	struct drm_connector_state *state;
-
-	/* DisplayID bits */
-	bool has_tile;
-	struct drm_tile_group *tile_group;
-	bool tile_is_single_monitor;
-
-	uint8_t num_h_tile, num_v_tile;
-	uint8_t tile_h_loc, tile_v_loc;
-	uint16_t tile_h_size, tile_v_size;
 };
 
 /**
  * struct drm_plane_state - mutable plane state
  * @plane: backpointer to the plane
  * @crtc: currently bound CRTC, NULL if disabled
- * @fb: currently bound framebuffer
- * @fence: optional fence to wait for before scanning out @fb
+ * @fb: currently bound fb
  * @crtc_x: left position of visible portion of plane on crtc
  * @crtc_y: upper position of visible portion of plane on crtc
  * @crtc_w: width of visible portion of plane on crtc
@@ -687,11 +692,8 @@ struct drm_connector {
  * @state: backpointer to global drm_atomic_state
  */
 struct drm_plane_state {
-	struct drm_plane *plane;
-
-	struct drm_crtc *crtc;   /* do not write directly, use drm_atomic_set_crtc_for_plane() */
-	struct drm_framebuffer *fb;  /* do not write directly, use drm_atomic_set_fb_for_plane() */
-	struct fence *fence;
+	struct drm_crtc *crtc;
+	struct drm_framebuffer *fb;
 
 	/* Signed dest location allows it to be partially off screen */
 	int32_t crtc_x, crtc_y;
@@ -739,7 +741,7 @@ struct drm_plane_funcs {
 	/* atomic update handling */
 	struct drm_plane_state *(*atomic_duplicate_state)(struct drm_plane *plane);
 	void (*atomic_destroy_state)(struct drm_plane *plane,
-				     struct drm_plane_state *state);
+				     struct drm_plane_state *cstate);
 	int (*atomic_set_property)(struct drm_plane *plane,
 				   struct drm_plane_state *state,
 				   struct drm_property *property,
@@ -795,8 +797,6 @@ struct drm_plane {
 	struct drm_object_properties properties;
 
 	enum drm_plane_type type;
-
-	void *helper_private;
 
 	struct drm_plane_state *state;
 };
