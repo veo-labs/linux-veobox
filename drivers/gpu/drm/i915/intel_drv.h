@@ -882,8 +882,7 @@ void intel_fb_obj_flush(struct drm_i915_gem_object *obj, bool retire);
 
 /* intel_audio.c */
 void intel_init_audio(struct drm_device *dev);
-void intel_write_eld(struct drm_encoder *encoder,
-		     struct drm_display_mode *mode);
+void intel_write_eld(struct intel_encoder *encoder);
 
 /* intel_display.c */
 extern const struct drm_plane_funcs intel_plane_funcs;

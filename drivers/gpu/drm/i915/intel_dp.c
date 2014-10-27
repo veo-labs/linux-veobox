@@ -1357,6 +1357,8 @@ static void intel_dp_prepare(struct intel_encoder *encoder)
 
 	if (crtc->config->has_audio)
 		intel_dp->DP |= DP_AUDIO_OUTPUT_ENABLE;
+		intel_write_eld(encoder);
+	}
 
 	/* Split out the IBX/CPU vs CPT settings */
 
