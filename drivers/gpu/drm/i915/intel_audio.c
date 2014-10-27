@@ -82,9 +82,6 @@ static bool intel_eld_uptodate(struct drm_connector *connector,
 	tmp = I915_READ(reg_eldv);
 	tmp &= bits_eldv;
 
-	if (!eld[0])
-		return !tmp;
-
 	if (!tmp)
 		return false;
 
@@ -125,9 +122,6 @@ static void g4x_audio_codec_enable(struct drm_connector *connector,
 	tmp &= ~(eldv | G4X_ELD_ADDR);
 	len = (tmp >> 9) & 0x1f;		/* ELD buffer size */
 	I915_WRITE(G4X_AUD_CNTL_ST, tmp);
-
-	if (!eld[0])
-		return;
 
 	len = min_t(int, eld[2], len);
 	DRM_DEBUG_DRIVER("ELD size %d\n", len);
@@ -209,9 +203,6 @@ static void hsw_audio_codec_enable(struct drm_connector *connector,
 	tmp = I915_READ(aud_cntrl_st2);
 	tmp &= ~eldv;
 	I915_WRITE(aud_cntrl_st2, tmp);
-
-	if (!eld[0])
-		return;
 
 	tmp = I915_READ(aud_cntl_st);
 	tmp &= ~IBX_ELD_ADDRESS;
@@ -306,9 +297,6 @@ static void ilk_audio_codec_enable(struct drm_connector *connector,
 	tmp = I915_READ(aud_cntrl_st2);
 	tmp &= ~eldv;
 	I915_WRITE(aud_cntrl_st2, tmp);
-
-	if (!eld[0])
-		return;
 
 	tmp = I915_READ(aud_cntl_st);
 	tmp &= ~IBX_ELD_ADDRESS;
