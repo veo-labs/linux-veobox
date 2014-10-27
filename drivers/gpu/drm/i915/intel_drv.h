@@ -880,6 +880,11 @@ int intel_fb_align_height(struct drm_device *dev, int height,
 void intel_fb_obj_flush(struct drm_i915_gem_object *obj, bool retire);
 
 
+/* intel_audio.c */
+void intel_init_audio(struct drm_device *dev);
+void intel_write_eld(struct drm_encoder *encoder,
+		     struct drm_display_mode *mode);
+
 /* intel_display.c */
 extern const struct drm_plane_funcs intel_plane_funcs;
 bool intel_has_pending_fb_unpin(struct drm_device *dev);
@@ -905,6 +910,7 @@ int intel_get_pipe_from_crtc_id(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
 enum transcoder intel_pipe_to_cpu_transcoder(struct drm_i915_private *dev_priv,
 					     enum pipe pipe);
+bool intel_pipe_has_type(struct intel_crtc *crtc, int type);
 static inline void
 intel_wait_for_vblank(struct drm_device *dev, int pipe)
 {
