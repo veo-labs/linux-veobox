@@ -334,23 +334,8 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 		}
 	}
 
-	if (nvbo->pin_refcnt) {
-		if (!(memtype & (1 << bo->mem.mem_type)) || evict) {
-			NV_ERROR(drm, "bo %p pinned elsewhere: "
-				      "0x%08x vs 0x%08x\n", bo,
-				 1 << bo->mem.mem_type, memtype);
-			ret = -EBUSY;
-		}
-		nvbo->pin_refcnt++;
-		goto out;
-	}
-
-	if (evict) {
-		nouveau_bo_placement_set(nvbo, TTM_PL_FLAG_TT, 0);
-		ret = nouveau_bo_validate(nvbo, false, false);
-		if (ret)
-			goto out;
-	}
+	if (nvbo->pin_refcnt)
+		goto ref_inc;
 
 	nvbo->pin_refcnt++;
 	nouveau_bo_placement_set(nvbo, memtype, 0);
@@ -375,6 +360,9 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 	default:
 		break;
 	}
+
+ref_inc:
+	nvbo->pin_refcnt++;
 
 out:
 	if (force && ret)
