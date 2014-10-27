@@ -358,7 +358,6 @@ struct drm_crtc_funcs {
  * @pixeldur_ns: precise pixel timing
  * @helper_private: mid-layer private data
  * @properties: property tracking for this CRTC
- * @state: current atomic state for this CRTC
  * @acquire_ctx: per-CRTC implicit acquire context used by atomic drivers for
  * 	legacy ioctls
  *
@@ -594,16 +593,6 @@ struct drm_encoder {
  * @null_edid_counter: track sinks that give us all zeros for the EDID
  * @bad_edid_counter: track sinks that give us an EDID with invalid checksum
  * @debugfs_entry: debugfs directory for this connector
- * @state: current atomic state for this connector
- * @has_tile: is this connector connected to a tiled monitor
- * @tile_group: tile group for the connected monitor
- * @tile_is_single_monitor: whether the tile is one monitor housing
- * @num_h_tile: number of horizontal tiles in the tile group
- * @num_v_tile: number of vertical tiles in the tile group
- * @tile_h_loc: horizontal location of this tile
- * @tile_v_loc: vertical location of this tile
- * @tile_h_size: horizontal size of this tile.
- * @tile_v_size: vertical size of this tile.
  *
  * Each connector may be connected to one or more CRTCs, or may be clonable by
  * another connector if they can share a CRTC.  Each connector also has a specific
@@ -859,7 +848,6 @@ struct drm_bridge {
 
 /**
  * struct drm_mode_set - new values for a CRTC config change
- * @head: list management
  * @fb: framebuffer to use for new config
  * @crtc: CRTC whose configuration we're about to change
  * @mode: mode timings to use
