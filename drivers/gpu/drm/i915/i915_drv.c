@@ -741,7 +741,7 @@ static int i915_drm_resume(struct drm_device *dev)
 static int i915_drm_resume_early(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * We have a resume ordering issue with the snd-hda driver also
@@ -757,7 +757,10 @@ static int i915_drm_resume_early(struct drm_device *dev)
 
 	pci_set_master(dev->pdev);
 
-	ret = intel_resume_prepare(dev_priv, false);
+	if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv))
+		hsw_disable_pc8(dev_priv);
+	else if (IS_VALLEYVIEW(dev_priv))
+		ret = vlv_resume_prepare(dev_priv, false);
 	if (ret)
 		DRM_ERROR("Resume prepare failed: %d,Continuing resume\n", ret);
 
