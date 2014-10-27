@@ -248,60 +248,6 @@ struct drm_bridge;
 struct drm_atomic_state;
 
 /**
- * struct drm_crtc_state - mutable CRTC state
- * @crtc: backpointer to the CRTC
- * @enable: whether the CRTC should be enabled, gates all other state
- * @active: whether the CRTC is actively displaying (used for DPMS)
- * @mode_changed: for use by helpers and drivers when computing state updates
- * @active_changed: for use by helpers and drivers when computing state updates
- * @plane_mask: bitmask of (1 << drm_plane_index(plane)) of attached planes
- * @last_vblank_count: for helpers and drivers to capture the vblank of the
- * 	update to ensure framebuffer cleanup isn't done too early
- * @planes_changed: for use by helpers and drivers when computing state updates
- * @adjusted_mode: for use by helpers and drivers to compute adjusted mode timings
- * @mode: current mode timings
- * @event: optional pointer to a DRM event to signal upon completion of the
- * 	state update
- * @state: backpointer to global drm_atomic_state
- *
- * Note that the distinction between @enable and @active is rather subtile:
- * Flipping @active while @enable is set without changing anything else may
- * never return in a failure from the ->atomic_check callback. Userspace assumes
- * that a DPMS On will always succeed. In other words: @enable controls resource
- * assignment, @active controls the actual hardware state.
- */
-struct drm_crtc_state {
-	struct drm_crtc *crtc;
-
-	bool enable;
-	bool active;
-
-	/* computed state bits used by helpers and drivers */
-	bool planes_changed : 1;
-	bool mode_changed : 1;
-	bool active_changed : 1;
-
-	/* attached planes bitmask:
-	 * WARNING: transitional helpers do not maintain plane_mask so
-	 * drivers not converted over to atomic helpers should not rely
-	 * on plane_mask being accurate!
-	 */
-	u32 plane_mask;
-
-	/* last_vblank_count: for vblank waits before cleanup */
-	u32 last_vblank_count;
-
-	/* adjusted_mode: for use by helpers and drivers */
-	struct drm_display_mode adjusted_mode;
-
-	struct drm_display_mode mode;
-
-	struct drm_pending_vblank_event *event;
-
-	struct drm_atomic_state *state;
-};
-
-/**
  * struct drm_crtc_funcs - control CRTCs for a given device
  * @save: save CRTC state
  * @restore: restore CRTC state
@@ -912,37 +858,8 @@ struct drm_bridge {
 };
 
 /**
- * struct struct drm_atomic_state - the global state object for atomic updates
- * @dev: parent DRM device
- * @allow_modeset: allow full modeset
- * @legacy_cursor_update: hint to enforce legacy cursor ioctl semantics
- * @planes: pointer to array of plane pointers
- * @plane_states: pointer to array of plane states pointers
- * @crtcs: pointer to array of CRTC pointers
- * @crtc_states: pointer to array of CRTC states pointers
- * @num_connector: size of the @connectors and @connector_states arrays
- * @connectors: pointer to array of connector pointers
- * @connector_states: pointer to array of connector states pointers
- * @acquire_ctx: acquire context for this atomic modeset state update
- */
-struct drm_atomic_state {
-	struct drm_device *dev;
-	bool allow_modeset : 1;
-	bool legacy_cursor_update : 1;
-	struct drm_plane **planes;
-	struct drm_plane_state **plane_states;
-	struct drm_crtc **crtcs;
-	struct drm_crtc_state **crtc_states;
-	int num_connector;
-	struct drm_connector **connectors;
-	struct drm_connector_state **connector_states;
-
-	struct drm_modeset_acquire_ctx *acquire_ctx;
-};
-
-
-/**
  * struct drm_mode_set - new values for a CRTC config change
+ * @head: list management
  * @fb: framebuffer to use for new config
  * @crtc: CRTC whose configuration we're about to change
  * @mode: mode timings to use
