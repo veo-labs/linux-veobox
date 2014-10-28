@@ -9707,6 +9707,18 @@ static void intel_do_mmio_flip(struct intel_crtc *intel_crtc)
 
 	if (atomic_update)
 		intel_pipe_update_end(intel_crtc, start_vbl_count);
+
+	spin_lock_irq(&dev_priv->mmio_flip_lock);
+	intel_crtc->mmio_flip.status = INTEL_MMIO_FLIP_IDLE;
+	spin_unlock_irq(&dev_priv->mmio_flip_lock);
+}
+
+static void intel_mmio_flip_work_func(struct work_struct *work)
+{
+	struct intel_crtc *intel_crtc =
+		container_of(work, struct intel_crtc, mmio_flip.work);
+
+	intel_do_mmio_flip(intel_crtc);
 }
 
 static void intel_mmio_flip_work_func(struct work_struct *work)
@@ -9743,7 +9755,20 @@ static int intel_queue_mmio_flip(struct drm_device *dev,
 
 	schedule_work(&intel_crtc->mmio_flip.work);
 
-	return 0;
+		mmio_flip = &intel_crtc->mmio_flip;
+		if (mmio_flip->status != INTEL_MMIO_FLIP_WAIT_RING)
+			continue;
+
+		if (ring->id != mmio_flip->ring_id)
+			continue;
+
+		if (i915_seqno_passed(seqno, mmio_flip->seqno)) {
+			schedule_work(&intel_crtc->mmio_flip.work);
+			mmio_flip->status = INTEL_MMIO_FLIP_WORK_SCHEDULED;
+			ring->irq_put(ring);
+		}
+	}
+	spin_unlock_irqrestore(&dev_priv->mmio_flip_lock, irq_flags);
 }
 
 static int intel_gen9_queue_flip(struct drm_device *dev,
@@ -9756,20 +9781,8 @@ static int intel_gen9_queue_flip(struct drm_device *dev,
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	int ret;
 
-	switch(intel_crtc->pipe) {
-	case PIPE_A:
-		plane = MI_DISPLAY_FLIP_SKL_PLANE_1_A;
-		break;
-	case PIPE_B:
-		plane = MI_DISPLAY_FLIP_SKL_PLANE_1_B;
-		break;
-	case PIPE_C:
-		plane = MI_DISPLAY_FLIP_SKL_PLANE_1_C;
-		break;
-	default:
-		WARN_ONCE(1, "unknown plane in flip command\n");
-		return -ENODEV;
-	}
+	if (WARN_ON(intel_crtc->mmio_flip.status != INTEL_MMIO_FLIP_IDLE))
+		return -EBUSY;
 
 	switch (obj->tiling_mode) {
 	case I915_TILING_NONE:
@@ -9784,6 +9797,7 @@ static int intel_gen9_queue_flip(struct drm_device *dev,
 	}
 
 	spin_lock_irq(&dev_priv->mmio_flip_lock);
+	intel_crtc->mmio_flip.status = INTEL_MMIO_FLIP_WAIT_RING;
 	intel_crtc->mmio_flip.seqno = obj->last_write_seqno;
 	intel_crtc->mmio_flip.ring_id = obj->ring->id;
 	spin_unlock_irq(&dev_priv->mmio_flip_lock);

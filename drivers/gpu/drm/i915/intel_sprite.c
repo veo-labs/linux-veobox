@@ -77,7 +77,7 @@ static int usecs_to_scanlines(const struct drm_display_mode *mode, int usecs)
  *
  * Return: true if the call was successful
  */
-static bool intel_pipe_update_start(struct intel_crtc *crtc, uint32_t *start_vbl_count)
+bool intel_pipe_update_start(struct intel_crtc *crtc, uint32_t *start_vbl_count)
 {
 	struct drm_device *dev = crtc->base.dev;
 	const struct drm_display_mode *mode = &crtc->config->base.adjusted_mode;
@@ -150,7 +150,7 @@ static bool intel_pipe_update_start(struct intel_crtc *crtc, uint32_t *start_vbl
  * re-enables interrupts and verifies the update was actually completed
  * before a vblank using the value of @start_vbl_count.
  */
-static void intel_pipe_update_end(struct intel_crtc *crtc, u32 start_vbl_count)
+void intel_pipe_update_end(struct intel_crtc *crtc, u32 start_vbl_count)
 {
 	struct drm_device *dev = crtc->base.dev;
 	enum pipe pipe = crtc->pipe;

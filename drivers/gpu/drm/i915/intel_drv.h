@@ -400,41 +400,17 @@ struct intel_pipe_wm {
 	bool sprites_scaled;
 };
 
+enum intel_mmio_flip_status {
+	INTEL_MMIO_FLIP_IDLE = 0,
+	INTEL_MMIO_FLIP_WAIT_RING,
+	INTEL_MMIO_FLIP_WORK_SCHEDULED,
+};
+
 struct intel_mmio_flip {
-	struct drm_i915_gem_request *req;
+	u32 seqno;
+	u32 ring_id;
+	enum intel_mmio_flip_status status;
 	struct work_struct work;
-};
-
-struct skl_pipe_wm {
-	struct skl_wm_level wm[8];
-	struct skl_wm_level trans_wm;
-	uint32_t linetime;
-};
-
-/*
- * Tracking of operations that need to be performed at the beginning/end of an
- * atomic commit, outside the atomic section where interrupts are disabled.
- * These are generally operations that grab mutexes or might otherwise sleep
- * and thus can't be run with interrupts disabled.
- */
-struct intel_crtc_atomic_commit {
-	/* vblank evasion */
-	bool evade;
-	unsigned start_vbl_count;
-
-	/* Sleepable operations to perform before commit */
-	bool wait_for_flips;
-	bool disable_fbc;
-	bool pre_disable_primary;
-	bool update_wm;
-	unsigned disabled_planes;
-
-	/* Sleepable operations to perform after commit */
-	unsigned fb_bits;
-	bool wait_vblank;
-	bool update_fbc;
-	bool post_enable_primary;
-	unsigned update_sprite_watermarks;
 };
 
 struct intel_crtc {
