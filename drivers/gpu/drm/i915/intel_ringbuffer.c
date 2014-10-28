@@ -832,38 +832,6 @@ static int chv_init_workarounds(struct intel_engine_cs *ring)
 	WA_SET_BIT_MASKED(GEN8_ROW_CHICKEN,
 		  STALL_DOP_GATING_DISABLE);
 
-	/* WaDisableDopClockGating:chv (pre-production hw) */
-	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2,
-		  DOP_CLOCK_GATING_DISABLE);
-
-	/* WaDisableSamplerPowerBypass:chv (pre-production hw) */
-	WA_SET_BIT_MASKED(HALF_SLICE_CHICKEN3,
-		  GEN8_SAMPLER_POWER_BYPASS_DIS);
-
-	/* According to the CACHE_MODE_0 default value documentation, some
-	 * CHV platforms disable this optimization by default.  Turn it on.
-	 */
-	WA_CLR_BIT_MASKED(CACHE_MODE_0_GEN7, HIZ_RAW_STALL_OPT_DISABLE);
-
-	/* Wa4x4STCOptimizationDisable:chv */
-	WA_SET_BIT_MASKED(CACHE_MODE_1,
-			  GEN8_4x4_STC_OPTIMIZATION_DISABLE);
-
-	/* Improve HiZ throughput on CHV. */
-	WA_SET_BIT_MASKED(HIZ_CHICKEN, CHV_HZ_8X8_MODE_IN_1X);
-
-	/*
-	 * BSpec recommends 8x4 when MSAA is used,
-	 * however in practice 16x4 seems fastest.
-	 *
-	 * Note that PS/WM thread counts depend on the WIZ hashing
-	 * disable bit, which we don't touch here, but it's good
-	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
-	 */
-	WA_SET_FIELD_MASKED(GEN7_GT_MODE,
-			    GEN6_WIZ_HASHING_MASK,
-			    GEN6_WIZ_HASHING_16x4);
-
 	return 0;
 }
 

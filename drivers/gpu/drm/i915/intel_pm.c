@@ -6917,15 +6917,9 @@ bool i915_gpu_turbo_disable(void)
 	}
 	dev_priv = i915_mch_dev;
 
-	dev_priv->ips.max_delay = dev_priv->ips.fstart;
-
-	if (!ironlake_set_drps(dev_priv->dev, dev_priv->ips.fstart))
-		ret = false;
-
-out_unlock:
-	spin_unlock_irq(&mchdev_lock);
-
-	return ret;
+	/* WaDisableSDEUnitClockGating:chv */
+	I915_WRITE(GEN8_UCGCTL6, I915_READ(GEN8_UCGCTL6) |
+		   GEN8_SDEUNIT_CLOCK_GATE_DISABLE);
 }
 EXPORT_SYMBOL_GPL(i915_gpu_turbo_disable);
 
