@@ -6002,7 +6002,7 @@ static void vlv_prepare_pll(struct intel_crtc *crtc,
 	vlv_dpio_write(dev_priv, pipe, VLV_PLL_DW3(pipe), mdiv);
 
 	/* Set HBR and RBR LPF coefficients */
-	if (crtc->config.port_clock == 162000 ||
+	if (pipe_config->port_clock == 162000 ||
 	    intel_pipe_has_type(crtc, INTEL_OUTPUT_ANALOG) ||
 	    intel_pipe_has_type(crtc, INTEL_OUTPUT_HDMI))
 		vlv_dpio_write(dev_priv, pipe, VLV_PLL_DW10(pipe),
@@ -6555,9 +6555,9 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 				has_reduced_clock ? &reduced_clock : NULL,
 				num_connectors);
 	} else if (IS_CHERRYVIEW(dev)) {
-		chv_update_pll(crtc);
+		chv_update_pll(crtc, &crtc->config);
 	} else if (IS_VALLEYVIEW(dev)) {
-		vlv_update_pll(crtc);
+		vlv_update_pll(crtc, &crtc->config);
 	} else {
 		i9xx_update_pll(crtc, crtc_state,
 				has_reduced_clock ? &reduced_clock : NULL,
