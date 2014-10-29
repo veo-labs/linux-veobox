@@ -29,6 +29,7 @@
 #ifndef __MIB_H__
 #define __MIB_H__
 
+#include "ttype.h"
 #include "desc.h"
 
 //
