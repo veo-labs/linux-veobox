@@ -255,9 +255,7 @@ struct intel_shared_dpll_config {
 };
 
 struct intel_shared_dpll {
-	struct intel_shared_dpll_config config;
-	struct intel_shared_dpll_config *new_config;
-
+	unsigned crtc_mask; /* mask of CRTCs sharing this PLL */
 	int active; /* count of number of active CRTCs (i.e. DPMS on) */
 	bool on; /* is the PLL actually active? Disabled during modeset */
 	const char *name;

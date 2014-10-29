@@ -1782,7 +1782,7 @@ static void intel_prepare_shared_dpll(struct intel_crtc *crtc)
 	if (WARN_ON(pll == NULL))
 		return;
 
-	WARN_ON(!pll->config.crtc_mask);
+	WARN_ON(!pll->crtc_mask);
 	if (pll->active == 0) {
 		DRM_DEBUG_DRIVER("setting up %s\n", pll->name);
 		WARN_ON(pll->on);
@@ -1809,7 +1809,7 @@ static void intel_enable_shared_dpll(struct intel_crtc *crtc)
 	if (WARN_ON(pll == NULL))
 		return;
 
-	if (WARN_ON(pll->config.crtc_mask == 0))
+	if (WARN_ON(pll->crtc_mask == 0))
 		return;
 
 	DRM_DEBUG_KMS("enable %s (active %d, on? %d) for crtc %d\n",
@@ -1841,7 +1841,7 @@ static void intel_disable_shared_dpll(struct intel_crtc *crtc)
 	if (WARN_ON(pll == NULL))
 	       return;
 
-	if (WARN_ON(pll->config.crtc_mask == 0))
+	if (WARN_ON(pll->crtc_mask == 0))
 		return;
 
 	DRM_DEBUG_KMS("disable %s (active %d, on? %d) for crtc %d\n",
@@ -3943,13 +3943,13 @@ void intel_put_shared_dpll(struct intel_crtc *crtc)
 	if (pll == NULL)
 		return;
 
-	if (!(pll->config.crtc_mask & (1 << crtc->pipe))) {
+	if (!(pll->crtc_mask & (1 << crtc->pipe))) {
 		WARN(1, "bad %s crtc mask\n", pll->name);
 		return;
 	}
 
-	pll->config.crtc_mask &= ~(1 << crtc->pipe);
-	if (pll->config.crtc_mask == 0) {
+	pll->crtc_mask &= ~(1 << crtc->pipe);
+	if (pll->crtc_mask == 0) {
 		WARN_ON(pll->on);
 		WARN_ON(pll->active);
 	}
@@ -3972,7 +3972,7 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 		DRM_DEBUG_KMS("CRTC:%d using pre-allocated %s\n",
 			      crtc->base.base.id, pll->name);
 
-		WARN_ON(pll->new_config->crtc_mask);
+		WARN_ON(pll->crtc_mask);
 
 		goto found;
 	}
@@ -3981,16 +3981,16 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 		pll = &dev_priv->shared_dplls[i];
 
 		/* Only want to check enabled timings first */
-		if (pll->new_config->crtc_mask == 0)
+		if (pll->crtc_mask == 0)
 			continue;
 
-		if (memcmp(&crtc_state->dpll_hw_state,
-			   &pll->new_config->hw_state,
-			   sizeof(pll->new_config->hw_state)) == 0) {
-			DRM_DEBUG_KMS("CRTC:%d sharing existing %s (crtc mask 0x%08x, ative %d)\n",
+		if (memcmp(&crtc->config.dpll_hw_state, &pll->hw_state,
+			   sizeof(pll->hw_state)) == 0) {
+			DRM_DEBUG_KMS("CRTC:%d sharing existing %s "
+				      "(crtc_mask 0x%08x, active %d)\n",
 				      crtc->base.base.id, pll->name,
-				      pll->new_config->crtc_mask,
-				      pll->active);
+				      pll->crtc_mask, pll->active);
+
 			goto found;
 		}
 	}
@@ -3998,7 +3998,7 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 	/* Ok no matching timings, maybe there's a free one? */
 	for (i = 0; i < dev_priv->num_shared_dpll; i++) {
 		pll = &dev_priv->shared_dplls[i];
-		if (pll->new_config->crtc_mask == 0) {
+		if (pll->crtc_mask == 0) {
 			DRM_DEBUG_KMS("CRTC:%d allocated %s\n",
 				      crtc->base.base.id, pll->name);
 			goto found;
@@ -4008,14 +4008,14 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 	return NULL;
 
 found:
-	if (pll->new_config->crtc_mask == 0)
-		pll->new_config->hw_state = crtc_state->dpll_hw_state;
+	if (pll->crtc_mask == 0)
+		pll->hw_state = crtc->config.dpll_hw_state;
 
 	crtc_state->shared_dpll = i;
 	DRM_DEBUG_DRIVER("using %s for pipe %c\n", pll->name,
 			 pipe_name(crtc->pipe));
 
-	pll->new_config->crtc_mask |= 1 << crtc->pipe;
+	pll->crtc_mask |= 1 << crtc->pipe;
 
 	return pll;
 }
@@ -11052,10 +11052,10 @@ check_shared_dpll_state(struct drm_device *dev)
 
 		active = pll->get_hw_state(dev_priv, pll, &dpll_hw_state);
 
-		I915_STATE_WARN(pll->active > hweight32(pll->config.crtc_mask),
+		WARN(pll->active > hweight32(pll->crtc_mask),
 		     "more active pll users than references: %i vs %i\n",
-		     pll->active, hweight32(pll->config.crtc_mask));
-		I915_STATE_WARN(pll->active && !pll->on,
+		     pll->active, hweight32(pll->crtc_mask));
+		WARN(pll->active && !pll->on,
 		     "pll in active use but not on in sw tracking\n");
 		I915_STATE_WARN(pll->on && !pll->active,
 		     "pll in on but not on in use in sw tracking\n");
@@ -11072,9 +11072,9 @@ check_shared_dpll_state(struct drm_device *dev)
 		I915_STATE_WARN(pll->active != active_crtcs,
 		     "pll active crtcs mismatch (expected %i, found %i)\n",
 		     pll->active, active_crtcs);
-		I915_STATE_WARN(hweight32(pll->config.crtc_mask) != enabled_crtcs,
+		WARN(hweight32(pll->crtc_mask) != enabled_crtcs,
 		     "pll enabled crtcs mismatch (expected %i, found %i)\n",
-		     hweight32(pll->config.crtc_mask), enabled_crtcs);
+		     hweight32(pll->crtc_mask), enabled_crtcs);
 
 		I915_STATE_WARN(pll->on && memcmp(&pll->config.hw_state, &dpll_hw_state,
 				       sizeof(dpll_hw_state)),
@@ -13706,18 +13706,18 @@ static void intel_modeset_readout_hw_state(struct drm_device *dev)
 		pll->on = pll->get_hw_state(dev_priv, pll,
 					    &pll->config.hw_state);
 		pll->active = 0;
-		pll->config.crtc_mask = 0;
+		pll->crtc_mask = 0;
 		for_each_intel_crtc(dev, crtc) {
 			if (crtc->active && intel_crtc_to_shared_dpll(crtc) == pll) {
 				pll->active++;
-				pll->config.crtc_mask |= 1 << crtc->pipe;
+				pll->crtc_mask |= 1 << crtc->pipe;
 			}
 		}
 
 		DRM_DEBUG_KMS("%s hw state readout: crtc_mask 0x%08x, on %i\n",
-			      pll->name, pll->config.crtc_mask, pll->on);
+			      pll->name, pll->crtc_mask, pll->on);
 
-		if (pll->config.crtc_mask)
+		if (pll->crtc_mask)
 			intel_display_power_get(dev_priv, POWER_DOMAIN_PLLS);
 	}
 
