@@ -1347,7 +1347,7 @@ s_cbFillTxBufHead(struct vnt_private *pDevice, unsigned char byPktType,
 			       cbFrameSize, bNeedACK, uDMAIdx, hdr, pDevice->wCurrentRate);
 	/* Fill DataHead */
 	uDuration = s_uFillDataHead(pDevice, byPktType, pvTxDataHd, cbFrameSize, uDMAIdx, bNeedACK,
-				    0, 0, uMACfragNum, byFBOption, pDevice->wCurrentRate);
+				    0, 0, uMACfragNum, byFBOption, pDevice->wCurrentRate, is_pspoll);
 
 	hdr->duration_id = uDuration;
 
@@ -1596,7 +1596,7 @@ int vnt_generate_fifo_header(struct vnt_private *priv, u32 dma_idx,
 
 	//Fill DataHead
 	uDuration = s_uFillDataHead(pDevice, byPktType, pvTxDataHd, cbFrameSize, TYPE_TXDMA0, bNeedACK,
-				    0, 0, 1, AUTO_FB_NONE, wCurrentRate);
+				    0, 0, 1, AUTO_FB_NONE, wCurrentRate, false);
 
 	pMACHeader = (PS802_11Header) (pbyTxBufferAddr + cbHeaderSize);
 
@@ -1747,7 +1747,9 @@ static int vnt_beacon_xmit(struct vnt_private *priv,
 	s_vGenerateTxParameter(pDevice, byPktType, pbyTxBufferAddr, pvRrvTime, pvRTS, pvCTS,
 			       cbFrameSize, bNeedACK, TYPE_TXDMA0, &sEthHeader, wCurrentRate);
 
-	priv->wBCNBufLen = sizeof(*short_head) + skb->len;
+	//Fill DataHead
+	uDuration = s_uFillDataHead(pDevice, byPktType, pvTxDataHd, cbFrameSize, TYPE_TXDMA0, bNeedACK,
+				    0, 0, 1, AUTO_FB_NONE, wCurrentRate, false);
 
 	MACvSetCurrBCNTxDescAddr(priv->PortOffset, priv->tx_beacon_dma);
 
