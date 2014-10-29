@@ -1519,6 +1519,22 @@ static int vidioc_overlay(struct file *file, void *priv,
 	return ret;
 }
 
+static int vidioc_log_status(struct file *file, void *f)
+{
+	struct video_device *vdev = video_devdata(file);
+
+	v4l2_ctrl_log_status(file, f);
+	v4l2_device_call_all(vdev->v4l2_dev, 0, core, log_status);
+	return 0;
+}
+static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
+{
+	struct video_device *vdev = video_devdata(file);
+
+	v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
+	return 0;
+}
+
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
 
@@ -1562,6 +1578,8 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_streamon	= vidioc_streamon,
 	.vidioc_streamoff	= vidioc_streamoff,
 	.vidioc_overlay         = vidioc_overlay,
+	.vidioc_log_status      = vidioc_log_status,
+	.vidioc_s_edid          = vidioc_s_edid,
 };
 
 
