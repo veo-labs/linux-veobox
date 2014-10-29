@@ -53,7 +53,6 @@
 #include "card.h"
 #include "mac.h"
 #include "baseband.h"
-#include "michael.h"
 #include "tcrc.h"
 #include "wctl.h"
 #include "rf.h"
