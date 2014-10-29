@@ -32,6 +32,11 @@
 
 #include "device.h"
 #include "baseband.h"
+#include "michael.h"
+#include "tkip.h"
+#include "tcrc.h"
+#include "wctl.h"
+#include "wroute.h"
 #include "rf.h"
 #include "dpc.h"
 
