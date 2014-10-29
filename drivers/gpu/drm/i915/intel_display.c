@@ -3972,7 +3972,7 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 		DRM_DEBUG_KMS("CRTC:%d using pre-allocated %s\n",
 			      crtc->base.base.id, pll->name);
 
-		WARN_ON(pll->config.crtc_mask);
+		WARN_ON(pll->new_config->crtc_mask);
 
 		goto found;
 	}
@@ -3981,17 +3981,16 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 		pll = &dev_priv->shared_dplls[i];
 
 		/* Only want to check enabled timings first */
-		if (pll->config.crtc_mask == 0)
+		if (pll->new_config->crtc_mask == 0)
 			continue;
 
-		if (memcmp(&crtc->config.dpll_hw_state,
-			   &pll->config.hw_state,
-			   sizeof(pll->config.hw_state)) == 0) {
-			DRM_DEBUG_KMS("CRTC:%d sharing existing %s "
-				      "(crtc_mask 0x%08x, active %d)\n",
+		if (memcmp(&crtc->new_config->dpll_hw_state,
+			   &pll->new_config->hw_state,
+			   sizeof(pll->new_config->hw_state)) == 0) {
+			DRM_DEBUG_KMS("CRTC:%d sharing existing %s (crtc mask 0x%08x, ative %d)\n",
 				      crtc->base.base.id, pll->name,
-				      pll->config.crtc_mask, pll->active);
-
+				      pll->new_config->crtc_mask,
+				      pll->active);
 			goto found;
 		}
 	}
@@ -3999,7 +3998,7 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 	/* Ok no matching timings, maybe there's a free one? */
 	for (i = 0; i < dev_priv->num_shared_dpll; i++) {
 		pll = &dev_priv->shared_dplls[i];
-		if (pll->config.crtc_mask == 0) {
+		if (pll->new_config->crtc_mask == 0) {
 			DRM_DEBUG_KMS("CRTC:%d allocated %s\n",
 				      crtc->base.base.id, pll->name);
 			goto found;
@@ -4009,14 +4008,14 @@ struct intel_shared_dpll *intel_get_shared_dpll(struct intel_crtc *crtc,
 	return NULL;
 
 found:
-	if (pll->config.crtc_mask == 0)
-		pll->config.hw_state = crtc->config.dpll_hw_state;
+	if (pll->new_config->crtc_mask == 0)
+		pll->new_config->hw_state = crtc->new_config->dpll_hw_state;
 
 	crtc_state->shared_dpll = i;
 	DRM_DEBUG_DRIVER("using %s for pipe %c\n", pll->name,
 			 pipe_name(crtc->pipe));
 
-	pll->config.crtc_mask |= 1 << crtc->pipe;
+	pll->new_config->crtc_mask |= 1 << crtc->pipe;
 
 	return pll;
 }
@@ -4051,7 +4050,6 @@ static int intel_shared_dpll_start_config(struct drm_i915_private *dev_priv,
 cleanup:
 	while (--i >= 0) {
 		pll = &dev_priv->shared_dplls[i];
-		kfree(pll->new_config);
 		pll->new_config = NULL;
 	}
 
@@ -5636,6 +5634,14 @@ static int intel_crtc_compute_config(struct intel_crtc *crtc,
 
 	if (HAS_IPS(dev))
 		hsw_compute_ips_config(crtc, pipe_config);
+
+	/*
+	 * XXX: PCH/WRPLL clock sharing is done in ->mode_set if ->compute_clock is not
+	 * set, so make sure the old clock survives for now.
+	 */
+	if (dev_priv->display.crtc_compute_clock == NULL &&
+            (HAS_PCH_IBX(dev) || HAS_PCH_CPT(dev) || HAS_DDI(dev)))
+		pipe_config->shared_dpll = crtc->config.shared_dpll;
 
 	if (pipe_config->has_pch_encoder)
 		return ironlake_fdi_compute_config(crtc, pipe_config);
@@ -7571,7 +7577,10 @@ static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
 		else
 			crtc->new_config->dpll_hw_state.fp1 = fp;
 
-		pll = intel_get_shared_dpll(crtc, crtc_state);
+		if (intel_crtc_to_shared_dpll(crtc))
+			intel_put_shared_dpll(crtc);
+
+		pll = intel_get_shared_dpll(crtc);
 		if (pll == NULL) {
 			DRM_DEBUG_DRIVER("failed to find PLL for pipe %c\n",
 					 pipe_name(crtc->pipe));
@@ -11277,6 +11286,9 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 						&pipe_config->base.adjusted_mode);
 	}
 
+	if (dev_priv->display.crtc_compute_clock)
+		intel_shared_dpll_commit(dev_priv);
+
 	/* Only after disabling all output pipelines that will be changed can we
 	 * update the the output configuration. */
 	intel_modeset_update_state(dev, prepare_pipes);
@@ -11294,9 +11306,12 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 		crtc->x = x;
 		crtc->y = y;
 
-		ret = dev_priv->display.crtc_mode_set(intel_crtc, x, y, fb);
-		if (ret)
-			goto done;
+		if (dev_priv->display.crtc_mode_set) {
+			ret = dev_priv->display.crtc_mode_set(intel_crtc,
+							      x, y, fb);
+			if (ret)
+				goto done;
+		}
 	}
 
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */
