@@ -253,6 +253,7 @@ static void device_init_registers(struct vnt_private *pDevice)
 	unsigned char byValue;
 	unsigned char byCCKPwrdBm = 0;
 	unsigned char byOFDMPwrdBm = 0;
+	int zonetype = 0;
 
 	MACbShutdown(pDevice->PortOffset);
 	BBvSoftwareReset(pDevice);
@@ -430,12 +431,15 @@ static void device_init_registers(struct vnt_private *pDevice)
 		BBvSetVGAGainOffset(pDevice, pDevice->abyBBVGA[0]);
 	}
 
-	BBvSetRxAntennaMode(pDevice, pDevice->byRxAntennaMode);
-	BBvSetTxAntennaMode(pDevice, pDevice->byTxAntennaMode);
+	BBvSetRxAntennaMode(pDevice->PortOffset, pDevice->byRxAntennaMode);
+	BBvSetTxAntennaMode(pDevice->PortOffset, pDevice->byTxAntennaMode);
 
 	/* Set BB and packet type at the same time. */
 	/* Set Short Slot Time, xIFS, and RSPINF. */
-	pDevice->wCurrentRate = RATE_54M;
+	if (pDevice->uConnectionRate == RATE_AUTO)
+		pDevice->wCurrentRate = RATE_54M;
+	else
+		pDevice->wCurrentRate = (unsigned short)pDevice->uConnectionRate;
 
 	pDevice->bRadioOff = false;
 
