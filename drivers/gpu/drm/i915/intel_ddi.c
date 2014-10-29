@@ -1177,14 +1177,7 @@ bool intel_ddi_pll_select(struct intel_crtc *intel_crtc,
 		intel_ddi_get_crtc_new_encoder(intel_crtc);
 	int clock = crtc_state->port_clock;
 
-	intel_put_shared_dpll(intel_crtc);
-
-	if (IS_SKYLAKE(dev))
-		return skl_ddi_pll_select(intel_crtc, crtc_state,
-					  intel_encoder, clock);
-	else
-		return hsw_ddi_pll_select(intel_crtc, crtc_state,
-					  intel_encoder, clock);
+	return hsw_ddi_pll_select(intel_crtc, intel_encoder, clock);
 }
 
 void intel_ddi_set_pipe_settings(struct drm_crtc *crtc)

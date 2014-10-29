@@ -8163,9 +8163,7 @@ static int haswell_crtc_compute_clock(struct intel_crtc *crtc,
 	return 0;
 }
 
-static int haswell_crtc_mode_set(struct intel_crtc *crtc,
-				 int x, int y,
-				 struct drm_framebuffer *fb)
+static int haswell_crtc_compute_clock(struct intel_crtc *crtc)
 {
 	if (!intel_ddi_pll_select(crtc))
 		return -EINVAL;
