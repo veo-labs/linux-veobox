@@ -33,6 +33,4 @@
 
 bool vnt_receive_frame(struct vnt_private *priv, PSRxDesc curr_rd);
 
-bool vnt_receive_frame(struct vnt_private *priv, PSRxDesc curr_rd);
-
 #endif /* __RXTX_H__ */
