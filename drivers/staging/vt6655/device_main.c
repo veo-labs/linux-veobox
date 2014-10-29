@@ -62,7 +62,6 @@
 #include "bssdb.h"
 #include "hostap.h"
 #include "wpactl.h"
-#include "ioctl.h"
 #include "dpc.h"
 #include "rf.h"
 #include <linux/delay.h>

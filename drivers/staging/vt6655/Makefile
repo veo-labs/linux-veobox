@@ -12,6 +12,11 @@ vt6655_stage-y +=	device_main.o \
 	power.o \
 	srom.o \
 	mib.o \
+	rc4.o \
+	tether.o \
+	tcrc.o \
+	hostap.o \
+	wpa.o \
 	key.o \
 	tkip.o \
 	michael.o \
