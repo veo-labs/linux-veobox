@@ -7529,9 +7529,7 @@ static uint32_t ironlake_compute_dpll(struct intel_crtc *intel_crtc,
 	return dpll | DPLL_VCO_ENABLE;
 }
 
-static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
-				  int x, int y,
-				  struct drm_framebuffer *fb)
+static int ironlake_crtc_compute_clock(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
 	intel_clock_t clock, reduced_clock;
@@ -7577,17 +7575,13 @@ static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
 		else
 			crtc->new_config->dpll_hw_state.fp1 = fp;
 
-		if (intel_crtc_to_shared_dpll(crtc))
-			intel_put_shared_dpll(crtc);
-
 		pll = intel_get_shared_dpll(crtc);
 		if (pll == NULL) {
 			DRM_DEBUG_DRIVER("failed to find PLL for pipe %c\n",
 					 pipe_name(crtc->pipe));
 			return -EINVAL;
 		}
-	} else
-		intel_put_shared_dpll(crtc);
+	}
 
 	if (is_lvds && has_reduced_clock && i915.powersave)
 		crtc->lowfreq_avail = true;
