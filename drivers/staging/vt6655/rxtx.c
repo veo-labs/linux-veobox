@@ -1253,7 +1253,9 @@ static unsigned int
 s_cbFillTxBufHead(struct vnt_private *pDevice, unsigned char byPktType,
 		  unsigned char *pbyTxBufferAddr,
 		  unsigned int uDMAIdx, PSTxDesc pHeadTD,
-		  unsigned int is_pspoll)
+		  PSEthernetHeader psEthHeader, unsigned char *pPacket,
+		  bool bNeedEncrypt, PSKeyItem pTransmitKey,
+		  unsigned int is_pspoll, unsigned int *puMACfragNum)
 {
 	PDEVICE_TD_INFO td_info = pHeadTD->pTDInfo;
 	struct sk_buff *skb = td_info->skb;
@@ -1412,22 +1414,28 @@ s_cbFillTxBufHead(struct vnt_private *pDevice, unsigned char byPktType,
 			       cbFrameSize, bNeedACK, uDMAIdx, hdr, pDevice->wCurrentRate);
 	/* Fill DataHead */
 	uDuration = s_uFillDataHead(pDevice, byPktType, pvTxDataHd, cbFrameSize, uDMAIdx, bNeedACK,
-				    0, 0, uMACfragNum, byFBOption, pDevice->wCurrentRate, is_pspoll);
+				    0, 0, uMACfragNum, byFBOption, pDevice->wCurrentRate);
 
 	hdr->duration_id = uDuration;
 
-	cbReqCount = cbHeaderLength + uPadding + skb->len;
+	cbReqCount = cbHeaderLength + uPadding + cbFrameBodySize;
 	pbyBuffer = (unsigned char *)pHeadTD->pTDInfo->buf;
 	uLength = cbHeaderLength + uPadding;
 
 	/* Copy the Packet into a tx Buffer */
-	memcpy((pbyBuffer + uLength), skb->data, skb->len);
+	memcpy((pbyBuffer + uLength), pPacket, cbFrameBodySize);
 
 	ptdCurr = (PSTxDesc)pHeadTD;
 
-	ptdCurr->pTDInfo->dwReqCount = cbReqCount;
+	ptdCurr->pTDInfo->dwReqCount = cbReqCount - uPadding;
 	ptdCurr->pTDInfo->dwHeaderLength = cbHeaderLength;
 	ptdCurr->pTDInfo->skb_dma = ptdCurr->pTDInfo->buf_dma;
+	ptdCurr->buff_addr = cpu_to_le32(ptdCurr->pTDInfo->skb_dma);
+	/* Set TSR1 & ReqCount in TxDescHead */
+	ptdCurr->m_td1TD1.byTCR |= (TCR_STP | TCR_EDP | EDMSDU);
+	ptdCurr->m_td1TD1.wReqCount = cpu_to_le16((unsigned short)(cbReqCount));
+
+	*puMACfragNum = uMACfragNum;
 
 	return cbHeaderLength;
 }
