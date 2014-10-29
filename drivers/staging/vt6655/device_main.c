@@ -58,7 +58,6 @@
 #include "mac.h"
 #include "power.h"
 #include "rxtx.h"
-#include "wroute.h"
 #include "bssdb.h"
 #include "dpc.h"
 #include "rf.h"
