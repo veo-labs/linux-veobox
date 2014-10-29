@@ -423,6 +423,24 @@ bool intel_pipe_has_type(struct intel_crtc *crtc, int type)
 	return false;
 }
 
+/**
+ * Returns whether any output on the specified pipe will have the specified
+ * type after a staged modeset is complete, i.e., the same as
+ * intel_pipe_has_type() but looking at encoder->new_crtc instead of
+ * encoder->crtc.
+ */
+static bool intel_pipe_will_have_type(struct intel_crtc *crtc, int type)
+{
+	struct drm_device *dev = crtc->base.dev;
+	struct intel_encoder *encoder;
+
+	for_each_intel_encoder(dev, encoder)
+		if (encoder->new_crtc == crtc && encoder->type == type)
+			return true;
+
+	return false;
+}
+
 static const intel_limit_t *intel_ironlake_limit(struct intel_crtc *crtc,
 						int refclk)
 {
@@ -589,7 +607,7 @@ i9xx_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	intel_clock_t clock;
 	int err = target;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
 		/*
 		 * For LVDS just rely on its current settings for dual-channel.
 		 * We haven't figured out how to reliably set up different
@@ -650,7 +668,7 @@ pnv_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	intel_clock_t clock;
 	int err = target;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
 		/*
 		 * For LVDS just rely on its current settings for dual-channel.
 		 * We haven't figured out how to reliably set up different
@@ -713,7 +731,7 @@ g4x_find_best_dpll(const intel_limit_t *limit, struct intel_crtc *crtc,
 	int err_most = (target >> 8) + (target >> 9);
 	found = false;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
 		if (intel_is_dual_link_lvds(dev))
 			clock.p2 = limit->p2.p2_fast;
 		else
@@ -6185,12 +6203,12 @@ static void i9xx_update_pll(struct intel_crtc *crtc,
 
 	i9xx_update_pll_dividers(crtc, crtc_state, reduced_clock);
 
-	is_sdvo = intel_pipe_has_type(crtc, INTEL_OUTPUT_SDVO) ||
-		intel_pipe_has_type(crtc, INTEL_OUTPUT_HDMI);
+	is_sdvo = intel_pipe_will_have_type(crtc, INTEL_OUTPUT_SDVO) ||
+		intel_pipe_will_have_type(crtc, INTEL_OUTPUT_HDMI);
 
 	dpll = DPLL_VGA_MODE_DIS;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS))
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS))
 		dpll |= DPLLB_MODE_LVDS;
 	else
 		dpll |= DPLLB_MODE_DAC_SERIAL;
@@ -6203,7 +6221,7 @@ static void i9xx_update_pll(struct intel_crtc *crtc,
 	if (is_sdvo)
 		dpll |= DPLL_SDVO_HIGH_SPEED;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_DISPLAYPORT))
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_DISPLAYPORT))
 		dpll |= DPLL_SDVO_HIGH_SPEED;
 
 	/* compute bitmask from p1 value */
@@ -6233,7 +6251,7 @@ static void i9xx_update_pll(struct intel_crtc *crtc,
 
 	if (crtc_state->sdvo_tv_clock)
 		dpll |= PLL_REF_INPUT_TVCLKINBC;
-	else if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS) &&
+	else if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS) &&
 		 intel_panel_use_ssc(dev_priv) && num_connectors < 2)
 		dpll |= PLLB_REF_INPUT_SPREADSPECTRUMIN;
 	else
@@ -6263,7 +6281,7 @@ static void i8xx_update_pll(struct intel_crtc *crtc,
 
 	dpll = DPLL_VGA_MODE_DIS;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS)) {
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS)) {
 		dpll |= (1 << (clock->p1 - 1)) << DPLL_FPA01_P1_POST_DIV_SHIFT;
 	} else {
 		if (clock->p1 == 2)
@@ -6274,10 +6292,10 @@ static void i8xx_update_pll(struct intel_crtc *crtc,
 			dpll |= PLL_P2_DIVIDE_BY_4;
 	}
 
-	if (!IS_I830(dev) && intel_pipe_has_type(crtc, INTEL_OUTPUT_DVO))
+	if (!IS_I830(dev) && intel_pipe_will_have_type(crtc, INTEL_OUTPUT_DVO))
 		dpll |= DPLL_DVO_2X_MODE;
 
-	if (intel_pipe_has_type(crtc, INTEL_OUTPUT_LVDS) &&
+	if (intel_pipe_will_have_type(crtc, INTEL_OUTPUT_LVDS) &&
 		 intel_panel_use_ssc(dev_priv) && num_connectors < 2)
 		dpll |= PLLB_REF_INPUT_SPREADSPECTRUMIN;
 	else
@@ -6493,7 +6511,10 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 	struct intel_encoder *encoder;
 	const intel_limit_t *limit;
 
-	for_each_encoder_on_crtc(dev, &crtc->base, encoder) {
+	for_each_intel_encoder(dev, encoder) {
+		if (encoder->new_crtc != crtc)
+			continue;
+
 		switch (encoder->type) {
 		case INTEL_OUTPUT_LVDS:
 			is_lvds = true;
@@ -6511,7 +6532,7 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 	if (is_dsi)
 		return 0;
 
-	if (!crtc->config.clock_set) {
+	if (!crtc->new_config->clock_set) {
 		refclk = i9xx_get_refclk(crtc, num_connectors);
 
 		/*
@@ -6522,7 +6543,7 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 		 */
 		limit = intel_limit(crtc, refclk);
 		ok = dev_priv->display.find_dpll(limit, crtc,
-						 crtc->config.port_clock,
+						 crtc->new_config->port_clock,
 						 refclk, NULL, &clock);
 		if (!ok) {
 			DRM_ERROR("Couldn't find PLL settings for mode!\n");
@@ -6543,11 +6564,11 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 							    &reduced_clock);
 		}
 		/* Compat-code for transition, will disappear. */
-		crtc->config.dpll.n = clock.n;
-		crtc->config.dpll.m1 = clock.m1;
-		crtc->config.dpll.m2 = clock.m2;
-		crtc->config.dpll.p1 = clock.p1;
-		crtc->config.dpll.p2 = clock.p2;
+		crtc->new_config->dpll.n = clock.n;
+		crtc->new_config->dpll.m1 = clock.m1;
+		crtc->new_config->dpll.m2 = clock.m2;
+		crtc->new_config->dpll.p1 = clock.p1;
+		crtc->new_config->dpll.p2 = clock.p2;
 	}
 
 	if (IS_GEN2(dev)) {
@@ -6555,9 +6576,9 @@ static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
 				has_reduced_clock ? &reduced_clock : NULL,
 				num_connectors);
 	} else if (IS_CHERRYVIEW(dev)) {
-		chv_update_pll(crtc, &crtc->config);
+		chv_update_pll(crtc, crtc->new_config);
 	} else if (IS_VALLEYVIEW(dev)) {
-		vlv_update_pll(crtc, &crtc->config);
+		vlv_update_pll(crtc, crtc->new_config);
 	} else {
 		i9xx_update_pll(crtc, crtc_state,
 				has_reduced_clock ? &reduced_clock : NULL,
@@ -7364,7 +7385,7 @@ static bool ironlake_compute_clocks(struct drm_crtc *crtc,
 	const intel_limit_t *limit;
 	bool ret, is_lvds = false;
 
-	is_lvds = intel_pipe_has_type(intel_crtc, INTEL_OUTPUT_LVDS);
+	is_lvds = intel_pipe_will_have_type(intel_crtc, INTEL_OUTPUT_LVDS);
 
 	refclk = ironlake_get_refclk(crtc);
 
@@ -7375,7 +7396,7 @@ static bool ironlake_compute_clocks(struct drm_crtc *crtc,
 	 */
 	limit = intel_limit(intel_crtc, refclk);
 	ret = dev_priv->display.find_dpll(limit, intel_crtc,
-					  intel_crtc->config.port_clock,
+					  intel_crtc->new_config->port_clock,
 					  refclk, NULL, clock);
 	if (!ret)
 		return false;
@@ -7522,22 +7543,22 @@ static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
 
 	ok = ironlake_compute_clocks(&crtc->base, crtc_state, &clock,
 				     &has_reduced_clock, &reduced_clock);
-	if (!ok && !crtc->config.clock_set) {
+	if (!ok && !crtc->new_config->clock_set) {
 		DRM_ERROR("Couldn't find PLL settings for mode!\n");
 		return -EINVAL;
 	}
 	/* Compat-code for transition, will disappear. */
-	if (!crtc->config.clock_set) {
-		crtc->config.dpll.n = clock.n;
-		crtc->config.dpll.m1 = clock.m1;
-		crtc->config.dpll.m2 = clock.m2;
-		crtc->config.dpll.p1 = clock.p1;
-		crtc->config.dpll.p2 = clock.p2;
+	if (!crtc->new_config->clock_set) {
+		crtc->new_config->dpll.n = clock.n;
+		crtc->new_config->dpll.m1 = clock.m1;
+		crtc->new_config->dpll.m2 = clock.m2;
+		crtc->new_config->dpll.p1 = clock.p1;
+		crtc->new_config->dpll.p2 = clock.p2;
 	}
 
 	/* CPU eDP is the only output that doesn't need a PCH PLL of its own. */
-	if (crtc->config.has_pch_encoder) {
-		fp = i9xx_dpll_compute_fp(&crtc->config.dpll);
+	if (crtc->new_config->has_pch_encoder) {
+		fp = i9xx_dpll_compute_fp(&crtc->new_config->dpll);
 		if (has_reduced_clock)
 			fp2 = i9xx_dpll_compute_fp(&reduced_clock);
 
@@ -7545,12 +7566,12 @@ static int ironlake_crtc_mode_set(struct intel_crtc *crtc,
 					     &fp, &reduced_clock,
 					     has_reduced_clock ? &fp2 : NULL);
 
-		crtc->config.dpll_hw_state.dpll = dpll;
-		crtc->config.dpll_hw_state.fp0 = fp;
+		crtc->new_config->dpll_hw_state.dpll = dpll;
+		crtc->new_config->dpll_hw_state.fp0 = fp;
 		if (has_reduced_clock)
-			crtc->config.dpll_hw_state.fp1 = fp2;
+			crtc->new_config->dpll_hw_state.fp1 = fp2;
 		else
-			crtc->config.dpll_hw_state.fp1 = fp;
+			crtc->new_config->dpll_hw_state.fp1 = fp;
 
 		pll = intel_get_shared_dpll(crtc, crtc_state);
 		if (pll == NULL) {

@@ -1173,10 +1173,11 @@ skl_ddi_pll_select(struct intel_crtc *intel_crtc,
 bool intel_ddi_pll_select(struct intel_crtc *intel_crtc,
 			  struct intel_crtc_state *crtc_state)
 {
-	struct drm_device *dev = intel_crtc->base.dev;
 	struct intel_encoder *intel_encoder =
 		intel_ddi_get_crtc_new_encoder(intel_crtc);
 	int clock = crtc_state->port_clock;
+
+	intel_put_shared_dpll(intel_crtc);
 
 	if (IS_SKYLAKE(dev))
 		return skl_ddi_pll_select(intel_crtc, crtc_state,
