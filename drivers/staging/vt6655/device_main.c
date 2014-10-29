@@ -1004,6 +1004,78 @@ static int vnt_int_report_rate(struct vnt_private *priv,
 	return 0;
 }
 
+static const u8 fallback_rate0[5][5] = {
+	{RATE_18M, RATE_18M, RATE_12M, RATE_12M, RATE_12M},
+	{RATE_24M, RATE_24M, RATE_18M, RATE_12M, RATE_12M},
+	{RATE_36M, RATE_36M, RATE_24M, RATE_18M, RATE_18M},
+	{RATE_48M, RATE_48M, RATE_36M, RATE_24M, RATE_24M},
+	{RATE_54M, RATE_54M, RATE_48M, RATE_36M, RATE_36M}
+};
+
+static const u8 fallback_rate1[5][5] = {
+	{RATE_18M, RATE_18M, RATE_12M, RATE_6M, RATE_6M},
+	{RATE_24M, RATE_24M, RATE_18M, RATE_6M, RATE_6M},
+	{RATE_36M, RATE_36M, RATE_24M, RATE_12M, RATE_12M},
+	{RATE_48M, RATE_48M, RATE_24M, RATE_12M, RATE_12M},
+	{RATE_54M, RATE_54M, RATE_36M, RATE_18M, RATE_18M}
+};
+
+static int vnt_int_report_rate(struct vnt_private *priv,
+			       PDEVICE_TD_INFO context, u8 tsr0, u8 tsr1)
+{
+	struct vnt_tx_fifo_head *fifo_head;
+	struct ieee80211_tx_info *info;
+	struct ieee80211_rate *rate;
+	u16 fb_option;
+	u8 tx_retry = (tsr0 & TSR0_NCR);
+	s8 idx;
+
+	if (!context)
+		return -ENOMEM;
+
+	if (!context->skb)
+		return -EINVAL;
+
+	fifo_head = (struct vnt_tx_fifo_head *)context->buf;
+	fb_option = (le16_to_cpu(fifo_head->fifo_ctl) &
+			(FIFOCTL_AUTO_FB_0 | FIFOCTL_AUTO_FB_1));
+
+	info = IEEE80211_SKB_CB(context->skb);
+	idx = info->control.rates[0].idx;
+
+	if (fb_option && !(tsr1 & TSR1_TERR)) {
+		u8 tx_rate;
+		u8 retry = tx_retry;
+
+		rate = ieee80211_get_tx_rate(priv->hw, info);
+		tx_rate = rate->hw_value - RATE_18M;
+
+		if (retry > 4)
+			retry = 4;
+
+		if (fb_option & FIFOCTL_AUTO_FB_0)
+			tx_rate = fallback_rate0[tx_rate][retry];
+		else if (fb_option & FIFOCTL_AUTO_FB_1)
+			tx_rate = fallback_rate1[tx_rate][retry];
+
+		if (info->band == IEEE80211_BAND_5GHZ)
+			idx = tx_rate - RATE_6M;
+		else
+			idx = tx_rate;
+	}
+
+	ieee80211_tx_info_clear_status(info);
+
+	info->status.rates[0].count = tx_retry;
+
+	if (!(tsr1 & TSR1_TERR)) {
+		info->status.rates[0].idx = idx;
+		info->flags |= IEEE80211_TX_STAT_ACK;
+	}
+
+	return 0;
+}
+
 static int device_tx_srv(struct vnt_private *pDevice, unsigned int uIdx)
 {
 	PSTxDesc                 pTD;
@@ -1046,6 +1118,10 @@ static int device_tx_srv(struct vnt_private *pDevice, unsigned int uIdx)
 			}
 			device_free_tx_buf(pDevice, pTD);
 			pDevice->iTDUsed[uIdx]--;
+
+			/* Make sure queue is available */
+			if (AVAIL_TD(pDevice, uIdx))
+				ieee80211_wake_queues(pDevice->hw);
 		}
 	}
 
@@ -1440,8 +1516,11 @@ static int vnt_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	priv->vif = vif;
 
 		if (pDevice->dwIsr & ISR_TBTT) {
-			if (pDevice->op_mode != NL80211_IFTYPE_ADHOC) {
-				if ((pDevice->bUpdateBBVGA) && pDevice->bLinkPass && (pDevice->uCurrRSSI != 0)) {
+			if (pDevice->vif &&
+			    pDevice->op_mode != NL80211_IFTYPE_ADHOC) {
+				if (pDevice->bUpdateBBVGA &&
+				    pDevice->vif->bss_conf.assoc &&
+				    pDevice->uCurrRSSI) {
 					long            ldBm;
 
 		break;
