@@ -27,10 +27,6 @@
 
 void vnt_init_bands(struct vnt_private *);
 
-bool is_channel_valid(unsigned int CountryCode);
-unsigned char get_channel_mapping(void *pDeviceHandler, unsigned char byChannelNumber, CARD_PHY_TYPE ePhyType);
-bool channel_get_list(unsigned int uCountryCodeIdx, unsigned char *pbyChannelTable);
-unsigned char get_channel_number(void *pDeviceHandler, unsigned char byChannelIndex);
 bool set_channel(void *pDeviceHandler, unsigned int uConnectionChannel);
 
 #endif /* _CHANNEL_H_ */
