@@ -57,6 +57,8 @@
 #include "baseband.h"
 #include "mac.h"
 #include "power.h"
+#include "wcmd.h"
+#include "iocmd.h"
 #include "rxtx.h"
 #include "bssdb.h"
 #include "dpc.h"
