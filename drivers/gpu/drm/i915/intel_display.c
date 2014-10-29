@@ -6502,9 +6502,7 @@ static void i9xx_set_pipeconf(struct intel_crtc *intel_crtc)
 	POSTING_READ(PIPECONF(intel_crtc->pipe));
 }
 
-static int i9xx_crtc_mode_set(struct intel_crtc *crtc,
-			      int x, int y,
-			      struct drm_framebuffer *fb)
+static int i9xx_crtc_compute_clock(struct intel_crtc *crtc)
 {
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
