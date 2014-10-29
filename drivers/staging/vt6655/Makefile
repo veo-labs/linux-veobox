@@ -7,6 +7,10 @@ vt6655_stage-y +=	device_main.o \
 	channel.o \
 	mac.o \
 	baseband.o \
+	wctl.o \
+	80211mgr.o \
+	wcmd.o \
+	bssdb.o \
 	rxtx.o \
 	dpc.o \
 	power.o \
