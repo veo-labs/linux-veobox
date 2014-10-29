@@ -116,15 +116,15 @@ static struct sk_buff *rtllib_ADDBA(struct rtllib_device *ieee, u8 *Dst,
 
 	if (ACT_ADDBARSP == type) {
 		RT_TRACE(COMP_DBG, "====>to send ADDBARSP\n");
-
-		put_unaligned_le16(StatusCode, tag);
+		tmp = cpu_to_le16(StatusCode);
+		memcpy(tag, (u8 *)&tmp, 2);
 		tag += 2;
 	}
-
-	put_unaligned_le16(pBA->BaParamSet.shortData, tag);
+	tmp = cpu_to_le16(pBA->BaParamSet.shortData);
+	memcpy(tag, (u8 *)&tmp, 2);
 	tag += 2;
-
-	put_unaligned_le16(pBA->BaTimeoutValue, tag);
+	tmp = cpu_to_le16(pBA->BaTimeoutValue);
+	memcpy(tag, (u8 *)&tmp, 2);
 	tag += 2;
 
 	if (ACT_ADDBAREQ == type) {
@@ -178,11 +178,11 @@ static struct sk_buff *rtllib_DELBA(struct rtllib_device *ieee, u8 *dst,
 	*tag++ = ACT_CAT_BA;
 	*tag++ = ACT_DELBA;
 
-
-	put_unaligned_le16(DelbaParamSet.shortData, tag);
+	tmp = cpu_to_le16(DelbaParamSet.shortData);
+	memcpy(tag, (u8 *)&tmp, 2);
 	tag += 2;
-
-	put_unaligned_le16(ReasonCode, tag);
+	tmp = cpu_to_le16(ReasonCode);
+	memcpy(tag, (u8 *)&tmp, 2);
 	tag += 2;
 
 	RTLLIB_DEBUG_DATA(RTLLIB_DL_DATA|RTLLIB_DL_BA, skb->data, skb->len);
