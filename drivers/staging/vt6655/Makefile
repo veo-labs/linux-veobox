@@ -13,6 +13,14 @@ vt6655_stage-y +=	device_main.o \
 	srom.o \
 	mib.o \
 	key.o \
-	rf.o
+	tkip.o \
+	michael.o \
+	wroute.o \
+	rf.o \
+	wpactl.o \
+	wpa2.o \
+	aes_ccmp.o \
+	vntwifi.o \
+	IEEE11h.o
 
 obj-$(CONFIG_VT6655) +=	vt6655_stage.o
