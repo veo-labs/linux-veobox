@@ -723,4 +723,11 @@ static inline PDEVICE_TD_INFO alloc_td_info(void)
 {
 	return kzalloc(sizeof(DEVICE_TD_INFO), GFP_ATOMIC);
 }
+
+/*---------------------  Export Functions  --------------------------*/
+
+bool device_dma0_xmit(struct vnt_private *pDevice,
+		      struct sk_buff *skb, unsigned int uNodeIndex);
+bool device_alloc_frag_buf(struct vnt_private *pDevice,
+			   PSDeFragControlBlock pDeF);
 #endif

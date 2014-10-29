@@ -174,6 +174,7 @@ static void device_free_td1_ring(struct vnt_private *pDevice);
 static void device_free_rd0_ring(struct vnt_private *pDevice);
 static void device_free_rd1_ring(struct vnt_private *pDevice);
 static void device_free_rings(struct vnt_private *pDevice);
+static void device_free_frag_buf(struct vnt_private *pDevice);
 
 /*---------------------  Export Variables  --------------------------*/
 
@@ -253,7 +254,6 @@ static void device_init_registers(struct vnt_private *pDevice)
 	unsigned char byValue;
 	unsigned char byCCKPwrdBm = 0;
 	unsigned char byOFDMPwrdBm = 0;
-	int zonetype = 0;
 
 	MACbShutdown(pDevice->PortOffset);
 	BBvSoftwareReset(pDevice);
@@ -1615,33 +1615,31 @@ static void vnt_remove_interface(struct ieee80211_hw *hw,
 	return 0;
 }
 
-static void vnt_bss_info_changed(struct ieee80211_hw *hw,
-		struct ieee80211_vif *vif, struct ieee80211_bss_conf *conf,
-		u32 changed)
-{
-	struct vnt_private *priv = hw->priv;
+static void device_set_multi(struct net_device *dev) {
+	struct vnt_private *pDevice = netdev_priv(dev);
+	PSMgmtObject     pMgmt = pDevice->pMgmt;
+	u32              mc_filter[2];
+	struct netdev_hw_addr *ha;
 
-	priv->current_aid = conf->aid;
+	VNSvInPortB(pDevice->PortOffset + MAC_REG_RCR, &(pDevice->byRxMode));
 
-	if (changed & BSS_CHANGED_BSSID)
-		MACvWriteBSSIDAddress(priv->PortOffset, (u8 *)conf->bssid);
+	if (dev->flags & IFF_PROMISC) {         /* Set promiscuous. */
+		pr_notice("%s: Promiscuous mode enabled\n", dev->name);
+		/* Unconditionally log net taps. */
+		pDevice->byRxMode |= (RCR_MULTICAST|RCR_BROADCAST|RCR_UNICAST);
+	} else if ((netdev_mc_count(dev) > pDevice->multicast_limit)
+		 ||  (dev->flags & IFF_ALLMULTI)) {
+		MACvSelectPage1(pDevice->PortOffset);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MAR0, 0xffffffff);
+		VNSvOutPortD(pDevice->PortOffset + MAC_REG_MAR0 + 4, 0xffffffff);
+		MACvSelectPage0(pDevice->PortOffset);
+		pDevice->byRxMode |= (RCR_MULTICAST|RCR_BROADCAST);
+	} else {
+		memset(mc_filter, 0, sizeof(mc_filter));
+		netdev_for_each_mc_addr(ha, dev) {
+			int bit_nr = ether_crc(ETH_ALEN, ha->addr) >> 26;
 
-	if (changed & BSS_CHANGED_BASIC_RATES) {
-		priv->basic_rates = conf->basic_rates;
-
-		CARDvUpdateBasicTopRate(priv);
-
-		dev_dbg(&priv->pcid->dev,
-			"basic rates %x\n", conf->basic_rates);
-	}
-
-	if (changed & BSS_CHANGED_ERP_PREAMBLE) {
-		if (conf->use_short_preamble) {
-			MACvEnableBarkerPreambleMd(priv->PortOffset);
-			priv->byPreambleType = true;
-		} else {
-			MACvDisableBarkerPreambleMd(priv->PortOffset);
-			priv->byPreambleType = false;
+			mc_filter[bit_nr >> 5] |= cpu_to_le32(1 << (bit_nr & 31));
 		}
 	}
 
