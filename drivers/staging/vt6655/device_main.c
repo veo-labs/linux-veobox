@@ -236,12 +236,20 @@ device_set_options(struct vnt_private *pDevice)
 	pDevice->wFragmentationThreshold = pDevice->sOpts.frag_thresh;
 	pDevice->byShortRetryLimit = pDevice->sOpts.short_retry;
 	pDevice->byLongRetryLimit = pDevice->sOpts.long_retry;
+	pDevice->wMaxTransmitMSDULifetime = DEFAULT_MSDU_LIFETIME;
+	pDevice->byShortPreamble = (pDevice->sOpts.flags & DEVICE_FLAGS_PREAMBLE_TYPE) ? 1 : 0;
+	pDevice->byOpMode = (pDevice->sOpts.flags & DEVICE_FLAGS_OP_MODE) ? 1 : 0;
+	pDevice->b11hEnable = (pDevice->sOpts.flags & DEVICE_FLAGS_80211h_MODE) ? 1 : 0;
+	pDevice->bDiversityRegCtlON = (pDevice->sOpts.flags & DEVICE_FLAGS_DiversityANT) ? 1 : 0;
 	pDevice->byBBType = pDevice->sOpts.bbp_type;
 	pDevice->byPacketType = pDevice->byBBType;
 	pDevice->byAutoFBCtrl = AUTO_FB_0;
 	pDevice->bUpdateBBVGA = true;
 	pDevice->byPreambleType = 0;
 
+	pr_debug(" uChannel= %d\n", (int)pDevice->uChannel);
+	pr_debug(" byOpMode= %d\n", (int)pDevice->byOpMode);
+	pr_debug(" wRTSThreshold= %d\n", (int)pDevice->wRTSThreshold);
 	pr_debug(" byShortRetryLimit= %d\n", (int)pDevice->byShortRetryLimit);
 	pr_debug(" byLongRetryLimit= %d\n", (int)pDevice->byLongRetryLimit);
 	pr_debug(" byPreambleType= %d\n", (int)pDevice->byPreambleType);
