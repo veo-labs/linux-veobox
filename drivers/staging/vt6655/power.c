@@ -40,6 +40,7 @@
 #include "mac.h"
 #include "device.h"
 #include "power.h"
+#include "wcmd.h"
 #include "card.h"
 
 /*---------------------  Static Definitions -------------------------*/
