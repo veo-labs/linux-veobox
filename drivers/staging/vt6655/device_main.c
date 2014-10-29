@@ -1405,7 +1405,18 @@ static int vnt_start(struct ieee80211_hw *hw)
 
 static void vnt_stop(struct ieee80211_hw *hw)
 {
-	struct vnt_private *priv = hw->priv;
+	struct vnt_private *pDevice = dev_instance;
+	int             max_count = 0;
+	unsigned long dwMIBCounter = 0;
+	unsigned char byOrgPageSel = 0;
+	int             handled = 0;
+	int             ii = 0;
+	unsigned long flags;
+
+	MACvReadISR(pDevice->PortOffset, &pDevice->dwIsr);
+
+	if (pDevice->dwIsr == 0)
+		return IRQ_RETVAL(handled);
 
 	ieee80211_stop_queues(hw);
 
@@ -1428,19 +1439,10 @@ static int vnt_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	priv->vif = vif;
 
-	switch (vif->type) {
-	case NL80211_IFTYPE_STATION:
-		break;
-	case NL80211_IFTYPE_ADHOC:
-		MACvRegBitsOff(priv->PortOffset, MAC_REG_RCR, RCR_UNICAST);
-
-		MACvRegBitsOn(priv->PortOffset, MAC_REG_HOSTCR, HOSTCR_ADHOC);
-
-		break;
-	case NL80211_IFTYPE_AP:
-		MACvRegBitsOff(priv->PortOffset, MAC_REG_RCR, RCR_UNICAST);
-
-		MACvRegBitsOn(priv->PortOffset, MAC_REG_HOSTCR, HOSTCR_AP);
+		if (pDevice->dwIsr & ISR_TBTT) {
+			if (pDevice->op_mode != NL80211_IFTYPE_ADHOC) {
+				if ((pDevice->bUpdateBBVGA) && pDevice->bLinkPass && (pDevice->uCurrRSSI != 0)) {
+					long            ldBm;
 
 		break;
 	default:
@@ -1449,8 +1451,12 @@ static int vnt_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 	priv->op_mode = vif->type;
 
-	return 0;
-}
+			if ((pDevice->op_mode == NL80211_IFTYPE_AP ||
+			    pDevice->op_mode == NL80211_IFTYPE_ADHOC) &&
+			    pDevice->vif->bss_conf.enable_beacon) {
+				MACvOneShotTimer1MicroSec(pDevice->PortOffset,
+							  (pDevice->vif->bss_conf.beacon_int - MAKE_BEACON_RESERVED) << 10);
+			}
 
 static void vnt_remove_interface(struct ieee80211_hw *hw,
 				 struct ieee80211_vif *vif)
@@ -1476,15 +1482,14 @@ static void vnt_remove_interface(struct ieee80211_hw *hw,
 		break;
 	}
 
-	priv->op_mode = NL80211_IFTYPE_UNSPECIFIED;
-}
+		if (pDevice->dwIsr & ISR_BNTX) {
+			if (pDevice->op_mode == NL80211_IFTYPE_ADHOC) {
+				pDevice->bIsBeaconBufReadySet = false;
+				pDevice->cbBeaconBufReadySetCnt = 0;
+			}
 
-
-static int vnt_config(struct ieee80211_hw *hw, u32 changed)
-{
-	struct vnt_private *priv = hw->priv;
-	struct ieee80211_conf *conf = &hw->conf;
-	u8 bb_type;
+			pDevice->bBeaconSent = true;
+		}
 
 	if (changed & IEEE80211_CONF_CHANGE_PS) {
 		if (conf->flags & IEEE80211_CONF_PS)
@@ -1505,7 +1510,11 @@ static int vnt_config(struct ieee80211_hw *hw, u32 changed)
 		if (priv->byBBType != bb_type) {
 			priv->byBBType = bb_type;
 
-			CARDbSetPhyParameter(priv, priv->byBBType);
+		if (pDevice->dwIsr & ISR_SOFTTIMER1) {
+			if (pDevice->vif) {
+				if (pDevice->vif->bss_conf.enable_beacon)
+					vnt_beacon_make(pDevice, pDevice->vif);
+			}
 		}
 	}
 
