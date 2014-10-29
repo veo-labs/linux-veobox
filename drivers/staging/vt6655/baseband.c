@@ -2066,14 +2066,14 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		VNSvOutPortB(dwIoBase + MAC_REG_ITRTMSET, 0x23);
 		MACvRegBitsOn(dwIoBase, MAC_REG_PAPEDELAY, BIT(0));
 
-		priv->abyBBVGA[0] = 0x14;
-		priv->abyBBVGA[1] = 0x0A;
-		priv->abyBBVGA[2] = 0x0;
-		priv->abyBBVGA[3] = 0x0;
-		priv->ldBmThreshold[0] = -60;
-		priv->ldBmThreshold[1] = -50;
-		priv->ldBmThreshold[2] = 0;
-		priv->ldBmThreshold[3] = 0;
+		pDevice->abyBBVGA[0] = 0x14;
+		pDevice->abyBBVGA[1] = 0x0A;
+		pDevice->abyBBVGA[2] = 0x0;
+		pDevice->abyBBVGA[3] = 0x0;
+		pDevice->ldBmThreshold[0] = -60;
+		pDevice->ldBmThreshold[1] = -50;
+		pDevice->ldBmThreshold[2] = 0;
+		pDevice->ldBmThreshold[3] = 0;
 	} else if (byRFType == RF_UW2452) {
 		for (ii = 0; ii < CB_VT3253B0_INIT_FOR_UW2451; ii++)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_UW2451[ii][0], byVT3253B0_UW2451[ii][1]);
@@ -2256,9 +2256,9 @@ BBvPowerSaveModeON(struct vnt_private *priv)
 {
 	unsigned char byOrgData;
 
-	BBbReadEmbedded(priv, 0x0D, &byOrgData);
+	BBbReadEmbedded(dwIoBase, 0x0D, &byOrgData);
 	byOrgData |= BIT(0);
-	BBbWriteEmbedded(priv, 0x0D, byOrgData);
+	BBbWriteEmbedded(dwIoBase, 0x0D, byOrgData);
 }
 
 /*
@@ -2278,9 +2278,9 @@ BBvPowerSaveModeOFF(struct vnt_private *priv)
 {
 	unsigned char byOrgData;
 
-	BBbReadEmbedded(priv, 0x0D, &byOrgData);
+	BBbReadEmbedded(dwIoBase, 0x0D, &byOrgData);
 	byOrgData &= ~(BIT(0));
-	BBbWriteEmbedded(priv, 0x0D, byOrgData);
+	BBbWriteEmbedded(dwIoBase, 0x0D, byOrgData);
 }
 
 /*
