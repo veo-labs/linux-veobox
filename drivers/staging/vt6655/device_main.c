@@ -56,6 +56,8 @@
 #include "channel.h"
 #include "baseband.h"
 #include "mac.h"
+#include "tether.h"
+#include "wmgr.h"
 #include "power.h"
 #include "wcmd.h"
 #include "iocmd.h"
