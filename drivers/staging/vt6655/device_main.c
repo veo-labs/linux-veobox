@@ -58,7 +58,6 @@
 #include "mac.h"
 #include "wmgr.h"
 #include "power.h"
-#include "iocmd.h"
 #include "rxtx.h"
 #include "dpc.h"
 #include "rf.h"
