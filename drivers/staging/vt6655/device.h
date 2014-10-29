@@ -542,7 +542,6 @@ struct vnt_private {
 	u64 qwPacketNumber; /* For CCMP and TKIP as TSC(6 bytes) */
 	unsigned int	uCurrentWEPMode;
 
-	RC4Ext                  SBox;
 	unsigned char abyPRNG[WLAN_WEPMAX_KEYLEN+3];
 	unsigned char byKeyIndex;
 	unsigned int	uKeyLength;
