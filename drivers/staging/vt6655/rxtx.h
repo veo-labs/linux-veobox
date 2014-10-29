@@ -31,10 +31,6 @@
 
 #include "device.h"
 
-#define DEFAULT_MSDU_LIFETIME_RES_64us	8000 /* 64us */
-#define DEFAULT_MGN_LIFETIME_RES_64us	125  /* 64us */
-
-
 /*---------------------  Export Definitions -------------------------*/
 
 /*---------------------  Export Variables  --------------------------*/

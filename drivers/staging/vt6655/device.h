@@ -67,7 +67,10 @@
 /* device specific */
 
 #include "device_cfg.h"
-#include "card.h"
+#include "ttype.h"
+#include "80211hdr.h"
+#include "tether.h"
+#include "wmgr.h"
 #include "mib.h"
 #include "srom.h"
 #include "desc.h"
@@ -481,9 +484,6 @@ struct vnt_private {
 	unsigned char byCurrentCh;
 	unsigned int	uScanTime;
 
-	CMD_STATE               eCommandState;
-
-	CMD_CODE                eCommand;
 	bool bBeaconTx;
 
 	bool bStopBeacon;
@@ -493,7 +493,6 @@ struct vnt_private {
 
 	/* 802.11 counter */
 
-	CMD_ITEM                eCmdQueue[CMD_Q_SIZE];
 	unsigned int	uCmdDequeueIdx;
 	unsigned int	uCmdEnqueueIdx;
 	unsigned int	cbFreeCmdQueue;
