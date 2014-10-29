@@ -1092,15 +1092,10 @@ static const u8 fallback_rate1[5][5] = {
 static int vnt_int_report_rate(struct vnt_private *priv,
 			       PDEVICE_TD_INFO context, u8 tsr0, u8 tsr1)
 {
-	struct vnt_tx_fifo_head *fifo_head;
-	struct ieee80211_tx_info *info;
-	struct ieee80211_rate *rate;
-	u16 fb_option;
-	u8 tx_retry = (tsr0 & TSR0_NCR);
-	s8 idx;
-
-	if (!context)
-		return -ENOMEM;
+	pDeF->skb = dev_alloc_skb((int)pDevice->rx_buf_sz);
+	if (pDeF->skb == NULL)
+		return false;
+	ASSERT(pDeF->skb);
 
 	if (!context->skb)
 		return -EINVAL;

@@ -330,7 +330,9 @@ typedef struct __device_opt {
 
 struct vnt_private {
 	struct pci_dev *pcid;
-
+	/* mac80211 */
+	struct ieee80211_hw *hw;
+	struct ieee80211_vif *vif;
 /* netdev */
 	struct net_device *dev;
 
