@@ -846,22 +846,8 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-
-			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
-			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
-				ether_addr_copy(buf->data.ra,
-						psEthHeader->abyDstAddr);
-			} else {
-				ether_addr_copy(buf->data.ra,
-						pDevice->abyBSSID);
-			}
-			if (pDevice->op_mode == NL80211_IFTYPE_AP)
-				ether_addr_copy(buf->data.ta,
-						pDevice->abyBSSID);
-			else
-				ether_addr_copy(buf->data.ta,
-						psEthHeader->abySrcAddr);
-
+			ether_addr_copy(buf->data.ra, hdr->addr1);
+			ether_addr_copy(buf->data.ta, hdr->addr2);
 		} else {
 			struct vnt_rts_g_fb *buf = pvRTS;
 			/* Get SignalField, ServiceField & Length */
@@ -914,23 +900,8 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-
-			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
-			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
-				ether_addr_copy(buf->data.ra,
-						psEthHeader->abyDstAddr);
-			} else {
-				ether_addr_copy(buf->data.ra,
-						pDevice->abyBSSID);
-			}
-
-			if (pDevice->op_mode == NL80211_IFTYPE_AP)
-				ether_addr_copy(buf->data.ta,
-						pDevice->abyBSSID);
-			else
-				ether_addr_copy(buf->data.ta,
-						psEthHeader->abySrcAddr);
-
+			ether_addr_copy(buf->data.ra, hdr->addr1);
+			ether_addr_copy(buf->data.ta, hdr->addr2);
 		} // if (byFBOption == AUTO_FB_NONE)
 	} else if (byPktType == PK_TYPE_11A) {
 		if (byFBOption == AUTO_FB_NONE) {
@@ -951,23 +922,8 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-
-			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
-			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
-				ether_addr_copy(buf->data.ra,
-						psEthHeader->abyDstAddr);
-			} else {
-				ether_addr_copy(buf->data.ra,
-						pDevice->abyBSSID);
-			}
-
-			if (pDevice->op_mode == NL80211_IFTYPE_AP)
-				ether_addr_copy(buf->data.ta,
-						pDevice->abyBSSID);
-			else
-				ether_addr_copy(buf->data.ta,
-						psEthHeader->abySrcAddr);
-
+			ether_addr_copy(buf->data.ra, hdr->addr1);
+			ether_addr_copy(buf->data.ta, hdr->addr2);
 		} else {
 			struct vnt_rts_a_fb *buf = pvRTS;
 			/* Get SignalField, ServiceField & Length */
@@ -996,20 +952,8 @@ s_vFillRTSHead(
 					cpu_to_le16(IEEE80211_FTYPE_CTL |
 						    IEEE80211_STYPE_RTS);
 
-			if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
-			    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
-				ether_addr_copy(buf->data.ra,
-						psEthHeader->abyDstAddr);
-			} else {
-				ether_addr_copy(buf->data.ra,
-						pDevice->abyBSSID);
-			}
-			if (pDevice->op_mode == NL80211_IFTYPE_AP)
-				ether_addr_copy(buf->data.ta,
-						pDevice->abyBSSID);
-			else
-				ether_addr_copy(buf->data.ta,
-						psEthHeader->abySrcAddr);
+			ether_addr_copy(buf->data.ra, hdr->addr1);
+			ether_addr_copy(buf->data.ta, hdr->addr2);
 		}
 	} else if (byPktType == PK_TYPE_11B) {
 		struct vnt_rts_ab *buf = pvRTS;
@@ -1028,19 +972,8 @@ s_vFillRTSHead(
 		buf->data.frame_control =
 			cpu_to_le16(IEEE80211_FTYPE_CTL | IEEE80211_STYPE_RTS);
 
-		if ((pDevice->op_mode == NL80211_IFTYPE_ADHOC) ||
-		    (pDevice->op_mode == NL80211_IFTYPE_AP)) {
-			ether_addr_copy(buf->data.ra,
-					psEthHeader->abyDstAddr);
-		} else {
-			ether_addr_copy(buf->data.ra, pDevice->abyBSSID);
-		}
-
-		if (pDevice->op_mode == NL80211_IFTYPE_AP)
-			ether_addr_copy(buf->data.ta, pDevice->abyBSSID);
-		else
-			ether_addr_copy(buf->data.ta,
-					psEthHeader->abySrcAddr);
+		ether_addr_copy(buf->data.ra, hdr->addr1);
+		ether_addr_copy(buf->data.ta, hdr->addr2);
 	}
 }
 
