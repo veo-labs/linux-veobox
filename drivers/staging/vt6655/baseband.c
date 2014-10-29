@@ -2587,7 +2587,7 @@ TimerSQ3CallBack(
 	unsigned long data
 )
 {
-	struct vnt_private *pDevice = hDeviceContext;
+	struct vnt_private *pDevice = (struct vnt_private *)data;
 	unsigned long flags;
 
 	pr_debug("TimerSQ3CallBack...\n");
@@ -2633,7 +2633,7 @@ TimerState1CallBack(
 	unsigned long data
 )
 {
-	struct vnt_private *pDevice = hDeviceContext;
+	struct vnt_private *pDevice = (struct vnt_private *)data;
 	unsigned long flags;
 
 	pr_debug("TimerState1CallBack...\n");
