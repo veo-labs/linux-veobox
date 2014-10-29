@@ -32,6 +32,10 @@
 
 #include <net/mac80211.h>
 
+#include "ttype.h"
+#include "tether.h"
+#include "80211mgr.h"
+
 /*---------------------  Export Definitions -------------------------*/
 #define MAX_GROUP_KEY       4
 #define MAX_KEY_TABLE       11
@@ -58,6 +62,26 @@
 #define VNT_KEY_PAIRWISE	0x00
 #define VNT_KEY_ONFLY		0x8000
 #define VNT_KEY_ONFLY_ALL	0x4000
+
+typedef struct tagSKeyItem {
+	bool bKeyValid;
+	unsigned long uKeyLength;
+	unsigned char abyKey[MAX_KEY_LEN];
+	u64 KeyRSC;
+	unsigned long dwTSC47_16;
+	unsigned short wTSC15_0;
+	unsigned char byCipherSuite;
+	unsigned char byReserved0;
+	unsigned long dwKeyIndex;
+	void *pvKeyTable;
+} SKeyItem, *PSKeyItem; //64
+
+struct vnt_private;
+
+int vnt_key_init_table(struct vnt_private *);
+
+int vnt_set_keys(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
+		 struct ieee80211_vif *vif, struct ieee80211_key_conf *key);
 
 struct vnt_private;
 
