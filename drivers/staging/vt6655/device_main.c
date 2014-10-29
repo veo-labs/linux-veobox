@@ -1523,6 +1523,7 @@ static int vnt_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 			if (pDevice->vif &&
 			    pDevice->op_mode != NL80211_IFTYPE_ADHOC) {
 				if (pDevice->bUpdateBBVGA &&
+				    !(pDevice->hw->conf.flags & IEEE80211_CONF_OFFCHANNEL) &&
 				    pDevice->vif->bss_conf.assoc &&
 				    pDevice->uCurrRSSI) {
 					long            ldBm;
