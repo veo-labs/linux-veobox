@@ -2561,6 +2561,37 @@ vt6655_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
 
 /*------------------------------------------------------------------*/
 
+#ifdef CONFIG_PM
+static int vt6655_suspend(struct pci_dev *pcid, pm_message_t state)
+{
+	struct vnt_private *priv = pci_get_drvdata(pcid);
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	pci_save_state(pcid);
+
+	MACbShutdown(priv->PortOffset);
+
+	pci_disable_device(pcid);
+	pci_set_power_state(pcid, pci_choose_state(pcid, state));
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+	return 0;
+}
+
+static int vt6655_resume(struct pci_dev *pcid)
+{
+
+	pci_set_power_state(pcid, PCI_D0);
+	pci_enable_wake(pcid, PCI_D0, 0);
+	pci_restore_state(pcid);
+
+	return 0;
+}
+#endif
+
 MODULE_DEVICE_TABLE(pci, vt6655_pci_id_table);
 
 static struct pci_driver device_driver = {
