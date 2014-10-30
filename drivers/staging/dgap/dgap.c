@@ -1194,7 +1194,14 @@ static void dgap_poll_handler(ulong dummy)
 
 			p->u.conc.type = conc_type;
 
-			break;
+/*
+ * dgap_intr()
+ *
+ * Driver interrupt handler.
+ */
+static irqreturn_t dgap_intr(int irq, void *voidbrd)
+{
+	struct board_t *brd = voidbrd;
 
 		case MOD:	/* EBI module */
 			if (dgap_checknode(p))
