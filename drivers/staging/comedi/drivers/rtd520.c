@@ -617,8 +617,9 @@ static int ai_read_n(struct comedi_device *dev, struct comedi_subdevice *s,
 
 		d = readw(devpriv->las1 + LAS1_ADC_FIFO);
 		d = d >> 3;	/* low 3 bits are marker lines */
-		if (test_bit(async->cur_chan, devpriv->chan_is_bipolar))
-			/* convert to comedi unsigned data */
+
+		/* convert bipolar data to comedi unsigned data */
+		if (comedi_range_is_bipolar(s, range))
 			d = comedi_offset_munge(s, d);
 		d &= s->maxdata;
 
