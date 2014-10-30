@@ -514,7 +514,7 @@ static int apci1564_auto_attach(struct comedi_device *dev,
 	/* Timer subdevice */
 	s = &dev->subdevices[3];
 	s->type		= COMEDI_SUBD_TIMER;
-	s->subdev_flags	= SDF_WRITEABLE;
+	s->subdev_flags	= SDF_WRITABLE;
 	s->n_chan	= 3;
 	s->maxdata	= 0;
 	s->range_table	= &range_digital;
