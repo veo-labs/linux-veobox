@@ -12042,7 +12042,7 @@ intel_prepare_primary_plane(struct drm_plane *plane,
 
 	if (old_obj != obj) {
 		mutex_lock(&dev->struct_mutex);
-		ret = intel_pin_and_fence_fb_obj(dev, obj, NULL);
+		ret = intel_pin_and_fence_fb_obj(plane, fb, NULL);
 		if (ret == 0)
 			i915_gem_track_fb(old_obj, obj,
 					  INTEL_FRONTBUFFER_PRIMARY(pipe));
