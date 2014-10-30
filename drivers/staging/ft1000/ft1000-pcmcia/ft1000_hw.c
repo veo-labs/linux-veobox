@@ -950,12 +950,13 @@ static void ft1000_proc_drvmsg(struct net_device *dev)
 		u16 wrd;
 	} convert;
 
-	if (info->AsicID == ELECTRABUZZ_ID)
-		tempword = FT1000_DPRAM_RX_BASE+2;
-	else
-		tempword = FT1000_DPRAM_MAG_RX_BASE;
-
-	if (ft1000_receive_cmd(dev, &cmdbuffer[0], MAX_CMD_SQSIZE, &tempword)) {
+    if (info->AsicID == ELECTRABUZZ_ID) {
+        tempword = FT1000_DPRAM_RX_BASE+2;
+    }
+    else {
+        tempword = FT1000_DPRAM_MAG_RX_BASE;
+		}
+		if (ft1000_receive_cmd(dev, &cmdbuffer[0], MAX_CMD_SQSIZE, &tempword)) {
 
 		/* Get the message type which is total_len + PSEUDO header + msgtype + message body */
 		pdrvmsg = (struct drv_msg *)&cmdbuffer[0];
@@ -1171,11 +1172,11 @@ static void ft1000_proc_drvmsg(struct net_device *dev)
 				/* Insert application id */
 				ppseudo_hdr->portsrc = 0;
 				/* Calculate new checksum */
-				ppseudo_hdr->checksum = *pmsg++;
-				for (i = 1; i < 7; i++)
-					ppseudo_hdr->checksum ^= *pmsg++;
-
-				pmsg = (u16 *)&tempbuffer[16];
+                ppseudo_hdr->checksum = *pmsg++;
+                for (i=1; i<7; i++) {
+                    ppseudo_hdr->checksum ^= *pmsg++;
+                }
+				pmsg = (u16 *) &tempbuffer[16];
 				*pmsg++ = htons(RSP_DRV_ERR_RPT_MSG);
 				*pmsg++ = htons(0x000e);
 				*pmsg++ = htons(info->DSP_TIME[0]);
