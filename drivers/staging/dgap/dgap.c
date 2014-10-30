@@ -7144,10 +7144,31 @@ free_chan:
  */
 static void dgap_tty_free(struct board_t *brd)
 {
-	int i;
+	char *ptr;
 
-	for (i = 0; i < brd->nasync; i++)
-		kfree(brd->channels[i]);
+	if (!string || !group)
+		return NULL;
+
+	if (*group == '^') {
+		group++;
+		for (; *string; string++) {
+			for (ptr = group; *ptr; ptr++) {
+				if (*ptr == *string)
+					break;
+			}
+			if (*ptr == '\0')
+				return string;
+		}
+	} else {
+		for (; *string; string++) {
+			for (ptr = group; *ptr; ptr++) {
+				if (*ptr == *string)
+					return string;
+			}
+		}
+	}
+
+	return NULL;
 }
 
 static int dgap_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
