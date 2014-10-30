@@ -3634,6 +3634,9 @@ static void valleyview_irq_uninstall(struct drm_device *dev)
 
 	gen5_gt_irq_reset(dev);
 
+	for_each_pipe(dev_priv, pipe)
+		I915_WRITE(PIPESTAT(pipe), 0xffff);
+
 	I915_WRITE(HWSTAM, 0xffffffff);
 	I915_WRITE(PORT_HOTPLUG_EN, 0);
 	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
