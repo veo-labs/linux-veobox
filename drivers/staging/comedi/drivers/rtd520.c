@@ -617,13 +617,16 @@ static int ai_read_n(struct comedi_device *dev, struct comedi_subdevice *s,
 
 		d = readw(devpriv->las1 + LAS1_ADC_FIFO);
 		d = d >> 3;	/* low 3 bits are marker lines */
-		if (test_bit(s->async->cur_chan, devpriv->chan_is_bipolar))
+		if (test_bit(async->cur_chan, devpriv->chan_is_bipolar))
 			/* convert to comedi unsigned data */
 			d = comedi_offset_munge(s, d);
 		d &= s->maxdata;
 
 		if (!comedi_buf_write_samples(s, &d, 1))
 			return -1;
+
+		async->cur_chan++;
+		async->cur_chan %= cmd->chanlist_len;
 
 		if (devpriv->ai_count > 0)	/* < 0, means read forever */
 			devpriv->ai_count--;
