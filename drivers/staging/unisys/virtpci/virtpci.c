@@ -392,9 +392,9 @@ add_vnic(struct add_virt_guestpart *addparams)
 	}
 
 	LOGINF("Adding vnic macaddr:%02x:%02x:%02x:%02x:%02x:%02x rcvbufs:%d mtu:%d chanptr:%p%pUL\n",
-	     net.mac_addr[0], net.mac_addr[1], net.mac_addr[2], net.mac_addr[3],
-	     net.mac_addr[4], net.mac_addr[5], net.num_rcv_bufs, net.mtu,
-	     addparams->chanptr, &net.zone_uuid);
+	       net.mac_addr[0], net.mac_addr[1], net.mac_addr[2],
+	       net.mac_addr[3], net.mac_addr[4], net.mac_addr[5],
+	       net.num_rcv_bufs, net.mtu, addparams->chanptr, &net.zone_uuid);
 	i = virtpci_device_add(vbus, VIRTNIC_TYPE, addparams, NULL, &net);
 	if (i) {
 		LOGINF("Added vnic macaddr:%02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -795,11 +795,11 @@ static void fix_vbus_dev_info(struct device *dev, int dev_no, int dev_type,
 		stype = "unknown";
 		break;
 	}
-	bus_device_info_init(&dev_info, stype,
+	bus_device_info_init(&devInfo, stype,
 			     virtpcidrv->name,
 			     virtpcidrv->version,
 			     virtpcidrv->vertag);
-	write_vbus_dev_info(chan, &dev_info, dev_no);
+	write_vbus_devInfo(pChan, &devInfo, devNo);
 
 	/* Re-write bus+chipset info, because it is possible that this
 	* was previously written by our good counterpart, visorbus.
@@ -1513,7 +1513,7 @@ static int __init virtpci_mod_init(void)
 		return ret;
 	}
 	DBGINF("bus_register successful\n");
-	bus_device_info_init(&bus_driver_info, "clientbus", "virtpci",
+	bus_device_info_init(&Bus_DriverInfo, "clientbus", "virtpci",
 			     VERSION, NULL);
 
 	/* create a root bus used to parent all the virtpci buses. */
@@ -1537,7 +1537,7 @@ static int __init virtpci_mod_init(void)
 	}
 
 	LOGINF("successfully registered virtpci_ctrlchan_func (0x%p) as callback.\n",
-	     (void *)&virtpci_ctrlchan_func);
+	       (void *)&virtpci_ctrlchan_func);
 	/* create debugfs directory and info file inside. */
 	virtpci_debugfs_dir = debugfs_create_dir("virtpci", NULL);
 	debugfs_create_file("info", S_IRUSR, virtpci_debugfs_dir,
