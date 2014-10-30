@@ -3651,6 +3651,11 @@ static void cherryview_irq_uninstall(struct drm_device *dev)
 
 	GEN5_IRQ_RESET(GEN8_PCU_);
 
+	I915_WRITE(PORT_HOTPLUG_EN, 0);
+	I915_WRITE(PORT_HOTPLUG_STAT, I915_READ(PORT_HOTPLUG_STAT));
+
+	GEN5_IRQ_RESET(GEN8_PCU_);
+
 	vlv_display_irq_uninstall(dev_priv);
 }
 
