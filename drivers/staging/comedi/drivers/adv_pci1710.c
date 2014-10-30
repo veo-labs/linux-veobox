@@ -651,6 +651,8 @@ static int pci171x_ai_cancel(struct comedi_device *dev,
 	outb(0, dev->iobase + PCI171x_CLRFIFO);
 	outb(0, dev->iobase + PCI171x_CLRINT);
 
+	devpriv->ai_act_scan = 0;
+
 	return 0;
 }
 
@@ -831,6 +833,8 @@ static int pci171x_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 
 	outb(0, dev->iobase + PCI171x_CLRFIFO);
 	outb(0, dev->iobase + PCI171x_CLRINT);
+
+	devpriv->ai_act_scan = 0;
 
 	devpriv->CntrlReg &= Control_CNT0;
 	if ((cmd->flags & CMDF_WAKE_EOS) == 0)

@@ -465,6 +465,7 @@ static int pcl816_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 	pcl816_ai_setup_chanlist(dev, cmd->chanlist, seglen);
 	udelay(1);
 
+	devpriv->ai_act_scan = 0;
 	devpriv->ai_cmd_running = 1;
 	devpriv->ai_poll_ptr = 0;
 	devpriv->ai_cmd_canceled = 0;
