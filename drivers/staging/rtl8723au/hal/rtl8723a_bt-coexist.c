@@ -1759,16 +1759,6 @@ static enum hci_status bthci_CmdReadConnectionAcceptTimeout(struct rtw_adapter *
 	return status;
 }
 
-/* 7.3.3 */
-static enum hci_status
-bthci_CmdSetEventFilter(
-	struct rtw_adapter *padapter,
-	struct packet_irp_hcicmd_data *pHciCmd
-	)
-{
-	return HCI_STATUS_SUCCESS;
-}
-
 /* 7.3.14 */
 static enum hci_status
 bthci_CmdWriteConnectionAcceptTimeout(
@@ -2980,11 +2970,6 @@ bthci_CmdReadLinkQuality(
 	return status;
 }
 
-static enum hci_status bthci_CmdReadRSSI(struct rtw_adapter *padapter)
-{
-	return HCI_STATUS_SUCCESS;
-}
-
 static enum hci_status
 bthci_CmdCreateLogicalLink(
 	struct rtw_adapter *padapter,
@@ -4130,13 +4115,6 @@ bthci_CmdHostBufferSize(struct rtw_adapter *padapter,
 	bthci_IndicateEvent(padapter, PPacketIrpEvent, len+2);
 
 	return status;
-}
-
-static enum hci_status
-bthci_CmdHostNumberOfCompletedPackets(struct rtw_adapter *padapter,
-				      struct packet_irp_hcicmd_data *pHciCmd)
-{
-	return HCI_STATUS_SUCCESS;
 }
 
 static enum hci_status
