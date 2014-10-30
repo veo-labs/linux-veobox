@@ -999,8 +999,8 @@ static int virtpci_device_add(struct device *parentbus, int devtype,
 	}
 
 	/* add it at the head */
-	if (!vpcidev_list_head) {
-		vpcidev_list_head = virtpcidev;
+	if (!VpcidevListHead) {
+		VpcidevListHead = virtpcidev;
 	} else {
 		/* insert virtpcidev at the head of our linked list of
 		 * vpcidevs
