@@ -764,7 +764,7 @@ static int mx6cam_s_ctrl(struct v4l2_ctrl *ctrl)
 		return mx6cam_set_motion(dev, motion);
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control\n");
-		return -EINVAL;
+		return -ERANGE;
 	}
 
 	return mx6cam_set_rotation(dev, rotation, hflip, vflip);
@@ -822,11 +822,12 @@ static int mx6cam_init_controls(struct mx6cam_dev *dev)
 static int vidioc_querycap(struct file *file, void *priv,
 			   struct v4l2_capability *cap)
 {
-	strncpy(cap->driver, DEVICE_NAME, sizeof(cap->driver) - 1);
-	strncpy(cap->card, DEVICE_NAME, sizeof(cap->card) - 1);
-	cap->bus_info[0] = 0;
-	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE |
-		V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_OVERLAY;
+	strlcpy(cap->driver, DEVICE_NAME, sizeof(cap->driver));
+	strlcpy(cap->card, DEVICE_NAME, sizeof(cap->card));
+	strlcpy(cap->bus_info, "platform:mx6-camera", sizeof(cap->bus_info));
+	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_CAPTURE |
+				V4L2_CAP_VIDEO_OVERLAY;
+	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
 
 	return 0;
 }
@@ -878,6 +879,8 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	struct mx6cam_dev *dev = ctx->dev;
 	struct v4l2_mbus_framefmt mbus_fmt;
 	struct mx6cam_pixfmt *fmt;
+	struct v4l2_pix_format *pix = &f->fmt.pix;
+	struct v4l2_subdev_format sd_fmt;
 	unsigned int width_align;
 	struct v4l2_rect crop;
 	int ret;
@@ -903,7 +906,9 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 			      width_align, &f->fmt.pix.height,
 			      MIN_H, MAX_H, H_ALIGN, S_ALIGN);
 
+#if 0
 	v4l2_fill_mbus_format(&mbus_fmt, &f->fmt.pix, 0);
+
 	ret = v4l2_subdev_call(dev->ep->sd, video, try_mbus_fmt, &mbus_fmt);
 	if (ret)
 		return ret;
@@ -916,15 +921,21 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 		return -EINVAL;
 	}
 
+#else
+	sd_fmt.pad = 1; /* TODO: Modify this later */
+	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
+	v4l2_fill_pix_format(pix, &sd_fmt.format);
+	pix->colorspace = sd_fmt.format.colorspace;
+#endif
 	/*
 	 * calculate what the optimal crop window will be for this
 	 * sensor format and make any user format adjustments.
 	 */
-	calc_default_crop(dev, &crop, &mbus_fmt);
-	adjust_user_fmt(dev, &mbus_fmt, f, &crop);
-
-	/* this driver only delivers progressive frames to userland */
-	f->fmt.pix.field = V4L2_FIELD_NONE;
+	calc_default_crop(dev, &crop, &sd_fmt.format);
+	adjust_user_fmt(dev, &sd_fmt.format, f, &crop);
+	pix->field = V4L2_FIELD_NONE;
+	pix->priv = 0;
 
 	return 0;
 }
@@ -955,6 +966,8 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
 	struct v4l2_mbus_framefmt mbus_fmt;
+	struct v4l2_pix_format *pix = &f->fmt.pix;
+	struct v4l2_subdev_format sd_fmt;
 	int ret;
 
 	if (vb2_is_busy(&dev->buffer_queue)) {
@@ -965,14 +978,24 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	ret = vidioc_try_fmt_vid_cap(file, priv, f);
 	if (ret)
 		return ret;
-
+#if 0
 	v4l2_fill_mbus_format(&mbus_fmt, &f->fmt.pix, 0);
 	ret = v4l2_subdev_call(dev->ep->sd, video, s_mbus_fmt, &mbus_fmt);
 	if (ret) {
 		v4l2_err(&dev->v4l2_dev, "%s s_mbus_fmt failed\n", __func__);
 		return ret;
 	}
+#else
+	sd_fmt.pad = 1; /* TODO: Modify this later */
+	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	sd_fmt.format.code = V4L2_MBUS_FMT_YUYV8_1X16;
 
+	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "%s set_fmt failed\n", __func__);
+		return ret;
+	}
+#endif
 	ret = update_sensor_fmt(dev);
 	if (ret)
 		return ret;
@@ -1067,18 +1090,19 @@ static int vidioc_querystd(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	int ret;
 
-	ret = update_sensor_std(dev);
-	if (!ret)
-		*std = dev->current_std;
-	return ret;
+	return update_sensor_std(dev);
 }
 
 static int vidioc_g_std(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	int ret;
+
+	ret = v4l2_subdev_call(dev->ep->sd, video, g_std, std);
+	if (ret < 0)
+		return ret;
 
 	*std = dev->current_std;
 	return 0;
@@ -1119,13 +1143,14 @@ static int vidioc_enum_input(struct file *file, void *priv,
 	sensor_input = input->index - epinput->first;
 
 	input->type = V4L2_INPUT_TYPE_CAMERA;
-	input->capabilities = epinput->caps[sensor_input];
+	/* TODO: Modify it to make it dynamic */
+	input->capabilities = V4L2_IN_CAP_DV_TIMINGS;
 	strncpy(input->name, epinput->name[sensor_input], sizeof(input->name));
 
 	if (input->index == dev->current_input) {
 		v4l2_subdev_call(ep->sd, video, g_input_status, &input->status);
-		update_sensor_std(dev);
-		input->std = dev->current_std;
+/*		update_sensor_std(dev);
+		input->std = dev->current_std;*/
 	} else {
 		input->status = V4L2_IN_ST_NO_SIGNAL;
 		input->std = V4L2_STD_UNKNOWN;
@@ -1527,12 +1552,52 @@ static int vidioc_log_status(struct file *file, void *f)
 	v4l2_device_call_all(vdev->v4l2_dev, 0, core, log_status);
 	return 0;
 }
+
 static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
 {
 	struct video_device *vdev = video_devdata(file);
 
 	v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
 	return 0;
+}
+
+static int vidioc_g_dv_timings(struct file *file, void *priv_fh,
+				    struct v4l2_dv_timings *timings)
+{
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
+
+	return v4l2_subdev_call(dev->ep->sd,
+			video, g_dv_timings, timings);
+}
+
+static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
+				    struct v4l2_dv_timings *timings)
+{
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
+
+	return v4l2_subdev_call(dev->ep->sd,
+			video, s_dv_timings, timings);
+}
+
+static int vidioc_query_dv_timings(struct file *file, void *priv_fh,
+				    struct v4l2_dv_timings *timings)
+{
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
+
+	return v4l2_subdev_call(dev->ep->sd,
+			video, query_dv_timings, timings);
+}
+static int vidioc_enum_dv_timings(struct file *file, void *priv_fh,
+				    struct v4l2_enum_dv_timings *timings)
+{
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
+
+	return v4l2_subdev_call(dev->ep->sd,
+			pad, enum_dv_timings, timings);
 }
 
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
@@ -1551,7 +1616,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_try_fmt_vid_overlay	= vidioc_try_fmt_vid_overlay,
 	.vidioc_s_fmt_vid_overlay	= vidioc_s_fmt_vid_overlay,
 
-	.vidioc_querystd        = vidioc_querystd,
+	.vidioc_querystd		= vidioc_querystd,
 	.vidioc_g_std           = vidioc_g_std,
 	.vidioc_s_std           = vidioc_s_std,
 
@@ -1580,6 +1645,10 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_overlay         = vidioc_overlay,
 	.vidioc_log_status      = vidioc_log_status,
 	.vidioc_s_edid          = vidioc_s_edid,
+	.vidioc_s_dv_timings	= vidioc_s_dv_timings,
+	.vidioc_g_dv_timings	= vidioc_g_dv_timings,
+	.vidioc_query_dv_timings = vidioc_query_dv_timings,
+	.vidioc_enum_dv_timings	= vidioc_enum_dv_timings,
 };
 
 
