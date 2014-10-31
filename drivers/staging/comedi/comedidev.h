@@ -596,10 +596,6 @@ void comedi_pci_driver_unregister(struct comedi_driver *, struct pci_driver *);
 	module_driver(__comedi_driver, comedi_pci_driver_register, \
 			comedi_pci_driver_unregister, &(__pci_driver))
 
-#endif /* CONFIG_COMEDI_PCI_DRIVERS */
-
-#ifdef CONFIG_COMEDI_PCMCIA_DRIVERS
-
 /* comedi_pcmcia.c - comedi PCMCIA driver specific functions */
 
 struct pcmcia_driver;
