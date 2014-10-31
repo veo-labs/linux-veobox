@@ -109,7 +109,7 @@ static inline void delbusdevices(struct list_head *list, u32 bus_no)
 	struct visorchipset_device_info *p, *tmp;
 
 	list_for_each_entry_safe(p, tmp, list, entry) {
-		if (p->bus_no == busNo) {
+		if (p->bus_no == bus_no) {
 			list_del(&p->entry);
 			kfree(p);
 		}
