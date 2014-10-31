@@ -1137,7 +1137,6 @@ static void ni_ao_fifo_load(struct comedi_device *dev,
 			/* 6711 only has 16 bit wide ao fifo */
 			if (!devpriv->is_6711) {
 				comedi_buf_read_samples(s, &d, 1);
-				chan++;
 				i++;
 				packed_data |= (d << 16) & 0xffff0000;
 			}
@@ -1146,7 +1145,6 @@ static void ni_ao_fifo_load(struct comedi_device *dev,
 			ni_writew(dev, d, DAC_FIFO_Data);
 		}
 	}
-	async->cur_chan = chan;
 }
 
 /*

@@ -474,8 +474,11 @@ static bool pcl818_ai_write_sample(struct comedi_device *dev,
 	if (devpriv->act_chanlist_pos >= devpriv->act_chanlist_len)
 		devpriv->act_chanlist_pos = 0;
 
-	if (cmd->stop_src == TRIG_COUNT &&
-	    s->async->scans_done >= cmd->stop_arg) {
+	if (s->async->cur_chan == 0)
+		devpriv->ai_act_scan--;
+
+	if (cmd->stop_src == TRIG_COUNT && devpriv->ai_act_scan == 0) {
+		/* all data sampled */
 		s->async->events |= COMEDI_CB_EOA;
 		return false;
 	}
