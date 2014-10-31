@@ -80,7 +80,7 @@ struct visorchipset_device_info {
 	u32 busNo;
 	u32 devNo;
 	uuid_le devInstGuid;
-	VISORCHIPSET_STATE state;
+	struct visorchipset_state state;
 	VISORCHIPSET_CHANNEL_INFO chanInfo;
 	u32 Reserved1;		/* control_vm_id */
 	u64 Reserved2;
@@ -124,11 +124,11 @@ static inline void delbusdevices(struct list_head *list, u32 bus_no)
  */
 struct visorchipset_bus_info {
 	struct list_head entry;
-	u32 bus_no;
+	u32 busNo;
 	struct visorchipset_state state;
-	struct visorchipset_channel_info chan_info;
-	uuid_le partition_uuid;
-	u64 partition_handle;
+	VISORCHIPSET_CHANNEL_INFO chanInfo;
+	uuid_le partitionGuid;
+	u64 partitionHandle;
 	u8 *name;		/* UTF8 */
 	u8 *description;	/* UTF8 */
 	u64 reserved1;
@@ -162,7 +162,7 @@ findbus(struct list_head *list, u32 bus_no)
  */
 typedef struct {
 	u32 switchNo;
-	VISORCHIPSET_STATE state;
+	struct visorchipset_state state;
 	uuid_le switchTypeGuid;
 	u8 *authService1;
 	u8 *authService2;
@@ -179,12 +179,12 @@ typedef struct {
 /** Attributes for a particular Supervisor external port, which is connected
  *  to a specific switch.
  */
-struct visorchipset_externalport_info {
-	u32 switch_no;
-	u32 external_port_no;
+typedef struct {
+	u32 switchNo;
+	u32 externalPortNo;
 	struct visorchipset_state state;
-	uuid_le network_zone_uuid;
-	int pd_port;
+	uuid_le networkZoneGuid;
+	int pdPort;
 	u8 *ip;
 	u8 *ipNetmask;
 	u8 *ipBroadcast;
@@ -205,7 +205,7 @@ struct visorchipset_externalport_info {
 typedef struct {
 	u32 switchNo;
 	u32 internalPortNo;
-	VISORCHIPSET_STATE state;
+	struct visorchipset_state state;
 	u32 busNo;		/* valid only when state.attached == 1 */
 	u32 devNo;		/* valid only when state.attached == 1 */
 	u64 Reserved1;
