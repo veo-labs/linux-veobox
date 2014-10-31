@@ -29,6 +29,7 @@ struct mmp_clk_factor {
 	struct mmp_clk_factor_masks	*masks;
 	struct mmp_clk_factor_tbl	*ftbl;
 	unsigned int		ftbl_cnt;
+	spinlock_t *lock;
 };
 
 static long clk_factor_round_rate(struct clk_hw *hw, unsigned long drate,
@@ -167,7 +168,7 @@ struct clk *mmp_clk_register_factor(const char *name, const char *parent_name,
 		unsigned long flags, void __iomem *base,
 		struct mmp_clk_factor_masks *masks,
 		struct mmp_clk_factor_tbl *ftbl,
-		unsigned int ftbl_cnt)
+		unsigned int ftbl_cnt, spinlock_t *lock)
 {
 	struct mmp_clk_factor *factor;
 	struct clk_init_data init;
