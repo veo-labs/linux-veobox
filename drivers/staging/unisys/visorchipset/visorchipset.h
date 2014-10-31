@@ -77,28 +77,28 @@ struct visorchipset_channel_info {
  */
 struct visorchipset_device_info {
 	struct list_head entry;
-	u32 busNo;
-	u32 devNo;
-	uuid_le devInstGuid;
+	u32 bus_no;
+	u32 dev_no;
+	uuid_le dev_inst_uuid;
 	struct visorchipset_state state;
-	struct visorchipset_channel_info chanInfo;
-	u32 Reserved1;		/* control_vm_id */
-	u64 Reserved2;
-	u32 switchNo;		/* when devState.attached==1 */
-	u32 internalPortNo;	/* when devState.attached==1 */
-	struct controlvm_message_header pendingMsgHdr;	/* CONTROLVM_MESSAGE */
+	struct visorchipset_channel_info chan_info;
+	u32 reserved1;		/* control_vm_id */
+	u64 reserved2;
+	u32 switch_no;		/* when devState.attached==1 */
+	u32 internal_port_no;	/* when devState.attached==1 */
+	struct controlvm_message_header pending_msg_hdr;/* CONTROLVM_MESSAGE */
 	/** For private use by the bus driver */
 	void *bus_driver_context;
 
 };
 
-static inline struct visorchipset_device_info *finddevice(
-		struct list_head *list, u32 bus_no, u32 dev_no)
+static inline struct visorchipset_device_info *
+finddevice(struct list_head *list, u32 busNo, u32 devNo)
 {
 	struct visorchipset_device_info *p;
 
 	list_for_each_entry(p, list, entry) {
-		if (p->bus_no == bus_no && p->dev_no == dev_no)
+		if (p->bus_no == busNo && p->dev_no == devNo)
 			return p;
 	}
 	return NULL;
@@ -109,7 +109,7 @@ static inline void delbusdevices(struct list_head *list, u32 bus_no)
 	struct visorchipset_device_info *p, *tmp;
 
 	list_for_each_entry_safe(p, tmp, list, entry) {
-		if (p->bus_no == bus_no) {
+		if (p->bus_no == busNo) {
 			list_del(&p->entry);
 			kfree(p);
 		}
@@ -270,15 +270,18 @@ visorchipset_register_busdev_server(VISORCHIPSET_BUSDEV_NOTIFIERS *notifiers,
 typedef void (*SPARREPORTEVENT_COMPLETE_FUNC) (struct controlvm_message *msg,
 					       int status);
 
-void visorchipset_device_pause_response(ulong bus_no, ulong dev_no,
-					int response);
+void visorchipset_device_pause_response(ulong busNo, ulong devNo, int response);
 
-BOOL visorchipset_get_bus_info(ulong bus_no,
-			       struct visorchipset_bus_info *bus_info);
-BOOL visorchipset_get_device_info(ulong bus_no, ulong dev_no,
-				  struct visorchipset_device_info *dev_info);
-BOOL visorchipset_set_bus_context(ulong bus_no, void *context);
-BOOL visorchipset_set_device_context(ulong bus_no, ulong dev_no, void *context);
+BOOL visorchipset_get_bus_info(ulong busNo, VISORCHIPSET_BUS_INFO *busInfo);
+BOOL visorchipset_get_device_info(ulong busNo, ulong devNo,
+				  struct visorchipset_device_info *devInfo);
+BOOL visorchipset_get_switch_info(ulong switchNo,
+				  VISORCHIPSET_SWITCH_INFO *switchInfo);
+BOOL visorchipset_get_externalport_info(ulong switchNo, ulong externalPortNo,
+					VISORCHIPSET_EXTERNALPORT_INFO
+					*externalPortInfo);
+BOOL visorchipset_set_bus_context(ulong busNo, void *context);
+BOOL visorchipset_set_device_context(ulong busNo, ulong devNo, void *context);
 int visorchipset_chipset_ready(void);
 int visorchipset_chipset_selftest(void);
 int visorchipset_chipset_notready(void);
