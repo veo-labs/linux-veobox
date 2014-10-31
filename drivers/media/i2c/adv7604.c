@@ -1949,6 +1949,19 @@ static int adv7604_get_edid(struct v4l2_subdev *sd, struct v4l2_edid *edid)
 
 	memset(edid->reserved, 0, sizeof(edid->reserved));
 
+	if (edid->start_block == 0 && edid->blocks == 0) {
+		edid->blocks = state->edid.blocks;
+		return 0;
+	}
+
+	if (state->edid.blocks == 0)
+		return -ENODATA;
+
+	if (edid->start_block >= state->edid.blocks)
+
+	if (edid->start_block + edid->blocks > state->edid.blocks)
+		edid->blocks = state->edid.blocks - edid->start_block;
+
 	switch (edid->pad) {
 	case ADV7604_PAD_HDMI_PORT_A:
 	case ADV7604_PAD_HDMI_PORT_B:
