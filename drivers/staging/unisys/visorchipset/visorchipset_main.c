@@ -2217,7 +2217,7 @@ EXPORT_SYMBOL_GPL(visorchipset_get_bus_info);
 BOOL
 visorchipset_set_bus_context(ulong bus_no, void *context)
 {
-	struct visorchipset_bus_info *p = findbus(&BusInfoList, busNo);
+	struct visorchipset_bus_info *p = findbus(&BusInfoList, bus_no);
 
 	if (!p) {
 		LOGERR("(%lu) failed", bus_no);
