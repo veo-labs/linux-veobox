@@ -368,6 +368,22 @@ static void calc_default_crop(struct mx6cam_dev *dev,
 
 static int update_sensor_std(struct mx6cam_dev *dev)
 {
+	struct mx6cam_sensor_input *epinput;
+	struct mx6cam_endpoint *ep;
+	int sensor_input;
+
+	ep = find_ep_by_input_index(dev, dev->current_input);
+	if (!ep)
+		return -EINVAL;
+
+	epinput = &ep->sensor_input;
+	sensor_input = dev->current_input - epinput->first;
+
+	if (epinput->caps[sensor_input] == V4L2_IN_CAP_DV_TIMINGS) {
+		v4l2_err(&dev->v4l2_dev, "Update STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
+		return -ENODATA;
+	}
+
 	return v4l2_subdev_call(dev->ep->sd, video, querystd,
 				&dev->current_std);
 }
@@ -1090,6 +1106,21 @@ static int vidioc_querystd(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_sensor_input *epinput;
+	struct mx6cam_endpoint *ep;
+	int sensor_input;
+
+	ep = find_ep_by_input_index(dev, dev->current_input);
+	if (!ep)
+		return -EINVAL;
+
+	epinput = &ep->sensor_input;
+	sensor_input = dev->current_input - epinput->first;
+
+	if (epinput->caps[sensor_input] == V4L2_IN_CAP_DV_TIMINGS) {
+		v4l2_err(&dev->v4l2_dev, "Query STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
+		return -ENODATA;
+	}
 
 	return update_sensor_std(dev);
 }
@@ -1098,7 +1129,22 @@ static int vidioc_g_std(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_sensor_input *epinput;
+	struct mx6cam_endpoint *ep;
 	int ret;
+	int sensor_input;
+
+	ep = find_ep_by_input_index(dev, dev->current_input);
+	if (!ep)
+		return -EINVAL;
+
+	epinput = &ep->sensor_input;
+	sensor_input = dev->current_input - epinput->first;
+
+	if (epinput->caps[sensor_input] == V4L2_IN_CAP_DV_TIMINGS) {
+		v4l2_err(&dev->v4l2_dev, "Get STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
+		return -ENODATA;
+	}
 
 	ret = v4l2_subdev_call(dev->ep->sd, video, g_std, std);
 	if (ret < 0)
@@ -1112,7 +1158,22 @@ static int vidioc_s_std(struct file *file, void *priv, v4l2_std_id std)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_sensor_input *epinput;
+	struct mx6cam_endpoint *ep;
 	int ret;
+	int sensor_input;
+
+	ep = find_ep_by_input_index(dev, dev->current_input);
+	if (!ep)
+		return -EINVAL;
+
+	epinput = &ep->sensor_input;
+	sensor_input = dev->current_input - epinput->first;
+
+	if (epinput->caps[sensor_input] == V4L2_IN_CAP_DV_TIMINGS) {
+		v4l2_err(&dev->v4l2_dev, "Set STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
+		return -ENODATA;
+	}
 
 	if (vb2_is_busy(&dev->buffer_queue))
 		return -EBUSY;
@@ -1145,6 +1206,7 @@ static int vidioc_enum_input(struct file *file, void *priv,
 	input->type = V4L2_INPUT_TYPE_CAMERA;
 	/* TODO: Modify it to make it dynamic */
 	input->capabilities = V4L2_IN_CAP_DV_TIMINGS;
+	epinput->caps[sensor_input] = input->capabilities;
 	strncpy(input->name, epinput->name[sensor_input], sizeof(input->name));
 
 	if (input->index == dev->current_input) {
