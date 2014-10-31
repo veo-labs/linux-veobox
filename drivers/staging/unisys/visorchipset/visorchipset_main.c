@@ -2247,7 +2247,7 @@ BOOL
 visorchipset_set_device_context(ulong bus_no, ulong dev_no, void *context)
 {
 	struct visorchipset_device_info *p =
-			finddevice(&DevInfoList, busNo, devNo);
+			finddevice(&DevInfoList, bus_no, dev_no);
 
 	if (!p) {
 		LOGERR("(%lu,%lu) failed", bus_no, dev_no);
