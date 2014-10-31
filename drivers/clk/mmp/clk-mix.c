@@ -205,7 +205,7 @@ static long mmp_clk_mix_determine_rate(struct clk_hw *hw, unsigned long rate,
 					unsigned long min_rate,
 					unsigned long max_rate,
 					unsigned long *best_parent_rate,
-					struct clk_hw **best_parent_clk)
+					struct clk **best_parent_clk)
 {
 	struct mmp_clk_mix *mix = to_clk_mix(hw);
 	struct mmp_clk_mix_clk_table *item;
@@ -266,7 +266,7 @@ static long mmp_clk_mix_determine_rate(struct clk_hw *hw, unsigned long rate,
 
 found:
 	*best_parent_rate = parent_rate_best;
-	*best_parent_clk = __clk_get_hw(parent_best);
+	*best_parent_clk = parent_best;
 
 	return mix_rate_best;
 }
