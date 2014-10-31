@@ -490,7 +490,8 @@ unsigned int comedi_buf_write_samples(struct comedi_subdevice *s,
 	 * If not, clamp the nsamples to the number that will fit, flag the
 	 * buffer overrun and add the samples that fit.
 	 */
-	max_samples = comedi_buf_write_n_available(s) / bytes_per_sample(s);
+	max_samples = comedi_bytes_to_samples(s,
+					      comedi_buf_write_n_available(s));
 	if (nsamples > max_samples) {
 		dev_warn(s->device->class_dev, "buffer overrun\n");
 		s->async->events |= COMEDI_CB_OVERFLOW;
@@ -500,7 +501,8 @@ unsigned int comedi_buf_write_samples(struct comedi_subdevice *s,
 	if (nsamples == 0)
 		return 0;
 
-	nbytes = comedi_buf_write_alloc(s, nsamples * bytes_per_sample(s));
+	nbytes = comedi_buf_write_alloc(s,
+					comedi_samples_to_bytes(s, nsamples));
 	comedi_buf_memcpy_to(s, data, nbytes);
 	comedi_buf_write_free(s, nbytes);
 	comedi_inc_scan_progress(s, nbytes);
@@ -528,14 +530,16 @@ unsigned int comedi_buf_read_samples(struct comedi_subdevice *s,
 	unsigned int nbytes;
 
 	/* clamp nsamples to the number of full samples available */
-	max_samples = comedi_buf_read_n_available(s) / bytes_per_sample(s);
+	max_samples = comedi_bytes_to_samples(s,
+					      comedi_buf_read_n_available(s));
 	if (nsamples > max_samples)
 		nsamples = max_samples;
 
 	if (nsamples == 0)
 		return 0;
 
-	nbytes = comedi_buf_read_alloc(s, nsamples * bytes_per_sample(s));
+	nbytes = comedi_buf_read_alloc(s,
+				       comedi_samples_to_bytes(s, nsamples));
 	comedi_buf_memcpy_from(s, data, nbytes);
 	comedi_buf_read_free(s, nbytes);
 	comedi_inc_scan_progress(s, nbytes);
