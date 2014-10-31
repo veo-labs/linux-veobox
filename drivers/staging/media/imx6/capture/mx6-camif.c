@@ -383,6 +383,7 @@ static int update_sensor_std(struct mx6cam_dev *dev)
 		v4l2_err(&dev->v4l2_dev, "Update STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
 		return -ENODATA;
 	}
+	v4l2_err(&dev->v4l2_dev, "Update STD on input %s\n", epinput->name[sensor_input]);
 
 	return v4l2_subdev_call(dev->ep->sd, video, querystd,
 				&dev->current_std);
@@ -1122,6 +1123,7 @@ static int vidioc_querystd(struct file *file, void *priv, v4l2_std_id *std)
 		return -ENODATA;
 	}
 
+	v4l2_err(&dev->v4l2_dev, "Query STD on input %s\n", epinput->name[sensor_input]);
 	return update_sensor_std(dev);
 }
 
@@ -1146,6 +1148,7 @@ static int vidioc_g_std(struct file *file, void *priv, v4l2_std_id *std)
 		return -ENODATA;
 	}
 
+	v4l2_err(&dev->v4l2_dev, "Get STD on input %s\n", epinput->name[sensor_input]);
 	ret = v4l2_subdev_call(dev->ep->sd, video, g_std, std);
 	if (ret < 0)
 		return ret;
@@ -1174,6 +1177,7 @@ static int vidioc_s_std(struct file *file, void *priv, v4l2_std_id std)
 		v4l2_err(&dev->v4l2_dev, "Set STD on input %s : DV Timings only\n", epinput->name[sensor_input]);
 		return -ENODATA;
 	}
+	v4l2_err(&dev->v4l2_dev, "Set STD on input %s\n", epinput->name[sensor_input]);
 
 	if (vb2_is_busy(&dev->buffer_queue))
 		return -EBUSY;
@@ -1285,6 +1289,12 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 	/* finally select the sensor's input */
 	epinput = &ep->sensor_input;
 	sensor_input = index - epinput->first;
+	dev->vfd->tvnorms = 0;
+/*
+ * TODO: Make it dynamic
+ *	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS)
+ *		dev->vfd->tvnorms = V4L2_STD_ALL;
+ */
 	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing,
 			       epinput->value[sensor_input], 0, 0);
 
@@ -2009,7 +2019,6 @@ static struct video_device mx6cam_videodev = {
 	.minor		= -1,
 	.release	= video_device_release,
 	.vfl_dir	= VFL_DIR_RX,
-	.tvnorms	= V4L2_STD_NTSC | V4L2_STD_PAL | V4L2_STD_SECAM,
 };
 
 /*
