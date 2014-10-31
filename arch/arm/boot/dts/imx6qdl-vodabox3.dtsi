@@ -79,6 +79,9 @@
 				data-shift = <0>; /* Lines 19:0 used */
 				hsync-active = <1>;
 				vsync-active = <1>;
+				inputs = <1>;
+				input-names = <"hdmi input">;
+				input-caps = <2>;
 			};
 		};
 	};
@@ -564,5 +567,12 @@
 };
 
 &vpu {
+	compatible = "fsl,imx6q-vpu";
+	clocks = <&clks 168>, <&clks 140>, <&clks 142>;
+	clock-names = "per", "ahb", "ocram";
+	iramsize = <0x21000>;
+	iram = <&ocram>;
+	resets = <&src 1>;
+	status = "okay";
 	pu-supply = <&reg_pu>; /* ldo-bypass:use pu_dummy if VDDSOC share with VDDPU */
 };
