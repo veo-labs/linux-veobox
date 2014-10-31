@@ -874,8 +874,16 @@ static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	struct v4l2_pix_format *pix = &f->fmt.pix;
+	struct v4l2_subdev_format sd_fmt;
 
-	f->fmt.pix = dev->user_fmt.fmt.pix;
+	/* TODO: This should be dynamic */
+	sd_fmt.pad = 1;
+	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
+	v4l2_fill_pix_format(pix, &sd_fmt.format);
+	pix->colorspace = sd_fmt.format.colorspace;
+
 	return 0;
 }
 
@@ -1627,10 +1635,18 @@ static int vidioc_log_status(struct file *file, void *f)
 
 static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
 {
-	struct video_device *vdev = video_devdata(file);
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
 
-	v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
-	return 0;
+	return v4l2_subdev_call(dev->ep->sd, pad, set_edid, edid);
+}
+
+static int vidioc_g_edid(struct file *file, void *f, struct v4l2_edid *edid)
+{
+	struct mx6cam_ctx *ctx = file2ctx(file);
+	struct mx6cam_dev *dev = ctx->dev;
+
+	return v4l2_subdev_call(dev->ep->sd, pad, get_edid, edid);
 }
 
 static int vidioc_g_dv_timings(struct file *file, void *priv_fh,
@@ -1782,6 +1798,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_overlay         = vidioc_overlay,
 	.vidioc_log_status      = vidioc_log_status,
 	.vidioc_s_edid          = vidioc_s_edid,
+	.vidioc_g_edid          = vidioc_g_edid,
 	.vidioc_s_dv_timings	= vidioc_s_dv_timings,
 	.vidioc_g_dv_timings	= vidioc_g_dv_timings,
 	.vidioc_query_dv_timings = vidioc_query_dv_timings,
