@@ -517,8 +517,12 @@ static void das1800_flush_dma_channel(struct comedi_device *dev,
 	unsigned int nsamples;
 
 	/*  figure out how many points to read */
-	nsamples = comedi_bytes_to_samples(s, nbytes);
-	nsamples = comedi_nsamples_left(s, nsamples);
+	num_bytes = devpriv->dma_transfer_size - get_dma_residue(channel);
+	num_samples = comedi_bytes_to_samples(s, num_bytes);
+
+	/* if we only need some of the points */
+	if (cmd->stop_src == TRIG_COUNT && devpriv->count < num_samples)
+		num_samples = devpriv->count;
 
 	munge_data(dev, buffer, num_samples);
 	comedi_buf_write_samples(s, buffer, num_samples);
