@@ -23,8 +23,22 @@
 #define MAX_FB_BUFFER	4
 #define DEFAULT_ZPOS	-1
 
-#define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc, base)
-#define to_exynos_plane(x)	container_of(x, struct exynos_drm_plane, base)
+#define _wait_for(COND, MS) ({ \
+	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS);	\
+	int ret__ = 0;							\
+	while (!(COND)) {						\
+		if (time_after(jiffies, timeout__)) {			\
+			ret__ = -ETIMEDOUT;				\
+			break;						\
+		}							\
+	}								\
+	ret__;								\
+})
+
+#define wait_for(COND, MS) _wait_for(COND, MS)
+
+struct drm_device;
+struct drm_connector;
 
 /* This enumerates device type. */
 enum exynos_drm_device_type {
