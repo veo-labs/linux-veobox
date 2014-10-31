@@ -1180,6 +1180,8 @@ static int ni_ao_fifo_half_empty(struct comedi_device *dev,
 	if (nsamples > board->ao_fifo_depth / 2)
 		nsamples = board->ao_fifo_depth / 2;
 
+	ni_ao_fifo_load(dev, s, nsamples);
+
 	return 1;
 }
 
