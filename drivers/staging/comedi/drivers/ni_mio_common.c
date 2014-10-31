@@ -1128,12 +1128,9 @@ static void ni_ao_fifo_load(struct comedi_device *dev,
 	int i;
 	unsigned short d;
 	u32 packed_data;
-	int range;
 
 	for (i = 0; i < n; i++) {
 		comedi_buf_read_samples(s, &d, 1);
-
-		range = CR_RANGE(cmd->chanlist[chan]);
 
 		if (devpriv->is_6xxx) {
 			packed_data = d & 0xffff;
