@@ -124,11 +124,11 @@ static inline void delbusdevices(struct list_head *list, u32 bus_no)
  */
 struct visorchipset_bus_info {
 	struct list_head entry;
-	u32 busNo;
+	u32 bus_no;
 	struct visorchipset_state state;
-	struct visorchipset_channel_info chanInfo;
-	uuid_le partitionGuid;
-	u64 partitionHandle;
+	struct visorchipset_channel_info chan_info;
+	uuid_le partition_uuid;
+	u64 partition_handle;
 	u8 *name;		/* UTF8 */
 	u8 *description;	/* UTF8 */
 	u64 reserved1;
@@ -139,7 +139,7 @@ struct visorchipset_bus_info {
 		/* Add new fields above. */
 		/* Remaining bits in this 32-bit word are unused. */
 	} flags;
-	struct controlvm_message_header pendingMsgHdr;	/* CONTROLVM MsgHdr */
+	struct controlvm_message_header pending_msg_hdr;/* CONTROLVM MsgHdr */
 	/** For private use by the bus driver */
 	void *bus_driver_context;
 	u64 dev_no;
@@ -147,12 +147,12 @@ struct visorchipset_bus_info {
 };
 
 static inline struct visorchipset_bus_info *
-findbus(struct list_head *list, u32 bus_no)
+findbus(struct list_head *list, u32 busNo)
 {
 	struct visorchipset_bus_info *p;
 
 	list_for_each_entry(p, list, entry) {
-		if (p->bus_no == bus_no)
+		if (p->bus_no == busNo)
 			return p;
 	}
 	return NULL;
@@ -272,7 +272,8 @@ typedef void (*SPARREPORTEVENT_COMPLETE_FUNC) (struct controlvm_message *msg,
 
 void visorchipset_device_pause_response(ulong busNo, ulong devNo, int response);
 
-BOOL visorchipset_get_bus_info(ulong busNo, VISORCHIPSET_BUS_INFO *busInfo);
+BOOL visorchipset_get_bus_info(ulong busNo,
+			       struct visorchipset_bus_info *busInfo);
 BOOL visorchipset_get_device_info(ulong busNo, ulong devNo,
 				  struct visorchipset_device_info *devInfo);
 BOOL visorchipset_get_switch_info(ulong switchNo,
