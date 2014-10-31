@@ -285,7 +285,7 @@ int visorchipset_chipset_notready(void);
 void visorchipset_controlvm_respond_reportEvent(struct controlvm_message *msg,
 						void *payload);
 void visorchipset_save_message(struct controlvm_message *msg,
-			       CRASH_OBJ_TYPE type);
+			       enum crash_obj_type type);
 void *visorchipset_cache_alloc(struct kmem_cache *pool,
 			       BOOL ok_to_block, char *fn, int ln);
 void visorchipset_cache_free(struct kmem_cache *pool, void *p,
