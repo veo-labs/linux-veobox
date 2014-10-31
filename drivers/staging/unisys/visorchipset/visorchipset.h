@@ -60,13 +60,13 @@ enum crash_obj_type {
 
 /** Attributes for a particular Supervisor channel.
  */
-typedef struct {
-	enum visorchipset_addresstype addrType;
-	HOSTADDRESS channelAddr;
+struct visorchipset_channel_info {
+	enum visorchipset_addresstype addr_type;
+	HOSTADDRESS channel_addr;
 	struct irq_info intr;
-	u64 nChannelBytes;
-	uuid_le channelTypeGuid;
-	uuid_le channelInstGuid;
+	u64 n_channel_bytes;
+	uuid_le channel_type_uuid;
+	uuid_le channel_inst_uuid;
 
 };
 
@@ -81,7 +81,7 @@ struct visorchipset_device_info {
 	u32 devNo;
 	uuid_le devInstGuid;
 	struct visorchipset_state state;
-	VISORCHIPSET_CHANNEL_INFO chanInfo;
+	struct visorchipset_channel_info chanInfo;
 	u32 Reserved1;		/* control_vm_id */
 	u64 Reserved2;
 	u32 switchNo;		/* when devState.attached==1 */
@@ -126,7 +126,7 @@ struct visorchipset_bus_info {
 	struct list_head entry;
 	u32 busNo;
 	struct visorchipset_state state;
-	VISORCHIPSET_CHANNEL_INFO chanInfo;
+	struct visorchipset_channel_info chanInfo;
 	uuid_le partitionGuid;
 	u64 partitionHandle;
 	u8 *name;		/* UTF8 */
