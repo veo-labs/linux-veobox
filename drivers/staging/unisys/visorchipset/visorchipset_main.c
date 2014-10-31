@@ -2229,8 +2229,8 @@ visorchipset_set_bus_context(ulong bus_no, void *context)
 EXPORT_SYMBOL_GPL(visorchipset_set_bus_context);
 
 BOOL
-visorchipset_get_device_info(ulong busNo, ulong devNo,
-			     struct visorchipset_device_info *devInfo)
+visorchipset_get_device_info(ulong bus_no, ulong dev_no,
+			     struct visorchipset_device_info *dev_info)
 {
 	void *p = finddevice(&DevInfoList, bus_no, dev_no);
 
@@ -2238,7 +2238,7 @@ visorchipset_get_device_info(ulong busNo, ulong devNo,
 		LOGERR("(%lu,%lu) failed", bus_no, dev_no);
 		return FALSE;
 	}
-	memcpy(devInfo, p, sizeof(struct visorchipset_device_info));
+	memcpy(dev_info, p, sizeof(struct visorchipset_device_info));
 	return TRUE;
 }
 EXPORT_SYMBOL_GPL(visorchipset_get_device_info);
