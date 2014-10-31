@@ -61,7 +61,7 @@ enum crash_obj_type {
 /** Attributes for a particular Supervisor channel.
  */
 typedef struct {
-	VISORCHIPSET_ADDRESSTYPE addrType;
+	enum visorchipset_addresstype addrType;
 	HOSTADDRESS channelAddr;
 	struct irq_info intr;
 	u64 nChannelBytes;
