@@ -23,6 +23,13 @@
  */
 
 #define to_clk_factor(hw) container_of(hw, struct mmp_clk_factor, hw)
+struct mmp_clk_factor {
+	struct clk_hw		hw;
+	void __iomem		*base;
+	struct mmp_clk_factor_masks	*masks;
+	struct mmp_clk_factor_tbl	*ftbl;
+	unsigned int		ftbl_cnt;
+};
 
 static long clk_factor_round_rate(struct clk_hw *hw, unsigned long drate,
 		unsigned long *prate)
@@ -160,7 +167,7 @@ struct clk *mmp_clk_register_factor(const char *name, const char *parent_name,
 		unsigned long flags, void __iomem *base,
 		struct mmp_clk_factor_masks *masks,
 		struct mmp_clk_factor_tbl *ftbl,
-		unsigned int ftbl_cnt, spinlock_t *lock)
+		unsigned int ftbl_cnt)
 {
 	struct mmp_clk_factor *factor;
 	struct clk_init_data init;
