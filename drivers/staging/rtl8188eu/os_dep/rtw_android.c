@@ -153,15 +153,10 @@ int rtw_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 	int bytes_written = 0;
 	struct android_wifi_priv_cmd priv_cmd;
 
-	if (!ifr->ifr_data) {
-		ret = -EINVAL;
-		goto exit;
-	}
-	if (copy_from_user(&priv_cmd, ifr->ifr_data,
-			   sizeof(struct android_wifi_priv_cmd))) {
-		ret = -EFAULT;
-		goto exit;
-	}
+	if (!ifr->ifr_data)
+		return -EINVAL;
+	if (copy_from_user(&priv_cmd, ifr->ifr_data, sizeof(priv_cmd)))
+		return -EFAULT;
 	if (priv_cmd.total_len < 1)
 		return -EINVAL;
 	command = memdup_user(priv_cmd.buf, priv_cmd.total_len);
