@@ -1834,6 +1834,8 @@ static int adv7604_get_format(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
 			      struct v4l2_subdev_format *format)
 {
 	struct adv7604_state *state = to_state(sd);
+	v4l2_dbg(2, debug, sd, "%s: format->pad %d, source pad: %d",
+			__func__, format->pad, state->source_pad);
 
 	if (format->pad != state->source_pad)
 		return -EINVAL;
@@ -1858,6 +1860,8 @@ static int adv7604_set_format(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh,
 	struct adv7604_state *state = to_state(sd);
 	const struct adv7604_format_info *info;
 
+	v4l2_dbg(2, debug, sd, "%s: format->pad %d, source pad: %d",
+			__func__, format->pad, state->source_pad);
 	if (format->pad != state->source_pad)
 		return -EINVAL;
 
@@ -2680,7 +2684,7 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 	/* Hardcode the remaining platform data fields. */
 	state->pdata.disable_pwrdnb = 0;
 	state->pdata.disable_cable_det_rst = 0;
-	state->pdata.default_input = -1;
+	state->pdata.default_input = 0;
 	state->pdata.blank_data = 1;
 	state->pdata.alt_data_sat = 1;
 	state->pdata.op_format_mode_sel = ADV7604_OP_FORMAT_MODE0;
