@@ -591,7 +591,7 @@ void
 visorchipset_register_busdev_server(
 			struct visorchipset_busdev_notifiers *notifiers,
 			struct visorchipset_busdev_responders *responders,
-			struct ultra_vbus_deviceinfo *driverInfo)
+			struct ultra_vbus_deviceinfo *driver_info)
 {
 	down(&NotifierLock);
 	if (notifiers == NULL) {
