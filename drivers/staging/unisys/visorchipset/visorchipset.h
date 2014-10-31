@@ -252,7 +252,7 @@ struct visorchipset_busdev_responders {
 void
 visorchipset_register_busdev_client(
 			struct visorchipset_busdev_notifiers *notifiers,
-			VISORCHIPSET_BUSDEV_RESPONDERS *responders,
+			struct visorchipset_busdev_responders *responders,
 			struct ultra_vbus_deviceinfo *driverInfo);
 
 /** Register functions (in the bus driver) to get called by visorchipset
@@ -264,7 +264,7 @@ visorchipset_register_busdev_client(
 void
 visorchipset_register_busdev_server(
 			struct visorchipset_busdev_notifiers *notifiers,
-			VISORCHIPSET_BUSDEV_RESPONDERS *responders,
+			struct visorchipset_busdev_responders *responders,
 			struct ultra_vbus_deviceinfo *driverInfo);
 
 typedef void (*SPARREPORTEVENT_COMPLETE_FUNC) (struct controlvm_message *msg,
