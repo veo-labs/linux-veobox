@@ -41,7 +41,7 @@ static const struct inode_operations ns_inode_operations = {
 static char *ns_dname(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct inode *inode = dentry->d_inode;
-	const struct proc_ns_operations *ns_ops = PROC_I(inode)->ns.ns_ops;
+	const struct proc_ns_operations *ns_ops = dentry->d_fsdata;
 
 	return dynamic_dname(dentry, buffer, buflen, "%s:[%lu]",
 		ns_ops->name, inode->i_ino);
@@ -71,6 +71,7 @@ static struct dentry *proc_ns_get_dentry(struct super_block *sb,
 		ns_ops->put(ns);
 		return ERR_PTR(-ENOMEM);
 	}
+	dentry->d_fsdata = (void *)ns_ops;
 
 	inode = iget_locked(sb, ns->inum);
 	if (!inode) {
@@ -247,3 +248,31 @@ const struct inode_operations proc_ns_dir_inode_operations = {
 	.getattr	= pid_getattr,
 	.setattr	= proc_setattr,
 };
+
+struct file *proc_ns_fget(int fd)
+{
+	struct file *file;
+
+	file = fget(fd);
+	if (!file)
+		return ERR_PTR(-EBADF);
+
+	if (file->f_op != &ns_file_operations)
+		goto out_invalid;
+
+	return file;
+
+out_invalid:
+	fput(file);
+	return ERR_PTR(-EINVAL);
+}
+
+struct ns_common *get_proc_ns(struct inode *inode)
+{
+	return PROC_I(inode)->ns.ns;
+}
+
+bool proc_ns_inode(struct inode *inode)
+{
+	return inode->i_fop == &ns_file_operations;
+}
