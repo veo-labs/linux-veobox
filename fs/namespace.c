@@ -1574,6 +1574,11 @@ struct mnt_namespace *to_mnt_ns(struct ns_common *ns)
 	return container_of(ns, struct mnt_namespace, ns);
 }
 
+struct mnt_namespace *to_mnt_ns(struct ns_common *ns)
+{
+	return container_of(ns, struct mnt_namespace, ns);
+}
+
 static bool mnt_ns_loop(struct dentry *dentry)
 {
 	/* Could bind mounting the mount namespace inode cause a
@@ -1583,7 +1588,7 @@ static bool mnt_ns_loop(struct dentry *dentry)
 	if (!is_mnt_ns_file(dentry))
 		return false;
 
-	mnt_ns = to_mnt_ns(get_proc_ns(dentry->d_inode));
+	mnt_ns = to_mnt_ns(get_proc_ns(dentry->d_inode)->ns);
 	return current->nsproxy->mnt_ns->seq >= mnt_ns->seq;
 }
 
@@ -3204,8 +3209,8 @@ static int mntns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 
 static unsigned int mntns_inum(void *ns)
 {
-	struct mnt_namespace *mnt_ns = ns;
-	return mnt_ns->ns.inum;
+	struct ns_common *p = ns;
+	return p->inum;
 }
 
 const struct proc_ns_operations mntns_operations = {
