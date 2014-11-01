@@ -339,7 +339,7 @@ static inline struct pid_namespace *to_pid_ns(struct ns_common *ns)
 	return container_of(ns, struct pid_namespace, ns);
 }
 
-static void *pidns_get(struct task_struct *task)
+static struct ns_common *pidns_get(struct task_struct *task)
 {
 	struct pid_namespace *ns;
 
@@ -386,11 +386,6 @@ static int pidns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	put_pid_ns(nsproxy->pid_ns_for_children);
 	nsproxy->pid_ns_for_children = get_pid_ns(new);
 	return 0;
-}
-
-static unsigned int pidns_inum(void *ns)
-{
-	return ((struct ns_common *)ns)->inum;
 }
 
 const struct proc_ns_operations pidns_operations = {

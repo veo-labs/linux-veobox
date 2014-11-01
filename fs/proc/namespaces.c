@@ -30,6 +30,78 @@ static const struct proc_ns_operations *ns_entries[] = {
 	&mntns_operations,
 };
 
+static const struct file_operations ns_file_operations = {
+	.llseek		= no_llseek,
+};
+
+static const struct inode_operations ns_inode_operations = {
+	.setattr	= proc_setattr,
+};
+
+static char *ns_dname(struct dentry *dentry, char *buffer, int buflen)
+{
+	struct inode *inode = dentry->d_inode;
+	const struct proc_ns_operations *ns_ops = PROC_I(inode)->ns.ns_ops;
+
+	return dynamic_dname(dentry, buffer, buflen, "%s:[%lu]",
+		ns_ops->name, inode->i_ino);
+}
+
+const struct dentry_operations ns_dentry_operations =
+{
+	.d_delete	= always_delete_dentry,
+	.d_dname	= ns_dname,
+};
+
+static struct dentry *proc_ns_get_dentry(struct super_block *sb,
+	struct task_struct *task, const struct proc_ns_operations *ns_ops)
+{
+	struct dentry *dentry, *result;
+	struct inode *inode;
+	struct proc_inode *ei;
+	struct qstr qname = { .name = "", };
+	struct ns_common *ns;
+
+	ns = ns_ops->get(task);
+	if (!ns)
+		return ERR_PTR(-ENOENT);
+
+	dentry = d_alloc_pseudo(sb, &qname);
+	if (!dentry) {
+		ns_ops->put(ns);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	inode = iget_locked(sb, ns->inum);
+	if (!inode) {
+		dput(dentry);
+		ns_ops->put(ns);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	ei = PROC_I(inode);
+	if (inode->i_state & I_NEW) {
+		inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+		inode->i_op = &ns_inode_operations;
+		inode->i_mode = S_IFREG | S_IRUGO;
+		inode->i_fop = &ns_file_operations;
+		ei->ns.ns_ops = ns_ops;
+		ei->ns.ns = ns;
+		unlock_new_inode(inode);
+	} else {
+		ns_ops->put(ns);
+	}
+
+	d_set_d_op(dentry, &ns_dentry_operations);
+	result = d_instantiate_unique(dentry, inode);
+	if (result) {
+		dput(dentry);
+		dentry = result;
+	}
+
+	return dentry;
+}
+
 static void *proc_ns_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *inode = dentry->d_inode;
@@ -56,6 +128,7 @@ static int proc_ns_readlink(struct dentry *dentry, char __user *buffer, int bufl
 	struct inode *inode = dentry->d_inode;
 	const struct proc_ns_operations *ns_ops = PROC_I(inode)->ns_ops;
 	struct task_struct *task;
+	struct ns_common *ns;
 	char name[50];
 	int res = -EACCES;
 
@@ -63,11 +136,15 @@ static int proc_ns_readlink(struct dentry *dentry, char __user *buffer, int bufl
 	if (!task)
 		return res;
 
-	if (ptrace_may_access(task, PTRACE_MODE_READ)) {
-		res = ns_get_name(name, sizeof(name), task, ns_ops);
-		if (res >= 0)
-			res = readlink_copy(buffer, buflen, name);
-	}
+	res = -ENOENT;
+	ns = ns_ops->get(task);
+	if (!ns)
+		goto out_put_task;
+
+	snprintf(name, sizeof(name), "%s:[%u]", ns_ops->name, ns->inum);
+	res = readlink_copy(buffer, buflen, name);
+	ns_ops->put(ns);
+out_put_task:
 	put_task_struct(task);
 	return res;
 }

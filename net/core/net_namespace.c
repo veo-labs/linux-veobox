@@ -861,12 +861,12 @@ static inline struct net *to_net_ns(struct ns_common *ns)
 	return container_of(ns, struct net, ns);
 }
 
-static inline struct net *to_net_ns(struct ns_common *ns)
+static void netns_put(struct ns_common *ns)
 {
 	put_net(to_net_ns(ns));
 }
 
-static void netns_put(struct ns_common *ns)
+static int netns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 {
 	struct net *net = to_net_ns(ns);
 
@@ -877,11 +877,6 @@ static void netns_put(struct ns_common *ns)
 	put_net(nsproxy->net_ns);
 	nsproxy->net_ns = get_net(net);
 	return 0;
-}
-
-static unsigned int netns_inum(void *ns)
-{
-	return ((struct ns_common *)ns)->inum;
 }
 
 const struct proc_ns_operations netns_operations = {

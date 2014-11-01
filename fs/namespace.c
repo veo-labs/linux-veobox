@@ -3207,12 +3207,6 @@ static int mntns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	return 0;
 }
 
-static unsigned int mntns_inum(void *ns)
-{
-	struct ns_common *p = ns;
-	return p->inum;
-}
-
 const struct proc_ns_operations mntns_operations = {
 	.name		= "mnt",
 	.type		= CLONE_NEWNS,

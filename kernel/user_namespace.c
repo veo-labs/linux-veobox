@@ -855,7 +855,7 @@ static inline struct user_namespace *to_user_ns(struct ns_common *ns)
 	return container_of(ns, struct user_namespace, ns);
 }
 
-static void *userns_get(struct task_struct *task)
+static struct ns_common *userns_get(struct task_struct *task)
 {
 	struct user_namespace *user_ns;
 
@@ -900,11 +900,6 @@ static int userns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	set_cred_user_ns(cred, get_user_ns(user_ns));
 
 	return commit_creds(cred);
-}
-
-static unsigned int userns_inum(void *ns)
-{
-	return ((struct ns_common *)ns)->inum;
 }
 
 const struct proc_ns_operations userns_operations = {

@@ -95,7 +95,7 @@ static inline struct uts_namespace *to_uts_ns(struct ns_common *ns)
 	return container_of(ns, struct uts_namespace, ns);
 }
 
-static void *utsns_get(struct task_struct *task)
+static struct ns_common *utsns_get(struct task_struct *task)
 {
 	struct uts_namespace *ns = NULL;
 	struct nsproxy *nsproxy;
@@ -128,11 +128,6 @@ static int utsns_install(struct nsproxy *nsproxy, struct ns_common *new)
 	put_uts_ns(nsproxy->uts_ns);
 	nsproxy->uts_ns = ns;
 	return 0;
-}
-
-static unsigned int utsns_inum(void *vp)
-{
-	return ((struct ns_common *)vp)->inum;
 }
 
 const struct proc_ns_operations utsns_operations = {
