@@ -78,7 +78,6 @@
 #include <linux/context_tracking.h>
 #include <linux/random.h>
 #include <linux/list.h>
-#include <linux/integrity.h>
 #include <linux/proc_ns.h>
 
 #include <asm/io.h>

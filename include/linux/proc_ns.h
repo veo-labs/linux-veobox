@@ -8,7 +8,7 @@
 
 struct pid_namespace;
 struct nsproxy;
-struct ns_common;
+struct path;
 
 struct proc_ns_operations {
 	const char *name;
@@ -40,8 +40,6 @@ enum {
 
 extern int pid_ns_prepare_proc(struct pid_namespace *ns);
 extern void pid_ns_release_proc(struct pid_namespace *ns);
-extern struct file *proc_ns_fget(int fd);
-extern struct ns_common *get_proc_ns(struct inode *);
 extern int proc_alloc_inum(unsigned int *pino);
 extern void proc_free_inum(unsigned int inum);
 
@@ -49,13 +47,6 @@ extern void proc_free_inum(unsigned int inum);
 
 static inline int pid_ns_prepare_proc(struct pid_namespace *ns) { return 0; }
 static inline void pid_ns_release_proc(struct pid_namespace *ns) {}
-
-static inline struct file *proc_ns_fget(int fd)
-{
-	return ERR_PTR(-EINVAL);
-}
-
-static inline struct ns_common *get_proc_ns(struct inode *inode) { return NULL; }
 
 static inline int proc_alloc_inum(unsigned int *inum)
 {
@@ -66,7 +57,21 @@ static inline void proc_free_inum(unsigned int inum) {}
 
 #endif /* CONFIG_PROC_FS */
 
-#define ns_alloc_inum(ns) proc_alloc_inum(&(ns)->inum)
+static inline int ns_alloc_inum(struct ns_common *ns)
+{
+	atomic_long_set(&ns->stashed, 0);
+	return proc_alloc_inum(&ns->inum);
+}
+
 #define ns_free_inum(ns) proc_free_inum((ns)->inum)
+
+extern struct file *proc_ns_fget(int fd);
+#define get_proc_ns(inode) ((struct ns_common *)(inode)->i_private)
+extern void *ns_get_path(struct path *path, struct task_struct *task,
+			const struct proc_ns_operations *ns_ops);
+
+extern int ns_get_name(char *buf, size_t size, struct task_struct *task,
+			const struct proc_ns_operations *ns_ops);
+extern void nsfs_init(void);
 
 #endif /* _LINUX_PROC_NS_H */
