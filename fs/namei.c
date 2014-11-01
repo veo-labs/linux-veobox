@@ -502,7 +502,6 @@ struct nameidata {
 	unsigned	seq, m_seq;
 	int		last_type;
 	unsigned	depth;
-	struct file	*base;
 	char *saved_names[MAX_NESTED_LINKS + 1];
 };
 
