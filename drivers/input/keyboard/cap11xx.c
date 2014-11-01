@@ -1,6 +1,7 @@
 /*
  * Input driver for Microchip CAP11xx based capacitive touch sensors
  *
+ *
  * (c) 2014 Daniel Mack <linux@zonque.org>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -45,7 +46,6 @@
 #define CAP11XX_REG_STANDBY_SENSITIVITY	0x42
 #define CAP11XX_REG_STANDBY_THRESH	0x43
 #define CAP11XX_REG_CONFIG2		0x44
-#define CAP11XX_REG_CONFIG2_ALT_POL	BIT(6)
 #define CAP11XX_REG_SENSOR_BASE_CNT(X)	(0x50 + (X))
 #define CAP11XX_REG_SENSOR_CALIB	(0xb1 + (X))
 #define CAP11XX_REG_SENSOR_CALIB_LSB1	0xb9
@@ -54,6 +54,8 @@
 #define CAP11XX_REG_MANUFACTURER_ID	0xfe
 #define CAP11XX_REG_REVISION		0xff
 
+#define CAP11XX_NUM_CHN 6
+#define CAP11XX_PRODUCT_ID	0x55
 #define CAP11XX_MANUFACTURER_ID	0x5d
 
 struct cap11xx_priv {
@@ -61,24 +63,7 @@ struct cap11xx_priv {
 	struct input_dev *idev;
 
 	/* config */
-	u32 keycodes[];
-};
-
-struct cap11xx_hw_model {
-	u8 product_id;
-	unsigned int num_channels;
-};
-
-enum {
-	CAP1106,
-	CAP1126,
-	CAP1188,
-};
-
-static const struct cap11xx_hw_model cap11xx_devices[] = {
-	[CAP1106] = { .product_id = 0x55, .num_channels = 6 },
-	[CAP1126] = { .product_id = 0x53, .num_channels = 6 },
-	[CAP1188] = { .product_id = 0x50, .num_channels = 8 },
+	unsigned short keycodes[CAP11XX_NUM_CHN];
 };
 
 static const struct reg_default cap11xx_reg_defaults[] = {
@@ -165,7 +150,7 @@ static irqreturn_t cap11xx_thread_func(int irq_num, void *data)
 	if (ret < 0)
 		goto out;
 
-	for (i = 0; i < priv->idev->keycodemax; i++)
+	for (i = 0; i < CAP11XX_NUM_CHN; i++)
 		input_report_key(priv->idev, priv->keycodes[i],
 				 status & (1 << i));
 
@@ -202,26 +187,11 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 	struct device *dev = &i2c_client->dev;
 	struct cap11xx_priv *priv;
 	struct device_node *node;
-	const struct cap11xx_hw_model *cap;
 	int i, error, irq, gain = 0;
 	unsigned int val, rev;
-	u32 gain32;
+	u32 gain32, keycodes[CAP11XX_NUM_CHN];
 
-	if (id->driver_data >= ARRAY_SIZE(cap11xx_devices)) {
-		dev_err(dev, "Invalid device ID %lu\n", id->driver_data);
-		return -EINVAL;
-	}
-
-	cap = &cap11xx_devices[id->driver_data];
-	if (!cap || !cap->num_channels) {
-		dev_err(dev, "Invalid device configuration\n");
-		return -EINVAL;
-	}
-
-	priv = devm_kzalloc(dev,
-			    sizeof(*priv) +
-				cap->num_channels * sizeof(priv->keycodes[0]),
-			    GFP_KERNEL);
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -233,10 +203,10 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 	if (error)
 		return error;
 
-	if (val != cap->product_id) {
+	if (val != CAP11XX_PRODUCT_ID) {
 		dev_err(dev, "Product ID: Got 0x%02x, expected 0x%02x\n",
-			val, cap->product_id);
-		return -ENXIO;
+			val, CAP11XX_PRODUCT_ID);
+		return -ENODEV;
 	}
 
 	error = regmap_read(priv->regmap, CAP11XX_REG_MANUFACTURER_ID, &val);
@@ -246,7 +216,7 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 	if (val != CAP11XX_MANUFACTURER_ID) {
 		dev_err(dev, "Manufacturer ID: Got 0x%02x, expected 0x%02x\n",
 			val, CAP11XX_MANUFACTURER_ID);
-		return -ENXIO;
+		return -ENODEV;
 	}
 
 	error = regmap_read(priv->regmap, CAP11XX_REG_REVISION, &rev);
@@ -264,19 +234,17 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 			dev_err(dev, "Invalid sensor-gain value %d\n", gain32);
 	}
 
-	if (of_property_read_bool(node, "microchip,irq-active-high")) {
-		error = regmap_update_bits(priv->regmap, CAP11XX_REG_CONFIG2,
-					   CAP11XX_REG_CONFIG2_ALT_POL, 0);
-		if (error)
-			return error;
-	}
+	BUILD_BUG_ON(ARRAY_SIZE(keycodes) != ARRAY_SIZE(priv->keycodes));
 
 	/* Provide some useful defaults */
-	for (i = 0; i < cap->num_channels; i++)
-		priv->keycodes[i] = KEY_A + i;
+	for (i = 0; i < ARRAY_SIZE(keycodes); i++)
+		keycodes[i] = KEY_A + i;
 
 	of_property_read_u32_array(node, "linux,keycodes",
-				   priv->keycodes, cap->num_channels);
+				   keycodes, ARRAY_SIZE(keycodes));
+
+	for (i = 0; i < ARRAY_SIZE(keycodes); i++)
+		priv->keycodes[i] = keycodes[i];
 
 	error = regmap_update_bits(priv->regmap, CAP11XX_REG_MAIN_CONTROL,
 				   CAP11XX_REG_MAIN_CONTROL_GAIN_MASK,
@@ -300,17 +268,17 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 	if (of_property_read_bool(node, "autorepeat"))
 		__set_bit(EV_REP, priv->idev->evbit);
 
-	for (i = 0; i < cap->num_channels; i++)
+	for (i = 0; i < CAP11XX_NUM_CHN; i++)
 		__set_bit(priv->keycodes[i], priv->idev->keybit);
 
 	__clear_bit(KEY_RESERVED, priv->idev->keybit);
 
 	priv->idev->keycode = priv->keycodes;
 	priv->idev->keycodesize = sizeof(priv->keycodes[0]);
-	priv->idev->keycodemax = cap->num_channels;
+	priv->idev->keycodemax = ARRAY_SIZE(priv->keycodes);
 
 	priv->idev->id.vendor = CAP11XX_MANUFACTURER_ID;
-	priv->idev->id.product = cap->product_id;
+	priv->idev->id.product = CAP11XX_PRODUCT_ID;
 	priv->idev->id.version = rev;
 
 	priv->idev->open = cap11xx_input_open;
@@ -344,16 +312,12 @@ static int cap11xx_i2c_probe(struct i2c_client *i2c_client,
 
 static const struct of_device_id cap11xx_dt_ids[] = {
 	{ .compatible = "microchip,cap1106", },
-	{ .compatible = "microchip,cap1126", },
-	{ .compatible = "microchip,cap1188", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, cap11xx_dt_ids);
 
 static const struct i2c_device_id cap11xx_i2c_ids[] = {
-	{ "cap1106", CAP1106 },
-	{ "cap1126", CAP1126 },
-	{ "cap1188", CAP1188 },
+	{ "cap1106", 0 },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, cap11xx_i2c_ids);
