@@ -26,7 +26,7 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	if (ns == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	err = proc_alloc_inum(&ns->ns.inum);
+	err = ns_alloc_inum(&ns->ns);
 	if (err) {
 		kfree(ns);
 		return ERR_PTR(err);
@@ -36,7 +36,7 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	atomic_set(&ns->count, 1);
 	err = mq_init_ns(ns);
 	if (err) {
-		proc_free_inum(ns->ns.inum);
+		ns_free_inum(&ns->ns);
 		kfree(ns);
 		return ERR_PTR(err);
 	}
@@ -98,7 +98,7 @@ static void free_ipc_ns(struct ipc_namespace *ns)
 	atomic_dec(&nr_ipc_ns);
 
 	put_user_ns(ns->user_ns);
-	proc_free_inum(ns->ns.inum);
+	ns_free_inum(&ns->ns);
 	kfree(ns);
 }
 
