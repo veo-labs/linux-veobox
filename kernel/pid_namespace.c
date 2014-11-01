@@ -105,7 +105,7 @@ static struct pid_namespace *create_pid_namespace(struct user_namespace *user_ns
 	if (ns->pid_cachep == NULL)
 		goto out_free_map;
 
-	err = ns_alloc_inum(&ns->ns);
+	err = proc_alloc_inum(&ns->ns.inum);
 	if (err)
 		goto out_free_map;
 	ns->ns.ops = &pidns_operations;
@@ -143,7 +143,7 @@ static void destroy_pid_namespace(struct pid_namespace *ns)
 {
 	int i;
 
-	ns_free_inum(&ns->ns);
+	proc_free_inum(ns->ns.inum);
 	for (i = 0; i < PIDMAP_ENTRIES; i++)
 		kfree(ns->pidmap[i].page);
 	put_user_ns(ns->user_ns);
@@ -386,6 +386,12 @@ static int pidns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	put_pid_ns(nsproxy->pid_ns_for_children);
 	nsproxy->pid_ns_for_children = get_pid_ns(new);
 	return 0;
+}
+
+static unsigned int pidns_inum(void *ns)
+{
+	struct pid_namespace *pid_ns = ns;
+	return pid_ns->ns.inum;
 }
 
 const struct proc_ns_operations pidns_operations = {

@@ -2640,7 +2640,7 @@ dput_out:
 
 static void free_mnt_ns(struct mnt_namespace *ns)
 {
-	ns_free_inum(&ns->ns);
+	proc_free_inum(ns->ns.inum);
 	put_user_ns(ns->user_ns);
 	kfree(ns);
 }
@@ -2662,7 +2662,7 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns)
 	new_ns = kmalloc(sizeof(struct mnt_namespace), GFP_KERNEL);
 	if (!new_ns)
 		return ERR_PTR(-ENOMEM);
-	ret = ns_alloc_inum(&new_ns->ns);
+	ret = proc_alloc_inum(&new_ns->ns.inum);
 	if (ret) {
 		kfree(new_ns);
 		return ERR_PTR(ret);
@@ -3200,6 +3200,12 @@ static int mntns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 
 	path_put(&root);
 	return 0;
+}
+
+static unsigned int mntns_inum(void *ns)
+{
+	struct mnt_namespace *mnt_ns = ns;
+	return mnt_ns->ns.inum;
 }
 
 const struct proc_ns_operations mntns_operations = {

@@ -87,7 +87,7 @@ int create_user_ns(struct cred *new)
 	if (!ns)
 		return -ENOMEM;
 
-	ret = ns_alloc_inum(&ns->ns);
+	ret = proc_alloc_inum(&ns->ns.inum);
 	if (ret) {
 		kmem_cache_free(user_ns_cachep, ns);
 		return ret;
@@ -143,7 +143,7 @@ void free_user_ns(struct user_namespace *ns)
 #ifdef CONFIG_PERSISTENT_KEYRINGS
 		key_put(ns->persistent_keyring_register);
 #endif
-		ns_free_inum(&ns->ns);
+		proc_free_inum(ns->ns.inum);
 		kmem_cache_free(user_ns_cachep, ns);
 		ns = parent;
 	} while (atomic_dec_and_test(&parent->count));
@@ -994,6 +994,12 @@ static int userns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	set_cred_user_ns(cred, get_user_ns(user_ns));
 
 	return commit_creds(cred);
+}
+
+static unsigned int userns_inum(void *ns)
+{
+	struct user_namespace *user_ns = ns;
+	return user_ns->ns.inum;
 }
 
 const struct proc_ns_operations userns_operations = {
