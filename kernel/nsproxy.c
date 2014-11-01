@@ -231,7 +231,8 @@ SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 		return PTR_ERR(file);
 
 	err = -EINVAL;
-	ns = get_proc_ns(file_inode(file));
+	ei = get_proc_ns(file_inode(file));
+	ns = ei->ns;
 	if (nstype && (ns->ops->type != nstype))
 		goto out;
 
