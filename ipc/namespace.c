@@ -133,7 +133,7 @@ static inline struct ipc_namespace *to_ipc_ns(struct ns_common *ns)
 	return container_of(ns, struct ipc_namespace, ns);
 }
 
-static struct ns_common *ipcns_get(struct task_struct *task)
+static void *ipcns_get(struct task_struct *task)
 {
 	struct ipc_namespace *ns = NULL;
 	struct nsproxy *nsproxy;
@@ -168,9 +168,7 @@ static int ipcns_install(struct nsproxy *nsproxy, struct ns_common *new)
 
 static unsigned int ipcns_inum(void *vp)
 {
-	struct ipc_namespace *ns = vp;
-
-	return ns->ns.inum;
+	return ((struct ns_common *)vp)->inum;
 }
 
 const struct proc_ns_operations ipcns_operations = {
