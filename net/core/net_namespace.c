@@ -430,9 +430,9 @@ struct net *get_net_ns_by_fd(int fd)
 	if (IS_ERR(file))
 		return ERR_CAST(file);
 
-	ns = get_proc_ns(file_inode(file));
-	if (ns->ops == &netns_operations)
-		net = get_net(container_of(ns, struct net, ns));
+	ei = get_proc_ns(file_inode(file));
+	if (ei->ns_ops == &netns_operations)
+		net = get_net(container_of(ei->ns, struct net, ns));
 	else
 		net = ERR_PTR(-EINVAL);
 
@@ -861,12 +861,12 @@ static inline struct net *to_net_ns(struct ns_common *ns)
 	return container_of(ns, struct net, ns);
 }
 
-static void netns_put(struct ns_common *ns)
+static inline struct net *to_net_ns(struct ns_common *ns)
 {
 	put_net(to_net_ns(ns));
 }
 
-static int netns_install(struct nsproxy *nsproxy, struct ns_common *ns)
+static void netns_put(struct ns_common *ns)
 {
 	struct net *net = to_net_ns(ns);
 
@@ -881,8 +881,7 @@ static int netns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 
 static unsigned int netns_inum(void *ns)
 {
-	struct net *net = ns;
-	return net->ns.inum;
+	return ((struct ns_common *)ns)->inum;
 }
 
 const struct proc_ns_operations netns_operations = {
