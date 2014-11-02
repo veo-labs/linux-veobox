@@ -190,13 +190,22 @@ static void recalculate_apic_map(struct kvm *kvm)
 			new->cid_mask = (1 << KVM_X2APIC_CID_BITS) - 1;
 			new->lid_mask = 0xffff;
 			new->broadcast = X2APIC_BROADCAST;
-		} else if (kvm_apic_sw_enabled(apic) &&
-				!new->cid_mask /* flat mode */ &&
-				kvm_apic_get_reg(apic, APIC_DFR) == APIC_DFR_CLUSTER) {
-			new->cid_shift = 4;
-			new->cid_mask = 0xf;
-			new->lid_mask = 0xf;
+			break;
+		} else if (kvm_apic_sw_enabled(apic)) {
+			if (kvm_apic_get_reg(apic, APIC_DFR) ==
+							APIC_DFR_CLUSTER) {
+				new->cid_shift = 4;
+				new->cid_mask = 0xf;
+				new->lid_mask = 0xf;
+			}
+			break;
 		}
+	}
+
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		struct kvm_lapic *apic = vcpu->arch.apic;
+		u16 cid, lid;
+		u32 ldr;
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		struct kvm_lapic *apic = vcpu->arch.apic;
