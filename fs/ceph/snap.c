@@ -381,7 +381,6 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 	     realm->ino, realm, snapc, snapc->seq,
 	     (unsigned int) snapc->num_snaps);
 
-done:
 	ceph_put_snap_context(realm->cached_context);
 	realm->cached_context = snapc;
 	return 0;
