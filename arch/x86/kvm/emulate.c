@@ -169,6 +169,7 @@
 #define CheckPerm   ((u64)1 << 49)  /* Has valid check_perm field */
 #define PrivUD      ((u64)1 << 51)  /* #UD instead of #GP on CPL > 0 */
 #define NearBranch  ((u64)1 << 52)  /* Near branches */
+#define No16	    ((u64)1 << 53)  /* No 16 bit operand */
 
 #define DstXacc     (DstAccLo | SrcAccHi | SrcWrite)
 
@@ -4206,7 +4207,7 @@ static const struct opcode twobyte_table[256] = {
 	D(DstReg | SrcMem8 | ModRM | Mov), D(DstReg | SrcMem16 | ModRM | Mov),
 	/* 0xC0 - 0xC7 */
 	F2bv(DstMem | SrcReg | ModRM | SrcWrite | Lock, em_xadd),
-	N, ID(0, &instr_dual_0f_c3),
+	N, I(DstMem | SrcReg | ModRM | No16 | Mov, em_mov),
 	N, N, N, GD(0, &group9),
 	/* 0xC8 - 0xCF */
 	X8(I(DstReg, em_bswap)),
@@ -4673,7 +4674,8 @@ done_prefixes:
 		return EMULATION_FAILED;
 
 	if (unlikely(ctxt->d &
-	    (NotImpl|Stack|Op3264|Sse|Mmx|Intercept|CheckPerm|NearBranch))) {
+	    (NotImpl|Stack|Op3264|Sse|Mmx|Intercept|CheckPerm|NearBranch|
+	     No16))) {
 		/*
 		 * These are copied unconditionally here, and checked unconditionally
 		 * in x86_emulate_insn.
