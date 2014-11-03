@@ -876,13 +876,26 @@ static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 	struct mx6cam_dev *dev = ctx->dev;
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	struct v4l2_subdev_format sd_fmt;
+	struct mx6cam_pixfmt *fmt;
+	struct v4l2_rect crop;
 
 	/* TODO: This should be dynamic */
 	sd_fmt.pad = 1;
 	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 	v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 	v4l2_fill_pix_format(pix, &sd_fmt.format);
-	pix->colorspace = sd_fmt.format.colorspace;
+
+	fmt = mx6cam_get_format(0, sd_fmt.format.code);
+	if (!fmt) {
+		v4l2_err(&dev->v4l2_dev,
+			 "Fourcc format (0x%08x) invalid.\n",
+			 f->fmt.pix.pixelformat);
+		return -EINVAL;
+	}
+	pix->pixelformat = fmt->fourcc;
+
+	pix->bytesperline = (pix->width * fmt->depth) >> 3;
+	pix->sizeimage = pix->height * pix->bytesperline;
 
 	return 0;
 }
@@ -951,7 +964,6 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 	v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 	v4l2_fill_pix_format(pix, &sd_fmt.format);
-	pix->colorspace = sd_fmt.format.colorspace;
 #endif
 	/*
 	 * calculate what the optimal crop window will be for this
@@ -1010,6 +1022,10 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 		v4l2_err(&dev->v4l2_dev, "%s s_mbus_fmt failed\n", __func__);
 		return ret;
 	}
+	ret = update_sensor_fmt(dev);
+	if (ret)
+		return ret;
+
 #else
 	sd_fmt.pad = 1; /* TODO: Modify this later */
 	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
@@ -1021,10 +1037,6 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 		return ret;
 	}
 #endif
-	ret = update_sensor_fmt(dev);
-	if (ret)
-		return ret;
-
 	/* reset active crop window */
 	calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
 
