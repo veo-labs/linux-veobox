@@ -201,8 +201,8 @@ static int write_vbus_chp_info(struct spar_vbus_channel_protocol *chan,
 }
 
 /* Write the contents of <info> to the ULTRA_VBUS_CHANNEL_PROTOCOL.BusInfo. */
-static int write_vbus_busInfo(struct spar_vbus_channel_protocol *chan,
-			      struct ultra_vbus_deviceinfo *info)
+static int write_vbus_bus_info(struct spar_vbus_channel_protocol *chan,
+			       struct ultra_vbus_deviceinfo *info)
 {
 	int off;
 
@@ -277,8 +277,8 @@ static int add_vbus(struct add_vbus_guestpart *addparams)
 	}
 	write_vbus_chp_info(vbus->platform_data /* chanptr */ ,
 			    &chipset_driver_info);
-	write_vbus_busInfo(vbus->platform_data /* chanptr */ ,
-			   &bus_driver_info);
+	write_vbus_bus_info(vbus->platform_data /* chanptr */ ,
+			    &bus_driver_info);
 	LOGINF("Added vbus %d; device %s created successfully\n",
 	       addparams->bus_no, BUS_ID(vbus));
 	POSTCODE_LINUX_2(VPCI_CREATE_EXIT_PC, POSTCODE_SEVERITY_INFO);
@@ -805,7 +805,7 @@ static void fix_vbus_dev_info(struct device *dev, int dev_no, int dev_type,
 	* was previously written by our good counterpart, visorbus.
 	*/
 	write_vbus_chp_info(pChan, &chipset_driver_info);
-	write_vbus_busInfo(pChan, &bus_driver_info);
+	write_vbus_bus_info(pChan, &bus_driver_info);
 }
 
 /* This function is called to query the existence of a specific device
