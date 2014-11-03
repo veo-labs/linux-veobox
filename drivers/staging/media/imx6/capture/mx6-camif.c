@@ -1799,11 +1799,14 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_g_crop          = vidioc_g_crop,
 	.vidioc_s_crop          = vidioc_s_crop,
 
-	.vidioc_reqbufs		= vidioc_reqbufs,
-	.vidioc_querybuf	= vidioc_querybuf,
-	.vidioc_qbuf		= vidioc_qbuf,
-	.vidioc_dqbuf		= vidioc_dqbuf,
-	.vidioc_expbuf		= vidioc_expbuf,
+
+	.vidioc_reqbufs			= vb2_ioctl_reqbufs,
+	.vidioc_create_bufs		= vb2_ioctl_create_bufs,
+	.vidioc_prepare_buf		= vb2_ioctl_prepare_buf,
+	.vidioc_querybuf		= vb2_ioctl_querybuf,
+	.vidioc_qbuf			= vb2_ioctl_qbuf,
+	.vidioc_dqbuf			= vb2_ioctl_dqbuf,
+/* Not yet	.vidioc_expbuf		= vb2_ioctl_expbuf,*/
 
 	.vidioc_streamon	= vidioc_streamon,
 	.vidioc_streamoff	= vidioc_streamoff,
@@ -2432,6 +2435,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	struct mx6cam_dev *dev;
 	struct video_device *vfd;
 	struct pinctrl *pinctrl;
+	struct vb2_queue *vq = &dev->buffer_queue;
 	int ret;
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
@@ -2501,6 +2505,19 @@ static int mx6cam_probe(struct platform_device *pdev)
 	dev->user_pixfmt =
 		mx6cam_get_format(dev->user_fmt.fmt.pix.pixelformat, 0);
 	dev->current_std = V4L2_STD_ALL;
+
+	/* Initialize the buffer queues */
+	vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	vq->lock = &dev->mutex;
+	vq->drv_priv = dev;
+	vq->buf_struct_size = sizeof(struct xvip_dma_buffer);
+	vq->ops = &mx6cam_qops;
+	vq->mem_ops = &vb2_dma_contig_memops;
+	vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	ret = vb2_queue_init(vq);
+
+
 
 	/* init our controls */
 	ret = mx6cam_init_controls(dev);
