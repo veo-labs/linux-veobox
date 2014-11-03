@@ -264,60 +264,8 @@ static int tegra_bo_alloc(struct drm_device *drm, struct tegra_bo *bo,
 	return 0;
 }
 
-static int tegra_bo_iommu_map(struct tegra_drm *tegra, struct tegra_bo *bo)
-{
-	int prot = IOMMU_READ | IOMMU_WRITE;
-	ssize_t err;
-
-	if (bo->mm)
-		return -EBUSY;
-
-	bo->mm = kzalloc(sizeof(*bo->mm), GFP_KERNEL);
-	if (!bo->mm)
-		return -ENOMEM;
-
-	err = drm_mm_insert_node_generic(&tegra->mm, bo->mm, bo->gem.size,
-					 PAGE_SIZE, 0, 0, 0);
-	if (err < 0) {
-		dev_err(tegra->drm->dev, "out of I/O virtual memory: %zd\n",
-			err);
-		goto free;
-	}
-
-	bo->paddr = bo->mm->start;
-
-	err = iommu_map_sg(tegra->domain, bo->paddr, bo->sgt->sgl,
-			   bo->sgt->nents, prot);
-	if (err < 0) {
-		dev_err(tegra->drm->dev, "failed to map buffer: %zd\n", err);
-		goto remove;
-	}
-
-	bo->size = err;
-
-	return 0;
-
-remove:
-	drm_mm_remove_node(bo->mm);
-free:
-	kfree(bo->mm);
-	return err;
-}
-
-static int tegra_bo_iommu_unmap(struct tegra_drm *tegra, struct tegra_bo *bo)
-{
-	if (!bo->mm)
-		return 0;
-
-	iommu_unmap(tegra->domain, bo->paddr, bo->size);
-	drm_mm_remove_node(bo->mm);
-	kfree(bo->mm);
-
-	return 0;
-}
-
-static struct tegra_bo *tegra_bo_alloc_object(struct drm_device *drm,
-					      size_t size)
+struct tegra_bo *tegra_bo_create(struct drm_device *drm, size_t size,
+				 unsigned long flags)
 {
 	struct tegra_bo *bo;
 	int err;
