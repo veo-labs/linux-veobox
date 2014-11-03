@@ -203,39 +203,6 @@ void drm_gem_cma_free_object(struct drm_gem_object *gem_obj)
 EXPORT_SYMBOL_GPL(drm_gem_cma_free_object);
 
 /**
- * drm_gem_cma_dumb_create_internal - create a dumb buffer object
- * @file_priv: DRM file-private structure to create the dumb buffer for
- * @drm: DRM device
- * @args: IOCTL data
- *
- * This aligns the pitch and size arguments to the minimum required. This is
- * an internal helper that can be wrapped by a driver to account for hardware
- * with more specific alignment requirements. It should not be used directly
- * as the ->dumb_create() callback in a DRM driver.
- *
- * Returns:
- * 0 on success or a negative error code on failure.
- */
-int drm_gem_cma_dumb_create_internal(struct drm_file *file_priv,
-				     struct drm_device *drm,
-				     struct drm_mode_create_dumb *args)
-{
-	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
-	struct drm_gem_cma_object *cma_obj;
-
-	if (args->pitch < min_pitch)
-		args->pitch = min_pitch;
-
-	if (args->size < args->pitch * args->height)
-		args->size = args->pitch * args->height;
-
-	cma_obj = drm_gem_cma_create_with_handle(file_priv, drm, args->size,
-						 &args->handle);
-	return PTR_ERR_OR_ZERO(cma_obj);
-}
-EXPORT_SYMBOL_GPL(drm_gem_cma_dumb_create_internal);
-
-/**
  * drm_gem_cma_dumb_create - create a dumb buffer object
  * @file_priv: DRM file-private structure to create the dumb buffer for
  * @drm: DRM device
@@ -246,10 +213,6 @@ EXPORT_SYMBOL_GPL(drm_gem_cma_dumb_create_internal);
  * any additional restrictions on the pitch can directly use this function as
  * their ->dumb_create() callback.
  *
- * For hardware with additional restrictions, drivers can adjust the fields
- * set up by userspace and pass the IOCTL data along to the
- * drm_gem_cma_dumb_create_internal() function.
- *
  * Returns:
  * 0 on success or a negative error code on failure.
  */
@@ -257,10 +220,14 @@ int drm_gem_cma_dumb_create(struct drm_file *file_priv,
 			    struct drm_device *drm,
 			    struct drm_mode_create_dumb *args)
 {
+	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 	struct drm_gem_cma_object *cma_obj;
 
-	args->pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
-	args->size = args->pitch * args->height;
+	if (args->pitch < min_pitch)
+		args->pitch = min_pitch;
+
+	if (args->size < args->pitch * args->height)
+		args->size = args->pitch * args->height;
 
 	cma_obj = drm_gem_cma_create_with_handle(file_priv, drm, args->size,
 						 &args->handle);
