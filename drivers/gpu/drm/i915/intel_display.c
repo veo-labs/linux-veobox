@@ -11268,9 +11268,6 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 						&pipe_config->base.adjusted_mode);
 	}
 
-	if (dev_priv->display.crtc_compute_clock)
-		intel_shared_dpll_commit(dev_priv);
-
 	/* Only after disabling all output pipelines that will be changed can we
 	 * update the the output configuration. */
 	intel_modeset_update_state(dev, prepare_pipes);
