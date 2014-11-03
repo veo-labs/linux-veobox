@@ -134,7 +134,7 @@ static struct device virtpci_rootbus_device = {
 };
 
 /* filled in with info about parent chipset driver when we register with it */
-static struct ultra_vbus_deviceinfo Chipset_DriverInfo;
+static struct ultra_vbus_deviceinfo chipset_driver_info;
 
 static const struct sysfs_ops virtpci_driver_sysfs_ops = {
 	.show = virtpci_driver_attr_show,
@@ -275,10 +275,9 @@ static int add_vbus(struct add_vbus_guestpart *addparams)
 		POSTCODE_LINUX_2(VPCI_CREATE_FAILURE_PC, POSTCODE_SEVERITY_ERR);
 		return 0;
 	}
-	write_vbus_chp_info(vbus->platform_data /* chanptr */,
-			    &chipset_driver_info);
-	write_vbus_bus_info(vbus->platform_data /* chanptr */,
-			    &bus_driver_info);
+	write_vbus_chpInfo(vbus->platform_data /* chanptr */ ,
+			   &chipset_driver_info);
+	write_vbus_busInfo(vbus->platform_data /* chanptr */ , &Bus_DriverInfo);
 	LOGINF("Added vbus %d; device %s created successfully\n",
 	       addparams->bus_no, BUS_ID(vbus));
 	POSTCODE_LINUX_2(VPCI_CREATE_EXIT_PC, POSTCODE_SEVERITY_INFO);
@@ -804,8 +803,8 @@ static void fix_vbus_dev_info(struct device *dev, int dev_no, int dev_type,
 	/* Re-write bus+chipset info, because it is possible that this
 	* was previously written by our good counterpart, visorbus.
 	*/
-	write_vbus_chp_info(chan, &chipset_driver_info);
-	write_vbus_bus_info(chan, &bus_driver_info);
+	write_vbus_chpInfo(pChan, &chipset_driver_info);
+	write_vbus_busInfo(pChan, &Bus_DriverInfo);
 }
 
 /* This function is called to query the existence of a specific device
@@ -1528,7 +1527,7 @@ static int __init virtpci_mod_init(void)
 	DBGINF("device_register successful ret:%x\n", ret);
 
 	if (!uisctrl_register_req_handler(2, (void *)&virtpci_ctrlchan_func,
-					  &Chipset_DriverInfo)) {
+					  &chipset_driver_info)) {
 		LOGERR("uisctrl_register_req_handler ****FAILED.\n");
 		POSTCODE_LINUX_2(VPCI_CREATE_FAILURE_PC, POSTCODE_SEVERITY_ERR);
 		device_unregister(&virtpci_rootbus_device);
