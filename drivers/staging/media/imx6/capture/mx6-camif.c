@@ -842,8 +842,8 @@ static int vidioc_querycap(struct file *file, void *priv,
 	strlcpy(cap->driver, DEVICE_NAME, sizeof(cap->driver));
 	strlcpy(cap->card, DEVICE_NAME, sizeof(cap->card));
 	strlcpy(cap->bus_info, "platform:mx6-camera", sizeof(cap->bus_info));
-	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_CAPTURE |
-				V4L2_CAP_VIDEO_OVERLAY;
+	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_CAPTURE;
+//			| V4L2_CAP_VIDEO_OVERLAY;
 	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
 
 	return 0;
@@ -858,7 +858,7 @@ static int vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 		return -EINVAL;
 
 	fmt = &mx6cam_pixformats[f->index];
-	strncpy(f->description, fmt->name, sizeof(f->description) - 1);
+	strlcpy(f->description, fmt->name, sizeof(f->description));
 	f->pixelformat = fmt->fourcc;
 	return 0;
 }
@@ -923,14 +923,7 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_rect crop;
 	int ret;
 
-	fmt = mx6cam_get_format(f->fmt.pix.pixelformat, 0);
-	if (!fmt) {
-		v4l2_err(&dev->v4l2_dev,
-			 "Fourcc format (0x%08x) invalid.\n",
-			 f->fmt.pix.pixelformat);
-		return -EINVAL;
-	}
-
+#if 0
 	/*
 	 * We have to adjust the width such that the physaddrs and U and
 	 * U and V plane offsets are multiples of 8 bytes as required by
@@ -944,7 +937,6 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 			      width_align, &f->fmt.pix.height,
 			      MIN_H, MAX_H, H_ALIGN, S_ALIGN);
 
-#if 0
 	v4l2_fill_mbus_format(&mbus_fmt, &f->fmt.pix, 0);
 
 	ret = v4l2_subdev_call(dev->ep->sd, video, try_mbus_fmt, &mbus_fmt);
@@ -958,6 +950,12 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 			 mbus_fmt.code);
 		return -EINVAL;
 	}
+	/*
+	 * calculate what the optimal crop window will be for this
+	 * sensor format and make any user format adjustments.
+	 */
+	calc_default_crop(dev, &crop, &sd_fmt.format);
+	adjust_user_fmt(dev, &sd_fmt.format, f, &crop);
 
 #else
 	sd_fmt.pad = 1; /* TODO: Modify this later */
@@ -965,12 +963,6 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 	v4l2_fill_pix_format(pix, &sd_fmt.format);
 #endif
-	/*
-	 * calculate what the optimal crop window will be for this
-	 * sensor format and make any user format adjustments.
-	 */
-	calc_default_crop(dev, &crop, &sd_fmt.format);
-	adjust_user_fmt(dev, &sd_fmt.format, f, &crop);
 	fmt = mx6cam_get_format(0, sd_fmt.format.code);
 	if (!fmt) {
 		v4l2_err(&dev->v4l2_dev,
@@ -981,6 +973,7 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	pix->pixelformat = fmt->fourcc;
 
 	pix->bytesperline = (pix->width * fmt->depth) >> 3;
+	pix->sizeimage = pix->height * pix->bytesperline;
 	pix->field = V4L2_FIELD_NONE;
 	pix->priv = 0;
 
@@ -1037,6 +1030,8 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 		return ret;
 
 #else
+	dev->format = f->fmt.pix;
+
 	sd_fmt.pad = 1; /* TODO: Modify this later */
 	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 	sd_fmt.format.code = V4L2_MBUS_FMT_YUYV8_1X16;
@@ -1049,9 +1044,6 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 #endif
 	/* reset active crop window */
 	calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
-
-	dev->user_fmt = *f;
-	dev->user_pixfmt = mx6cam_get_format(f->fmt.pix.pixelformat, 0);
 
 	return 0;
 }
@@ -1672,10 +1664,10 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_enum_framesizes         = vidioc_enum_framesizes,
 	.vidioc_enum_frameintervals     = vidioc_enum_frameintervals,
 
-	.vidioc_enum_fmt_vid_overlay    = vidioc_enum_fmt_vid_overlay,
+/*	.vidioc_enum_fmt_vid_overlay    = vidioc_enum_fmt_vid_overlay,
 	.vidioc_g_fmt_vid_overlay	= vidioc_g_fmt_vid_overlay,
 	.vidioc_try_fmt_vid_overlay	= vidioc_try_fmt_vid_overlay,
-	.vidioc_s_fmt_vid_overlay	= vidioc_s_fmt_vid_overlay,
+	.vidioc_s_fmt_vid_overlay	= vidioc_s_fmt_vid_overlay,*/
 
 	.vidioc_querystd		= vidioc_querystd,
 	.vidioc_g_std           = vidioc_g_std,
@@ -1706,9 +1698,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_streamon	= vb2_ioctl_streamon,
 	.vidioc_streamoff	= vb2_ioctl_streamoff,
 
-	.vidioc_streamon	= vidioc_streamon,
-	.vidioc_streamoff	= vidioc_streamoff,
-	.vidioc_overlay         = vidioc_overlay,
+/*	.vidioc_overlay         = vidioc_overlay,*/
 	.vidioc_log_status      = vidioc_log_status,
 	.vidioc_s_edid          = vidioc_s_edid,
 	.vidioc_g_edid          = vidioc_g_edid,
@@ -1732,21 +1722,17 @@ static int mx6cam_queue_setup(struct vb2_queue *vq,
 	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vq);
 	struct mx6cam_dev *dev = ctx->dev;
 	unsigned int count = *nbuffers;
-	u32 sizeimage = dev->user_fmt.fmt.pix.sizeimage;
 
 	if (vq->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	while (sizeimage * count > VID_MEM_LIMIT)
-		count--;
-
 	*nplanes = 1;
 	*nbuffers = count;
-	sizes[0] = sizeimage;
+	sizes[0] = dev->format.sizeimage;
 
 	alloc_ctxs[0] = dev->alloc_ctx;
 
-	dprintk(dev, "get %d buffer(s) of size %d each.\n", count, sizeimage);
+	dprintk(dev, "get %d buffer(s) of size %d each.\n", count, dev->format.sizeimage);
 
 	return 0;
 }
@@ -2402,7 +2388,17 @@ static int mx6cam_probe(struct platform_device *pdev)
 		mx6cam_get_format(dev->user_fmt.fmt.pix.pixelformat, 0);
 	dev->current_std = V4L2_STD_ALL;
 
+	/* Init formats */
+	dev->format.pixelformat = V4L2_PIX_FMT_YUV420;
+	dev->format.colorspace = V4L2_COLORSPACE_SRGB;
+	dev->format.field = V4L2_FIELD_NONE;
+	dev->format.width = 1280;
+	dev->format.height = 720;
+	dev->format.bytesperline = (dev->format.width * 12) >> 3;
+	dev->format.sizeimage = dev->format.bytesperline * dev->format.height;
+
 	/* Initialize the buffer queues */
+	vfd->queue = &dev->buffer_queue;
 	dev->alloc_ctx = vb2_dma_contig_init_ctx(dev->dev);
 	if (IS_ERR(dev->alloc_ctx)) {
 		v4l2_err(&dev->v4l2_dev, "Failed to alloc vb2 context\n");
