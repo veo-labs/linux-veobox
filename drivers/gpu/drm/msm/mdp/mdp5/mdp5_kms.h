@@ -52,12 +52,6 @@ struct mdp5_kms {
 	struct clk *lut_clk;
 	struct clk *vsync_clk;
 
-	/*
-	 * lock to protect access to global resources: ie., following register:
-	 *	- REG_MDP5_DISP_INTF_SEL
-	 */
-	spinlock_t resource_lock;
-
 	struct mdp_irq error_handler;
 
 	struct {

@@ -85,6 +85,8 @@ static struct hdmi *hdmi_init(struct platform_device *pdev)
 		goto fail;
 	}
 
+	kref_init(&hdmi->refcount);
+
 	hdmi->pdev = pdev;
 	hdmi->config = config;
 
@@ -201,7 +203,7 @@ static struct hdmi *hdmi_init(struct platform_device *pdev)
 
 fail:
 	if (hdmi)
-		hdmi_destroy(hdmi);
+		hdmi_destroy(&hdmi->refcount);
 
 	return ERR_PTR(ret);
 }
@@ -219,6 +221,7 @@ int hdmi_modeset_init(struct hdmi *hdmi,
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct platform_device *pdev = hdmi->pdev;
+	struct hdmi_platform_config *config = pdev->dev.platform_data;
 	int ret;
 
 	hdmi->dev = dev;
@@ -287,56 +290,11 @@ fail:
 
 #include <linux/of_gpio.h>
 
-#define HDMI_CFG(item, entry) \
-	.item ## _names = item ##_names_ ## entry, \
-	.item ## _cnt   = ARRAY_SIZE(item ## _names_ ## entry)
-
-static struct hdmi_platform_config hdmi_tx_8660_config = {
-		.phy_init = hdmi_phy_8x60_init,
-};
-
-static const char *hpd_reg_names_8960[] = {"core-vdda", "hdmi-mux"};
-static const char *hpd_clk_names_8960[] = {"core_clk", "master_iface_clk", "slave_iface_clk"};
-
-static struct hdmi_platform_config hdmi_tx_8960_config = {
-		.phy_init = hdmi_phy_8960_init,
-		HDMI_CFG(hpd_reg, 8960),
-		HDMI_CFG(hpd_clk, 8960),
-};
-
-static const char *pwr_reg_names_8x74[] = {"core-vdda", "core-vcc"};
-static const char *hpd_reg_names_8x74[] = {"hpd-gdsc", "hpd-5v"};
-static const char *pwr_clk_names_8x74[] = {"extp_clk", "alt_iface_clk"};
-static const char *hpd_clk_names_8x74[] = {"iface_clk", "core_clk", "mdp_core_clk"};
-static unsigned long hpd_clk_freq_8x74[] = {0, 19200000, 0};
-
-static struct hdmi_platform_config hdmi_tx_8074_config = {
-		.phy_init = hdmi_phy_8x74_init,
-		HDMI_CFG(pwr_reg, 8x74),
-		HDMI_CFG(hpd_reg, 8x74),
-		HDMI_CFG(pwr_clk, 8x74),
-		HDMI_CFG(hpd_clk, 8x74),
-		.hpd_freq      = hpd_clk_freq_8x74,
-};
-
-static const char *hpd_reg_names_8084[] = {"hpd-gdsc", "hpd-5v", "hpd-5v-en"};
-
-static struct hdmi_platform_config hdmi_tx_8084_config = {
-		.phy_init = hdmi_phy_8x74_init,
-		HDMI_CFG(pwr_reg, 8x74),
-		HDMI_CFG(hpd_reg, 8084),
-		HDMI_CFG(pwr_clk, 8x74),
-		HDMI_CFG(hpd_clk, 8x74),
-		.hpd_freq      = hpd_clk_freq_8x74,
-};
-
-static const struct of_device_id dt_match[] = {
-	{ .compatible = "qcom,hdmi-tx-8084", .data = &hdmi_tx_8084_config },
-	{ .compatible = "qcom,hdmi-tx-8074", .data = &hdmi_tx_8074_config },
-	{ .compatible = "qcom,hdmi-tx-8960", .data = &hdmi_tx_8960_config },
-	{ .compatible = "qcom,hdmi-tx-8660", .data = &hdmi_tx_8660_config },
-	{}
-};
+static void set_hdmi(struct drm_device *dev, struct hdmi *hdmi)
+{
+	struct msm_drm_private *priv = dev->dev_private;
+	priv->hdmi = hdmi;
+}
 
 #ifdef CONFIG_OF
 static int get_gpio(struct device *dev, struct device_node *of_node, const char *name)
@@ -437,20 +395,14 @@ static int hdmi_bind(struct device *dev, struct device *master, void *data)
 	hdmi = hdmi_init(to_platform_device(dev));
 	if (IS_ERR(hdmi))
 		return PTR_ERR(hdmi);
-	priv->hdmi = hdmi;
-
+	set_hdmi(dev_get_drvdata(master), hdmi);
 	return 0;
 }
 
 static void hdmi_unbind(struct device *dev, struct device *master,
 		void *data)
 {
-	struct drm_device *drm = dev_get_drvdata(master);
-	struct msm_drm_private *priv = drm->dev_private;
-	if (priv->hdmi) {
-		hdmi_destroy(priv->hdmi);
-		priv->hdmi = NULL;
-	}
+	set_hdmi(dev_get_drvdata(master), NULL);
 }
 
 static const struct component_ops hdmi_ops = {
