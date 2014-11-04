@@ -112,6 +112,7 @@ struct mx6cam_dev {
 
 	/* buffer queue used in videobuf2 */
 	struct vb2_queue        buffer_queue;
+	void *alloc_ctx;
 
 	/* v4l2 controls */
 	struct v4l2_ctrl_handler ctrl_hdlr;
@@ -184,8 +185,6 @@ struct mx6cam_dev {
 struct mx6cam_ctx {
 	struct v4l2_fh          fh;
 	struct mx6cam_dev       *dev;
-
-	struct vb2_alloc_ctx    *alloc_ctx;
 
 	/* streaming buffer queue */
 	struct list_head        ready_q;
