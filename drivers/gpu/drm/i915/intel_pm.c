@@ -3627,42 +3627,111 @@ void skl_ddb_get_hw_state(struct drm_i915_private *dev_priv,
 	}
 }
 
-static unsigned int
-skl_plane_relative_data_rate(const struct intel_plane_wm_parameters *p)
+static void skl_pipe_wm_active_state(uint32_t val,
+				     struct skl_pipe_wm *active,
+				     bool is_transwm,
+				     bool is_cursor,
+				     int i,
+				     int level)
 {
-	return p->horiz_pixels * p->vert_pixels * p->bytes_per_pixel;
+	bool is_enabled = (val & PLANE_WM_EN) != 0;
+
+	if (!is_transwm) {
+		if (!is_cursor) {
+			active->wm[level].plane_en[i] = is_enabled;
+			active->wm[level].plane_res_b[i] =
+					val & PLANE_WM_BLOCKS_MASK;
+			active->wm[level].plane_res_l[i] =
+					(val >> PLANE_WM_LINES_SHIFT) &
+						PLANE_WM_LINES_MASK;
+		} else {
+			active->wm[level].cursor_en = is_enabled;
+			active->wm[level].cursor_res_b =
+					val & PLANE_WM_BLOCKS_MASK;
+			active->wm[level].cursor_res_l =
+					(val >> PLANE_WM_LINES_SHIFT) &
+						PLANE_WM_LINES_MASK;
+		}
+	} else {
+		if (!is_cursor) {
+			active->trans_wm.plane_en[i] = is_enabled;
+			active->trans_wm.plane_res_b[i] =
+					val & PLANE_WM_BLOCKS_MASK;
+			active->trans_wm.plane_res_l[i] =
+					(val >> PLANE_WM_LINES_SHIFT) &
+						PLANE_WM_LINES_MASK;
+		} else {
+			active->trans_wm.cursor_en = is_enabled;
+			active->trans_wm.cursor_res_b =
+					val & PLANE_WM_BLOCKS_MASK;
+			active->trans_wm.cursor_res_l =
+					(val >> PLANE_WM_LINES_SHIFT) &
+						PLANE_WM_LINES_MASK;
+		}
+	}
 }
 
-/*
- * We don't overflow 32 bits. Worst case is 3 planes enabled, each fetching
- * a 8192x4096@32bpp framebuffer:
- *   3 * 4096 * 8192  * 4 < 2^32
- */
-static unsigned int
-skl_get_total_relative_data_rate(struct intel_crtc *intel_crtc,
-				 const struct skl_pipe_wm_parameters *params)
+static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 {
-	unsigned int total_data_rate = 0;
-	int plane;
+	struct drm_device *dev = crtc->dev;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct skl_wm_values *hw = &dev_priv->wm.skl_hw;
+	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct skl_pipe_wm *active = &intel_crtc->wm.skl_active;
+	enum pipe pipe = intel_crtc->pipe;
+	int level, i, max_level;
+	uint32_t temp;
 
-	for (plane = 0; plane < intel_num_planes(intel_crtc); plane++) {
-		const struct intel_plane_wm_parameters *p;
+	max_level = ilk_wm_max_level(dev);
 
-		p = &params->plane[plane];
-		if (!p->enabled)
-			continue;
+	hw->wm_linetime[pipe] = I915_READ(PIPE_WM_LINETIME(pipe));
 
-		total_data_rate += skl_plane_relative_data_rate(p);
+	for (level = 0; level <= max_level; level++) {
+		for (i = 0; i < intel_num_planes(intel_crtc); i++)
+			hw->plane[pipe][i][level] =
+					I915_READ(PLANE_WM(pipe, i, level));
+		hw->cursor[pipe][level] = I915_READ(CUR_WM(pipe, level));
 	}
 
-	return total_data_rate;
+	for (i = 0; i < intel_num_planes(intel_crtc); i++)
+		hw->plane_trans[pipe][i] = I915_READ(PLANE_WM_TRANS(pipe, i));
+	hw->cursor_trans[pipe] = I915_READ(CUR_WM_TRANS(pipe));
+
+	if (!intel_crtc_active(crtc))
+		return;
+
+	hw->dirty[pipe] = true;
+
+	active->linetime = hw->wm_linetime[pipe];
+
+	for (level = 0; level <= max_level; level++) {
+		for (i = 0; i < intel_num_planes(intel_crtc); i++) {
+			temp = hw->plane[pipe][i][level];
+			skl_pipe_wm_active_state(temp, active, false,
+						false, i, level);
+		}
+		temp = hw->cursor[pipe][level];
+		skl_pipe_wm_active_state(temp, active, false, true, i, level);
+	}
+
+	for (i = 0; i < intel_num_planes(intel_crtc); i++) {
+		temp = hw->plane_trans[pipe][i];
+		skl_pipe_wm_active_state(temp, active, true, false, i, 0);
+	}
+
+	temp = hw->cursor_trans[pipe];
+	skl_pipe_wm_active_state(temp, active, true, true, i, 0);
 }
 
-static void
-skl_allocate_pipe_ddb(struct drm_crtc *crtc,
-		      const struct intel_wm_config *config,
-		      const struct skl_pipe_wm_parameters *params,
-		      struct skl_ddb_allocation *ddb /* out */)
+void skl_wm_get_hw_state(struct drm_device *dev)
+{
+	struct drm_crtc *crtc;
+
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
+		skl_pipe_wm_get_hw_state(crtc);
+}
+
+static void ilk_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
