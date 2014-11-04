@@ -4458,15 +4458,16 @@ static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
 		}
 	}
 
-	/*
-	 * Third pass: flush the pipes that got more space allocated.
-	 *
-	 * We don't need to actively wait for the update here, next vblank
-	 * will just get more DDB space with the correct WM values.
-	 */
-	for_each_intel_crtc(dev, crtc) {
-		if (!crtc->active)
-			continue;
+static void gen9_disable_rps(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	I915_WRITE(GEN6_RC_CONTROL, 0);
+}
+
+static void gen6_disable_rps_interrupts(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
 
 		pipe = crtc->pipe;
 
@@ -4794,8 +4795,51 @@ static void ilk_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 
 	active->pipe_enabled = intel_crtc_active(crtc);
 
-	if (active->pipe_enabled) {
-		u32 tmp = hw->wm_pipe[pipe];
+static void gen9_enable_rps(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_engine_cs *ring;
+	uint32_t rc6_mask = 0;
+	int unused;
+
+	/* 1a: Software RC state - RC0 */
+	I915_WRITE(GEN6_RC_STATE, 0);
+
+	/* 1b: Get forcewake during program sequence. Although the driver
+	 * hasn't enabled a state yet where we need forcewake, BIOS may have.*/
+	gen6_gt_force_wake_get(dev_priv, FORCEWAKE_ALL);
+
+	/* 2a: Disable RC states. */
+	I915_WRITE(GEN6_RC_CONTROL, 0);
+
+	/* 2b: Program RC6 thresholds.*/
+	I915_WRITE(GEN6_RC6_WAKE_RATE_LIMIT, 54 << 16);
+	I915_WRITE(GEN6_RC_EVALUATION_INTERVAL, 125000); /* 12500 * 1280ns */
+	I915_WRITE(GEN6_RC_IDLE_HYSTERSIS, 25); /* 25 * 1280ns */
+	for_each_ring(ring, dev_priv, unused)
+		I915_WRITE(RING_MAX_IDLE(ring->mmio_base), 10);
+	I915_WRITE(GEN6_RC_SLEEP, 0);
+	I915_WRITE(GEN6_RC6_THRESHOLD, 37500); /* 37.5/125ms per EI */
+
+	/* 3a: Enable RC6 */
+	if (intel_enable_rc6(dev) & INTEL_RC6_ENABLE)
+		rc6_mask = GEN6_RC_CTL_RC6_ENABLE;
+	DRM_INFO("RC6 %s\n", (rc6_mask & GEN6_RC_CTL_RC6_ENABLE) ?
+			"on" : "off");
+	I915_WRITE(GEN6_RC_CONTROL, GEN6_RC_CTL_HW_ENABLE |
+				   GEN6_RC_CTL_EI_MODE(1) |
+				   rc6_mask);
+
+	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
+
+}
+
+static void gen8_enable_rps(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_engine_cs *ring;
+	uint32_t rc6_mask = 0, rp_state_cap;
+	int unused;
 
 		/*
 		 * For active pipes LP0 watermark is marked as
@@ -6552,7 +6596,18 @@ static unsigned long __i915_chipset_val(struct drm_i915_private *dev_priv)
 
 	dev_priv->ips.chipset_power = ret;
 
-	return ret;
+		mutex_lock(&dev_priv->rps.hw_lock);
+		if (INTEL_INFO(dev)->gen >= 9)
+			gen9_disable_rps(dev);
+		else if (IS_CHERRYVIEW(dev))
+			cherryview_disable_rps(dev);
+		else if (IS_VALLEYVIEW(dev))
+			valleyview_disable_rps(dev);
+		else
+			gen6_disable_rps(dev);
+		dev_priv->rps.enabled = false;
+		mutex_unlock(&dev_priv->rps.hw_lock);
+	}
 }
 
 unsigned long i915_chipset_val(struct drm_i915_private *dev_priv)
@@ -6563,9 +6618,21 @@ unsigned long i915_chipset_val(struct drm_i915_private *dev_priv)
 	if (INTEL_INFO(dev)->gen != 5)
 		return 0;
 
-	spin_lock_irq(&mchdev_lock);
-
-	val = __i915_chipset_val(dev_priv);
+	if (IS_CHERRYVIEW(dev)) {
+		cherryview_enable_rps(dev);
+	} else if (IS_VALLEYVIEW(dev)) {
+		valleyview_enable_rps(dev);
+	} else if (INTEL_INFO(dev)->gen >= 9) {
+		gen9_enable_rps(dev);
+	} else if (IS_BROADWELL(dev)) {
+		gen8_enable_rps(dev);
+		__gen6_update_ring_freq(dev);
+	} else {
+		gen6_enable_rps(dev);
+		__gen6_update_ring_freq(dev);
+	}
+	dev_priv->rps.enabled = true;
+	mutex_unlock(&dev_priv->rps.hw_lock);
 
 	spin_unlock_irq(&mchdev_lock);
 
