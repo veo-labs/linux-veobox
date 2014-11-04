@@ -126,6 +126,7 @@ struct mx6cam_dev {
 
 	/* the format from sensor and from userland */
 	struct v4l2_format        user_fmt;
+	struct v4l2_pix_format	format;
 	struct mx6cam_pixfmt      *user_pixfmt;
 	struct v4l2_mbus_framefmt sensor_fmt;
 	struct mx6cam_pixfmt      *sensor_pixfmt;
