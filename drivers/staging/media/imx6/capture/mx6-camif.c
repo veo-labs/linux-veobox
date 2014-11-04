@@ -1489,120 +1489,6 @@ static int vidioc_g_fbuf(struct file *file, void *priv,
 	return 0;
 }
 
-static int vidioc_reqbufs(struct file *file, void *priv,
-			  struct v4l2_requestbuffers *reqbufs)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct mx6cam_dev *dev = ctx->dev;
-	struct vb2_queue *vq = &dev->buffer_queue;
-	int ret;
-
-	if (vb2_is_busy(vq))
-		return -EBUSY;
-
-	ctx->alloc_ctx = vb2_dma_contig_init_ctx(dev->dev);
-	if (IS_ERR(ctx->alloc_ctx)) {
-		v4l2_err(&dev->v4l2_dev, "failed to alloc vb2 context\n");
-		return PTR_ERR(ctx->alloc_ctx);
-	}
-
-	INIT_LIST_HEAD(&ctx->ready_q);
-	INIT_WORK(&ctx->restart_work, restart_work_handler);
-	INIT_WORK(&ctx->stop_work, stop_work_handler);
-	init_timer(&ctx->restart_timer);
-	ctx->restart_timer.data = (unsigned long)ctx;
-	ctx->restart_timer.function = mx6cam_restart_timeout;
-
-	vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
-	vq->drv_priv = ctx;
-	vq->buf_struct_size = sizeof(struct mx6cam_buffer);
-	vq->ops = &mx6cam_qops;
-	vq->mem_ops = &vb2_dma_contig_memops;
-	vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	ret = vb2_queue_init(vq);
-	if (ret) {
-		v4l2_err(&dev->v4l2_dev, "vb2_queue_init failed\n");
-		goto alloc_ctx_free;
-	}
-
-	ctx->io_allowed = true;
-	dev->io_ctx = ctx;
-
-	return vb2_reqbufs(vq, reqbufs);
-
-alloc_ctx_free:
-	vb2_dma_contig_cleanup_ctx(ctx->alloc_ctx);
-	return ret;
-}
-
-static int vidioc_querybuf(struct file *file, void *priv,
-			   struct v4l2_buffer *buf)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	return vb2_querybuf(vq, buf);
-}
-
-static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	if (!ctx->io_allowed)
-		return -EBUSY;
-
-	return vb2_qbuf(vq, buf);
-}
-
-static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	if (!ctx->io_allowed)
-		return -EBUSY;
-
-	return vb2_dqbuf(vq, buf, file->f_flags & O_NONBLOCK);
-}
-
-static int vidioc_expbuf(struct file *file, void *priv,
-			 struct v4l2_exportbuffer *eb)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	if (!ctx->io_allowed)
-		return -EBUSY;
-
-	return vb2_expbuf(vq, eb);
-}
-
-static int vidioc_streamon(struct file *file, void *priv,
-			   enum v4l2_buf_type type)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	if (!ctx->io_allowed)
-		return -EBUSY;
-
-	return vb2_streamon(vq, type);
-}
-
-static int vidioc_streamoff(struct file *file, void *priv,
-			    enum v4l2_buf_type type)
-{
-	struct mx6cam_ctx *ctx = file2ctx(file);
-	struct vb2_queue *vq = &ctx->dev->buffer_queue;
-
-	if (!ctx->io_allowed)
-		return -EBUSY;
-
-	return vb2_streamoff(vq, type);
-}
-
 static int vidioc_overlay(struct file *file, void *priv,
 			  unsigned int enable)
 {
@@ -1802,21 +1688,23 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_g_parm          = vidioc_g_parm,
 	.vidioc_s_parm          = vidioc_s_parm,
 
-	.vidioc_g_fbuf          = vidioc_g_fbuf,
-	.vidioc_s_fbuf          = vidioc_s_fbuf,
+/*	.vidioc_g_fbuf          = vidioc_g_fbuf,
+	.vidioc_s_fbuf          = vidioc_s_fbuf,*/
 
 	.vidioc_cropcap         = vidioc_cropcap,
 	.vidioc_g_crop          = vidioc_g_crop,
 	.vidioc_s_crop          = vidioc_s_crop,
 
 
-	.vidioc_reqbufs			= vb2_ioctl_reqbufs,
-	.vidioc_create_bufs		= vb2_ioctl_create_bufs,
-	.vidioc_prepare_buf		= vb2_ioctl_prepare_buf,
-	.vidioc_querybuf		= vb2_ioctl_querybuf,
-	.vidioc_qbuf			= vb2_ioctl_qbuf,
-	.vidioc_dqbuf			= vb2_ioctl_dqbuf,
-/* Not yet	.vidioc_expbuf		= vb2_ioctl_expbuf,*/
+	.vidioc_reqbufs		= vb2_ioctl_reqbufs,
+	.vidioc_create_bufs	= vb2_ioctl_create_bufs,
+	.vidioc_prepare_buf	= vb2_ioctl_prepare_buf,
+	.vidioc_querybuf	= vb2_ioctl_querybuf,
+	.vidioc_qbuf		= vb2_ioctl_qbuf,
+	.vidioc_dqbuf		= vb2_ioctl_dqbuf,
+	.vidioc_expbuf		= vb2_ioctl_expbuf,
+	.vidioc_streamon	= vb2_ioctl_streamon,
+	.vidioc_streamoff	= vb2_ioctl_streamoff,
 
 	.vidioc_streamon	= vidioc_streamon,
 	.vidioc_streamoff	= vidioc_streamoff,
@@ -1856,7 +1744,7 @@ static int mx6cam_queue_setup(struct vb2_queue *vq,
 	*nbuffers = count;
 	sizes[0] = sizeimage;
 
-	alloc_ctxs[0] = ctx->alloc_ctx;
+	alloc_ctxs[0] = dev->alloc_ctx;
 
 	dprintk(dev, "get %d buffer(s) of size %d each.\n", count, sizeimage);
 
@@ -2053,7 +1941,6 @@ static int mx6cam_release(struct file *file)
 		BUG_ON(dev->io_ctx != ctx);
 
 		vb2_queue_release(&dev->buffer_queue);
-		vb2_dma_contig_cleanup_ctx(ctx->alloc_ctx);
 
 		if (dev->preview_on) {
 			stop_preview(dev);
@@ -2445,7 +2332,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 	struct mx6cam_dev *dev;
 	struct video_device *vfd;
 	struct pinctrl *pinctrl;
-	struct vb2_queue *vq = &dev->buffer_queue;
 	int ret;
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
@@ -2517,17 +2403,26 @@ static int mx6cam_probe(struct platform_device *pdev)
 	dev->current_std = V4L2_STD_ALL;
 
 	/* Initialize the buffer queues */
-	vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
-	vq->lock = &dev->mutex;
-	vq->drv_priv = dev;
-	vq->buf_struct_size = sizeof(struct xvip_dma_buffer);
-	vq->ops = &mx6cam_qops;
-	vq->mem_ops = &vb2_dma_contig_memops;
-	vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	ret = vb2_queue_init(vq);
+	dev->alloc_ctx = vb2_dma_contig_init_ctx(dev->dev);
+	if (IS_ERR(dev->alloc_ctx)) {
+		v4l2_err(&dev->v4l2_dev, "Failed to alloc vb2 context\n");
+		goto unreg_vdev;
+	}
 
-
+	dev->buffer_queue.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	dev->buffer_queue.io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	dev->buffer_queue.lock = &dev->mutex;
+	dev->buffer_queue.drv_priv = dev;
+	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
+	dev->buffer_queue.ops = &mx6cam_qops;
+	dev->buffer_queue.mem_ops = &vb2_dma_contig_memops;
+	dev->buffer_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
+			| V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
+	ret = vb2_queue_init(&dev->buffer_queue);
+	if (ret < 0) {
+		v4l2_err(&dev->v4l2_dev, "Failed to init vb2 queue: %d\n", ret);
+		goto cleanup_ctx;
+	}
 
 	/* init our controls */
 	ret = mx6cam_init_controls(dev);
@@ -2605,6 +2500,9 @@ unreg_subdevs:
 	mx6cam_unregister_subdevs(dev);
 free_ctrls:
 	v4l2_ctrl_handler_free(&dev->ctrl_hdlr);
+cleanup_ctx:
+	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
+		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 unreg_vdev:
 	video_unregister_device(dev->vfd);
 unreg_dev:
@@ -2620,6 +2518,8 @@ static int mx6cam_remove(struct platform_device *pdev)
 	v4l2_info(&dev->v4l2_dev, "Removing " DEVICE_NAME "\n");
 	v4l2_ctrl_handler_free(&dev->ctrl_hdlr);
 	video_unregister_device(dev->vfd);
+	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
+		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 	mx6cam_unregister_subdevs(dev);
 	v4l2_device_unregister(&dev->v4l2_dev);
 
