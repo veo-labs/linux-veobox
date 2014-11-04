@@ -1719,8 +1719,7 @@ static int mx6cam_queue_setup(struct vb2_queue *vq,
 			      unsigned int *nbuffers, unsigned int *nplanes,
 			      unsigned int sizes[], void *alloc_ctxs[])
 {
-	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vq);
-	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_dev *dev = vb2_get_drv_priv(vq);
 	unsigned int count = *nbuffers;
 
 	if (vq->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
@@ -1988,9 +1987,9 @@ static const struct v4l2_file_operations mx6cam_fops = {
 	.owner		= THIS_MODULE,
 	.open		= mx6cam_open,
 	.release	= mx6cam_release,
-	.poll		= mx6cam_poll,
+	.poll		= vb2_fop_poll,
 	.unlocked_ioctl	= video_ioctl2,
-	.mmap		= mx6cam_mmap,
+	.mmap		= vb2_fop_mmap,
 };
 
 static struct video_device mx6cam_videodev = {
