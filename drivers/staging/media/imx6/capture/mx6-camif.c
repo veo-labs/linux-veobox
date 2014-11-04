@@ -971,6 +971,16 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	 */
 	calc_default_crop(dev, &crop, &sd_fmt.format);
 	adjust_user_fmt(dev, &sd_fmt.format, f, &crop);
+	fmt = mx6cam_get_format(0, sd_fmt.format.code);
+	if (!fmt) {
+		v4l2_err(&dev->v4l2_dev,
+			 "Fourcc format (0x%08x) invalid.\n",
+			 f->fmt.pix.pixelformat);
+		return -EINVAL;
+	}
+	pix->pixelformat = fmt->fourcc;
+
+	pix->bytesperline = (pix->width * fmt->depth) >> 3;
 	pix->field = V4L2_FIELD_NONE;
 	pix->priv = 0;
 
