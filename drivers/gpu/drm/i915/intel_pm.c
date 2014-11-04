@@ -3452,8 +3452,6 @@ static void skl_write_wm_values(struct drm_i915_private *dev_priv,
 				   new->ddb.cursor[pipe].start);
 		}
 	}
-
-	dev_priv->wm.skl_hw = *new;
 }
 
 static bool skl_update_pipe_wm(struct drm_crtc *crtc,
@@ -3547,6 +3545,9 @@ static void skl_update_wm(struct drm_crtc *crtc)
 
 	skl_update_other_pipe_wm(dev, crtc, &config, results);
 	skl_write_wm_values(dev_priv, results);
+
+	/* store the new configuration */
+	dev_priv->wm.skl_hw = *results;
 }
 
 static void
