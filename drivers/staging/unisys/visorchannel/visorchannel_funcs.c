@@ -29,7 +29,7 @@
 #define MYDRVNAME "visorchannel"
 
 struct VISORCHANNEL_Tag {
-	MEMREGION *memregion;	/* from visor_memregion_create() */
+	struct memregion *memregion;	/* from visor_memregion_create() */
 	struct channel_header chan_hdr;
 	uuid_le guid;
 	ulong size;
@@ -578,7 +578,7 @@ visorchannel_debug(struct visorchannel *channel, int num_queues,
 {
 	HOSTADDRESS addr = 0;
 	ulong nbytes = 0, nbytes_region = 0;
-	MEMREGION *memregion = NULL;
+	struct memregion *memregion = NULL;
 	struct channel_header hdr;
 	struct channel_header *phdr = &hdr;
 	int i = 0;
