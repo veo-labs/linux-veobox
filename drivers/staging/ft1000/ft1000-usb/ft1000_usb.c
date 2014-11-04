@@ -110,15 +110,16 @@ static int ft1000_probe(struct usb_interface *interface,
 		endpoint =
 			(struct usb_endpoint_descriptor *)&iface_desc->
 			endpoint[i].desc;
-		pr_debug("endpoint %d\n", i);
-		pr_debug("bEndpointAddress=%x, bmAttributes=%x\n",
-			 endpoint->bEndpointAddress, endpoint->bmAttributes);
+		DEBUG("endpoint %d\n", i);
+		DEBUG("bEndpointAddress=%x, bmAttributes=%x\n",
+		      endpoint->bEndpointAddress, endpoint->bmAttributes);
 		if ((endpoint->bEndpointAddress & USB_DIR_IN)
 		    && ((endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
 			USB_ENDPOINT_XFER_BULK)) {
 			ft1000dev->bulk_in_endpointAddr =
 				endpoint->bEndpointAddress;
-			pr_debug("in: %d\n", endpoint->bEndpointAddress);
+			DEBUG("ft1000_probe: in: %d\n",
+			      endpoint->bEndpointAddress);
 		}
 
 		if (!(endpoint->bEndpointAddress & USB_DIR_IN)
@@ -126,7 +127,8 @@ static int ft1000_probe(struct usb_interface *interface,
 			USB_ENDPOINT_XFER_BULK)) {
 			ft1000dev->bulk_out_endpointAddr =
 				endpoint->bEndpointAddress;
-			pr_debug("out: %d\n", endpoint->bEndpointAddress);
+			DEBUG("ft1000_probe: out: %d\n",
+			      endpoint->bEndpointAddress);
 		}
 	}
 
@@ -214,8 +216,10 @@ static void ft1000_disconnect(struct usb_interface *interface)
 	struct ft1000_info *pft1000info;
 	struct ft1000_usb *ft1000dev;
 
+	DEBUG("ft1000_disconnect is called\n");
+
 	pft1000info = (struct ft1000_info *)usb_get_intfdata(interface);
-	pr_debug("In disconnect pft1000info=%p\n", pft1000info);
+	DEBUG("In disconnect pft1000info=%p\n", pft1000info);
 
 	if (pft1000info) {
 		ft1000dev = pft1000info->priv;
@@ -228,7 +232,8 @@ static void ft1000_disconnect(struct usb_interface *interface)
 			pr_debug("destroy char driver\n");
 			ft1000_destroy_dev(ft1000dev->net);
 			unregister_netdev(ft1000dev->net);
-			pr_debug("network device unregistered\n");
+			DEBUG
+				("ft1000_disconnect: network device unregistered\n");
 			free_netdev(ft1000dev->net);
 
 		}

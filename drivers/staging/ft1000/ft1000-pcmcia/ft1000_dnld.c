@@ -20,8 +20,6 @@
 
   ---------------------------------------------------------------------------*/
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #define __KERNEL_SYSCALLS__
 
 #include <linux/module.h>
@@ -690,7 +688,7 @@ int card_download(struct net_device *dev, const u8 *pFileStart,
 				uiState = STATE_SECTION_PROV;
 			} else {
 				netdev_dbg(dev,
-					   "Download error: Bad Port IDs in Pseudo Record\n");
+					   "FT1000:download:Download error: Bad Port IDs in Pseudo Record\n");
 				netdev_dbg(dev, "\t Port Source = 0x%2.2x\n",
 					   pHdr->portsrc);
 				netdev_dbg(dev, "\t Port Destination = 0x%2.2x\n",

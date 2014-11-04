@@ -4,8 +4,6 @@
  * This file is part of Express Card USB Driver
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -406,7 +404,7 @@ int dsp_reload(struct ft1000_usb *ft1000dev)
 	status =
 		ft1000_read_dpram32(ft1000dev, FT1000_MAG_DPRAM_FEFE_INDX,
 				    (u8 *)&templong, 4);
-	pr_debug("templong (fefe) = 0x%8x\n", templong);
+	DEBUG("templong (fefe) = 0x%8x\n", templong);
 
 	/* call codeloader */
 	status = scram_dnldr(ft1000dev, pFileStart, FileLength);
@@ -1207,8 +1205,8 @@ static int ft1000_proc_drvmsg(struct ft1000_usb *dev, u16 size)
 			memcpy(info->RfCalVer, pdspinitmsg->RfCalVer, CALVERSZ);
 			memcpy(info->RfCalDate, pdspinitmsg->RfCalDate,
 			       CALDATESZ);
-			pr_debug("RFCalVer = 0x%2x 0x%2x\n",
-				 info->RfCalVer[0], info->RfCalVer[1]);
+			DEBUG("RFCalVer = 0x%2x 0x%2x\n", info->RfCalVer[0],
+			      info->RfCalVer[1]);
 		}
 		break;
 	}
@@ -1227,7 +1225,7 @@ static int ft1000_proc_drvmsg(struct ft1000_usb *dev, u16 size)
 			dev->fProvComplete = true;
 			status = ft1000_write_register(dev, FT1000_DB_HB,
 						       FT1000_REG_DOORBELL);
-			pr_debug("No more DSP provisioning data in dsp image\n");
+			DEBUG("FT1000:drivermsg:No more DSP provisioning data in dsp image\n");
 		}
 		pr_debug("DSP PROVISION is done\n");
 		break;

@@ -26,9 +26,6 @@
  *
  *---------------------------------------------------------------------------
  */
-
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -90,13 +87,13 @@ struct dpram_blk *ft1000_get_buffer(struct list_head *bufflist)
 	spin_lock_irqsave(&free_buff_lock, flags);
 	/* Check if buffer is available */
 	if (list_empty(bufflist)) {
-		pr_debug("No more buffer - %d\n", numofmsgbuf);
+		DEBUG("ft1000_get_buffer:  No more buffer - %d\n", numofmsgbuf);
 		ptr = NULL;
 	} else {
 		numofmsgbuf--;
 		ptr = list_entry(bufflist->next, struct dpram_blk, list);
 		list_del(&ptr->list);
-		/* pr_debug("number of free msg buffers = %d\n", numofmsgbuf); */
+		/* DEBUG("ft1000_get_buffer: number of free msg buffers = %d\n", numofmsgbuf); */
 	}
 	spin_unlock_irqrestore(&free_buff_lock, flags);
 
@@ -128,7 +125,7 @@ void ft1000_free_buffer(struct dpram_blk *pdpram_blk, struct list_head *plist)
 	/* Put memory back to list */
 	list_add_tail(&pdpram_blk->list, plist);
 	numofmsgbuf++;
-	/*pr_debug("number of free msg buffers = %d\n", numofmsgbuf); */
+	/*DEBUG("ft1000_free_buffer: number of free msg buffers = %d\n", numofmsgbuf); */
 	spin_unlock_irqrestore(&free_buff_lock, flags);
 }
 
@@ -156,17 +153,17 @@ int ft1000_create_dev(struct ft1000_usb *dev)
 	/* make a new device name */
 	sprintf(dev->DeviceName, "%s%d", "FT1000_", dev->CardNumber);
 
-	pr_debug("number of instance = %d\n", ft1000_flarion_cnt);
-	pr_debug("DeviceCreated = %x\n", dev->DeviceCreated);
+	DEBUG("%s: number of instance = %d\n", __func__, ft1000_flarion_cnt);
+	DEBUG("DeviceCreated = %x\n", dev->DeviceCreated);
 
 	if (dev->DeviceCreated) {
-		pr_debug("\"%s\" already registered\n", dev->DeviceName);
+		DEBUG("%s: \"%s\" already registered\n", __func__, dev->DeviceName);
 		return -EIO;
 	}
 
 
 	/* register the device */
-	pr_debug("\"%s\" debugfs device registration\n", dev->DeviceName);
+	DEBUG("%s: \"%s\" debugfs device registration\n", __func__, dev->DeviceName);
 
 	tmp = kmalloc(sizeof(struct ft1000_debug_dirs), GFP_KERNEL);
 	if (tmp == NULL) {
@@ -192,7 +189,7 @@ int ft1000_create_dev(struct ft1000_usb *dev)
 	tmp->int_number = dev->CardNumber;
 	list_add(&(tmp->list), &(dev->nodes.list));
 
-	pr_debug("registered debugfs directory \"%s\"\n", dev->DeviceName);
+	DEBUG("%s: registered debugfs directory \"%s\"\n", __func__, dev->DeviceName);
 
 	/* initialize application information */
 	dev->appcnt = 0;
@@ -244,6 +241,10 @@ void ft1000_destroy_dev(struct net_device *netdev)
 	struct list_head *pos, *q;
 	struct ft1000_debug_dirs *dir;
 
+	DEBUG("%s called\n", __func__);
+
+
+
 	if (dev->DeviceCreated) {
 		ft1000_flarion_cnt--;
 		list_for_each_safe(pos, q, &dev->nodes.list) {
@@ -255,7 +256,8 @@ void ft1000_destroy_dev(struct net_device *netdev)
 				kfree(dir);
 			}
 		}
-		pr_debug("unregistered device \"%s\"\n", dev->DeviceName);
+		DEBUG("%s: unregistered device \"%s\"\n", __func__,
+		      dev->DeviceName);
 
 		/* Make sure we free any memory reserve for slow Queue */
 		for (i = 0; i < MAX_NUM_APP; i++) {
@@ -301,17 +303,17 @@ static int ft1000_open(struct inode *inode, struct file *file)
 	struct ft1000_usb *dev = (struct ft1000_usb *)inode->i_private;
 	int i, num;
 
+	DEBUG("%s called\n", __func__);
 	num = (MINOR(inode->i_rdev) & 0xf);
-	pr_debug("minor number=%d\n", num);
+	DEBUG("ft1000_open: minor number=%d\n", num);
 
 	info = file->private_data = netdev_priv(dev->net);
 
-	pr_debug("f_owner = %p number of application = %d\n",
-		 &file->f_owner, dev->appcnt);
+	DEBUG("f_owner = %p number of application = %d\n", (&file->f_owner), dev->appcnt);
 
 	/* Check if maximum number of application exceeded */
 	if (dev->appcnt > MAX_NUM_APP) {
-		pr_debug("Maximum number of application exceeded\n");
+		DEBUG("Maximum number of application exceeded\n");
 		return -EACCES;
 	}
 
@@ -324,7 +326,7 @@ static int ft1000_open(struct inode *inode, struct file *file)
 
 	/* Fail due to lack of application info block */
 	if (i == MAX_NUM_APP) {
-		pr_debug("Could not find an application info block\n");
+		DEBUG("Could not find an application info block\n");
 		return -EACCES;
 	}
 
@@ -358,35 +360,35 @@ static unsigned int ft1000_poll_dev(struct file *file, poll_table *wait)
 	struct net_device *netdev = file->private_data;
 	struct ft1000_info *info = netdev_priv(netdev);
 	struct ft1000_usb *dev = info->priv;
-    int i;
+	int i;
 
-    /* DEBUG("ft1000_poll_dev called\n"); */
-    if (ft1000_flarion_cnt == 0) {
-        DEBUG("FT1000:ft1000_poll_dev called when ft1000_flarion_cnt is zero\n");
-        return -EBADF;
-    }
+	/* DEBUG("ft1000_poll_dev called\n"); */
+	if (ft1000_flarion_cnt == 0) {
+		DEBUG("FT1000:ft1000_poll_dev called when ft1000_flarion_cnt is zero\n");
+		return -EBADF;
+	}
 
-    /* Search for matching file object */
-    for (i=0; i<MAX_NUM_APP; i++) {
-        if (dev->app_info[i].fileobject == &file->f_owner) {
-            /* DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", dev->app_info[i].app_id); */
-            break;
-        }
-    }
+	/* Search for matching file object */
+	for (i = 0; i < MAX_NUM_APP; i++) {
+		if (dev->app_info[i].fileobject == &file->f_owner) {
+			/* DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", dev->app_info[i].app_id); */
+			break;
+		}
+	}
 
-    /* Could not find application info block */
-    if (i == MAX_NUM_APP) {
-        DEBUG("FT1000:ft1000_ioctl:Could not find application info block\n");
-        return -EACCES;
-    }
+	/* Could not find application info block */
+	if (i == MAX_NUM_APP) {
+		DEBUG("FT1000:ft1000_ioctl:Could not find application info block\n");
+		return -EACCES;
+	}
 
-    if (list_empty(&dev->app_info[i].app_sqlist) == 0) {
-        DEBUG("FT1000:ft1000_poll_dev:Message detected in slow queue\n");
-        return(POLLIN | POLLRDNORM | POLLPRI);
-    }
+	if (list_empty(&dev->app_info[i].app_sqlist) == 0) {
+		DEBUG("FT1000:ft1000_poll_dev:Message detected in slow queue\n");
+		return(POLLIN | POLLRDNORM | POLLPRI);
+	}
 
-    poll_wait(file, &dev->app_info[i].wait_dpram_msg, wait);
-    /* DEBUG("FT1000:ft1000_poll_dev:Polling for data from DSP\n"); */
+	poll_wait(file, &dev->app_info[i].wait_dpram_msg, wait);
+	/* DEBUG("FT1000:ft1000_poll_dev:Polling for data from DSP\n"); */
 
 	return 0;
 }
@@ -427,25 +429,27 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 	unsigned short ledStat = 0;
 	unsigned short conStat = 0;
 
+	/* DEBUG("ft1000_ioctl called\n"); */
+
 	if (ft1000_flarion_cnt == 0) {
-		pr_debug("called with ft1000_flarion_cnt of zero\n");
+		DEBUG("FT1000:ft1000_ioctl called when ft1000_flarion_cnt is zero\n");
 		return -EBADF;
 	}
 
-	/* pr_debug("command = 0x%x argument = 0x%8x\n", command, (u32)argument); */
+	/* DEBUG("FT1000:ft1000_ioctl:command = 0x%x argument = 0x%8x\n", command, (u32)argument); */
 
 	info = file->private_data;
 	ft1000dev = info->priv;
 	cmd = _IOC_NR(command);
-	/* pr_debug("cmd = 0x%x\n", cmd); */
+	/* DEBUG("FT1000:ft1000_ioctl:cmd = 0x%x\n", cmd); */
 
 	/* process the command */
 	switch (cmd) {
 	case IOCTL_REGISTER_CMD:
-		pr_debug("IOCTL_FT1000_REGISTER called\n");
+		DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_REGISTER called\n");
 		result = get_user(tempword, (__u16 __user *)argp);
 		if (result) {
-			pr_debug("result = %d failed to get_user\n", result);
+			DEBUG("result = %d failed to get_user\n", result);
 			break;
 		}
 		if (tempword == DSPBCMSGID) {
@@ -453,45 +457,42 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 			for (i = 0; i < MAX_NUM_APP; i++) {
 				if (ft1000dev->app_info[i].fileobject == &file->f_owner) {
 					ft1000dev->app_info[i].DspBCMsgFlag = 1;
-					pr_debug("Registered for broadcast messages\n");
+					DEBUG("FT1000:ft1000_ioctl:Registered for broadcast messages\n");
 					break;
 				}
 			}
 		}
 		break;
 
-    if (ft1000_flarion_cnt == 0) {
-        DEBUG("FT1000:ft1000_ioctl called when ft1000_flarion_cnt is zero\n");
-        return -EBADF;
-    }
+	case IOCTL_GET_VER_CMD:
+		DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_GET_VER called\n");
 
 		get_ver_data.drv_ver = FT1000_DRV_VER;
 
 		if (copy_to_user(argp, &get_ver_data, sizeof(get_ver_data))) {
-			pr_debug("copy fault occurred\n");
+			DEBUG("FT1000:ft1000_ioctl: copy fault occurred\n");
 			result = -EFAULT;
 			break;
 		}
 
-		pr_debug("driver version = 0x%x\n",
-			 (unsigned int)get_ver_data.drv_ver);
+		DEBUG("FT1000:ft1000_ioctl:driver version = 0x%x\n", (unsigned int)get_ver_data.drv_ver);
 
 		break;
 	case IOCTL_CONNECT:
 		/* Connect Message */
-		pr_debug("IOCTL_FT1000_CONNECT\n");
+		DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_CONNECT\n");
 		ConnectionMsg[79] = 0xfc;
 		result = card_send_command(ft1000dev, (unsigned short *)ConnectionMsg, 0x4c);
 
 		break;
 	case IOCTL_DISCONNECT:
 		/* Disconnect Message */
-		pr_debug("IOCTL_FT1000_DISCONNECT\n");
+		DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_DISCONNECT\n");
 		ConnectionMsg[79] = 0xfd;
 		result = card_send_command(ft1000dev, (unsigned short *)ConnectionMsg, 0x4c);
 		break;
 	case IOCTL_GET_DSP_STAT_CMD:
-		/* pr_debug("IOCTL_FT1000_GET_DSP_STAT\n"); */
+		/* DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_GET_DSP_STAT called\n"); */
 		memset(&get_stat_data, 0, sizeof(get_stat_data));
 		memcpy(get_stat_data.DspVer, info->DspVer, DSPVERSZ);
 		memcpy(get_stat_data.HwSerNum, info->HwSerNum, HWSERNUMSZ);
@@ -501,10 +502,10 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 		if (info->ProgConStat != 0xFF) {
 			ft1000_read_dpram16(ft1000dev, FT1000_MAG_DSP_LED, (u8 *)&ledStat, FT1000_MAG_DSP_LED_INDX);
 			get_stat_data.LedStat = ntohs(ledStat);
-			pr_debug("LedStat = 0x%x\n", get_stat_data.LedStat);
+			DEBUG("FT1000:ft1000_ioctl: LedStat = 0x%x\n", get_stat_data.LedStat);
 			ft1000_read_dpram16(ft1000dev, FT1000_MAG_DSP_CON_STATE, (u8 *)&conStat, FT1000_MAG_DSP_CON_STATE_INDX);
 			get_stat_data.ConStat = ntohs(conStat);
-			pr_debug("ConStat = 0x%x\n", get_stat_data.ConStat);
+			DEBUG("FT1000:ft1000_ioctl: ConStat = 0x%x\n", get_stat_data.ConStat);
 		} else {
 			get_stat_data.ConStat = 0x0f;
 		}
@@ -516,13 +517,13 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 		get_stat_data.nRxBytes = info->stats.rx_bytes;
 		do_gettimeofday(&tv);
 		get_stat_data.ConTm = (u32)(tv.tv_sec - info->ConTm);
-		pr_debug("Connection Time = %d\n", (int)get_stat_data.ConTm);
+		DEBUG("Connection Time = %d\n", (int)get_stat_data.ConTm);
 		if (copy_to_user(argp, &get_stat_data, sizeof(get_stat_data))) {
-			pr_debug("copy fault occurred\n");
+			DEBUG("FT1000:ft1000_ioctl: copy fault occurred\n");
 			result = -EFAULT;
 			break;
 		}
-		pr_debug("GET_DSP_STAT succeed\n");
+		DEBUG("ft1000_chioctl: GET_DSP_STAT succeed\n");
 		break;
 	case IOCTL_SET_DPRAM_CMD:
 	{
@@ -536,33 +537,33 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 		u16 app_index;
 		u16 status;
 
-		/* pr_debug("IOCTL_FT1000_SET_DPRAM called\n");*/
+		/* DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_SET_DPRAM called\n");*/
 
 
-            if (ft1000_flarion_cnt == 0)
-                return -EBADF;
+		if (ft1000_flarion_cnt == 0)
+			return -EBADF;
 
-            if (ft1000dev->DrvMsgPend)
-                return -ENOTTY;
+		if (ft1000dev->DrvMsgPend)
+			return -ENOTTY;
 
-            if (ft1000dev->fProvComplete == 0)
-                return -EACCES;
+		if (ft1000dev->fProvComplete == 0)
+			return -EACCES;
 
 		ft1000dev->fAppMsgPend = 1;
 
 		if (info->CardReady) {
 
-			/* pr_debug("try to SET_DPRAM\n"); */
+			/* DEBUG("FT1000:ft1000_ioctl: try to SET_DPRAM \n"); */
 
 			/* Get the length field to see how many bytes to copy */
 			result = get_user(msgsz, (__u16 __user *)argp);
 			if (result)
 				break;
 			msgsz = ntohs(msgsz);
-			/* pr_debug("length of message = %d\n", msgsz); */
+			/* DEBUG("FT1000:ft1000_ioctl: length of message = %d\n", msgsz); */
 
 			if (msgsz > MAX_CMD_SQSIZE) {
-				pr_debug("bad message length = %d\n", msgsz);
+				DEBUG("FT1000:ft1000_ioctl: bad message length = %d\n", msgsz);
 				result = -EINVAL;
 				break;
 			}
@@ -573,7 +574,7 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 				break;
 
 			if (copy_from_user(dpram_data, argp, msgsz+2)) {
-				pr_debug("copy fault occurred\n");
+				DEBUG("FT1000:ft1000_ChIoctl: copy fault occurred\n");
 				result = -EFAULT;
 			} else {
 				/* Check if this message came from a registered application */
@@ -583,7 +584,7 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 					}
 				}
 				if (i == MAX_NUM_APP) {
-					pr_debug("No matching application fileobject\n");
+					DEBUG("FT1000:No matching application fileobject\n");
 					result = -EINVAL;
 					kfree(dpram_data);
 					break;
@@ -592,13 +593,13 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 
 				/* Check message qtype type which is the lower byte within qos_class */
 				qtype = ntohs(dpram_data->pseudohdr.qos_class) & 0xff;
-				/* pr_debug("qtype = %d\n", qtype); */
+				/* DEBUG("FT1000_ft1000_ioctl: qtype = %d\n", qtype); */
 				if (qtype) {
 				} else {
 					/* Put message into Slow Queue */
 					/* Only put a message into the DPRAM if msg doorbell is available */
 					status = ft1000_read_register(ft1000dev, &tempword, FT1000_REG_DOORBELL);
-					/* pr_debug("READ REGISTER tempword=%x\n", tempword); */
+					/* DEBUG("FT1000_ft1000_ioctl: READ REGISTER tempword=%x\n", tempword); */
 					if (tempword & FT1000_DB_DPRAM_TX) {
 						/* Suspend for 2ms and try again due to DSP doorbell busy */
 						mdelay(2);
@@ -614,7 +615,7 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 									mdelay(3);
 									status = ft1000_read_register(ft1000dev, &tempword, FT1000_REG_DOORBELL);
 									if (tempword & FT1000_DB_DPRAM_TX) {
-										pr_debug("Doorbell not available\n");
+										DEBUG("FT1000:ft1000_ioctl:Doorbell not available\n");
 										result = -ENOTTY;
 										kfree(dpram_data);
 										break;
@@ -624,7 +625,7 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 						}
 					}
 
-					/*pr_debug("finished reading register\n"); */
+					/*DEBUG("FT1000_ft1000_ioctl: finished reading register\n"); */
 
 					/* Make sure we are within the limits of the slow queue memory limitation */
 					if ((msgsz < MAX_CMD_SQSIZE) && (msgsz > PSEUDOSZ)) {
@@ -641,10 +642,10 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 						ppseudo_hdr->portsrc = ft1000dev->app_info[app_index].app_id;
 						/* Calculate new checksum */
 						ppseudo_hdr->checksum = *pmsg++;
-						/* pr_debug("checksum = 0x%x\n", ppseudo_hdr->checksum); */
+						/* DEBUG("checksum = 0x%x\n", ppseudo_hdr->checksum); */
 						for (i = 1; i < 7; i++) {
 							ppseudo_hdr->checksum ^= *pmsg++;
-							/* pr_debug("checksum = 0x%x\n", ppseudo_hdr->checksum); */
+							/* DEBUG("checksum = 0x%x\n", ppseudo_hdr->checksum); */
 						}
 						pmsg++;
 						ppseudo_hdr = (struct pseudo_hdr *)pmsg;
@@ -658,7 +659,7 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 				}
 			}
 		} else {
-			pr_debug("Card not ready take messages\n");
+			DEBUG("FT1000:ft1000_ioctl: Card not ready take messages\n");
 			result = -EACCES;
 		}
 		kfree(dpram_data);
@@ -669,68 +670,46 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 	{
 		struct dpram_blk *pdpram_blk;
 		struct IOCTL_DPRAM_BLK __user *pioctl_dpram;
-            int msglen;
+		int msglen;
 
-            /* DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_GET_DPRAM called\n"); */
+		/* DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_GET_DPRAM called\n"); */
 
-            if (ft1000_flarion_cnt == 0)
-                return -EBADF;
+		if (ft1000_flarion_cnt == 0)
+			return -EBADF;
 
-            /* Search for matching file object */
-            for (i=0; i<MAX_NUM_APP; i++) {
-                if (ft1000dev->app_info[i].fileobject == &file->f_owner) {
-                    /*DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", ft1000dev->app_info[i].app_id); */
-                    break;
-                }
-            }
+		/* Search for matching file object */
+		for (i = 0; i < MAX_NUM_APP; i++) {
+			if (ft1000dev->app_info[i].fileobject == &file->f_owner) {
+				/*DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", ft1000dev->app_info[i].app_id); */
+				break;
+			}
+		}
 
-            /* Could not find application info block */
-            if (i == MAX_NUM_APP) {
-                DEBUG("FT1000:ft1000_ioctl:Could not find application info block\n");
-                result = -EBADF;
-                break;
-            }
-
-            result = 0;
-            pioctl_dpram = argp;
-            if (list_empty(&ft1000dev->app_info[i].app_sqlist) == 0) {
-                /* DEBUG("FT1000:ft1000_ioctl:Message detected in slow queue\n"); */
-                spin_lock_irqsave(&free_buff_lock, flags);
-                pdpram_blk = list_entry(ft1000dev->app_info[i].app_sqlist.next, struct dpram_blk, list);
-                list_del(&pdpram_blk->list);
-                ft1000dev->app_info[i].NumOfMsg--;
-                /* DEBUG("FT1000:ft1000_ioctl:NumOfMsg for app %d = %d\n", i, ft1000dev->app_info[i].NumOfMsg); */
-                spin_unlock_irqrestore(&free_buff_lock, flags);
-                msglen = ntohs(*(u16 *)pdpram_blk->pbuffer) + PSEUDOSZ;
-                result = get_user(msglen, &pioctl_dpram->total_len);
-		if (result)
-			break;
-		msglen = htons(msglen);
-                /* DEBUG("FT1000:ft1000_ioctl:msg length = %x\n", msglen); */
-                if (copy_to_user (&pioctl_dpram->pseudohdr, pdpram_blk->pbuffer, msglen)) {
-					DEBUG("FT1000:ft1000_ioctl: copy fault occurred\n");
-			result = -EFAULT;
+		/* Could not find application info block */
+		if (i == MAX_NUM_APP) {
+			DEBUG("FT1000:ft1000_ioctl:Could not find application info block\n");
+			result = -EBADF;
 			break;
 		}
 
 		result = 0;
 		pioctl_dpram = argp;
 		if (list_empty(&ft1000dev->app_info[i].app_sqlist) == 0) {
-			/* pr_debug("Message detected in slow queue\n"); */
+			/* DEBUG("FT1000:ft1000_ioctl:Message detected in slow queue\n"); */
 			spin_lock_irqsave(&free_buff_lock, flags);
 			pdpram_blk = list_entry(ft1000dev->app_info[i].app_sqlist.next, struct dpram_blk, list);
 			list_del(&pdpram_blk->list);
 			ft1000dev->app_info[i].NumOfMsg--;
-			/* pr_debug("NumOfMsg for app %d = %d\n", i, ft1000dev->app_info[i].NumOfMsg); */
+			/* DEBUG("FT1000:ft1000_ioctl:NumOfMsg for app %d = %d\n", i, ft1000dev->app_info[i].NumOfMsg); */
 			spin_unlock_irqrestore(&free_buff_lock, flags);
 			msglen = ntohs(*(u16 *)pdpram_blk->pbuffer) + PSEUDOSZ;
 			result = get_user(msglen, &pioctl_dpram->total_len);
 			if (result)
 				break;
 			msglen = htons(msglen);
-			/* pr_debug("msg length = %x\n", msglen); */
+			/* DEBUG("FT1000:ft1000_ioctl:msg length = %x\n", msglen); */
 			if (copy_to_user(&pioctl_dpram->pseudohdr, pdpram_blk->pbuffer, msglen)) {
-				pr_debug("copy fault occurred\n");
+				DEBUG("FT1000:ft1000_ioctl: copy fault occurred\n");
 				result = -EFAULT;
 				break;
 			}
@@ -738,12 +717,12 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 			ft1000_free_buffer(pdpram_blk, &freercvpool);
 			result = msglen;
 		}
-		/* pr_debug("IOCTL_FT1000_GET_DPRAM no message\n"); */
+		/* DEBUG("FT1000:ft1000_ioctl: IOCTL_FT1000_GET_DPRAM no message\n"); */
 	}
 	break;
 
 	default:
-		pr_debug("unknown command: 0x%x\n", command);
+		DEBUG("FT1000:ft1000_ioctl:unknown command: 0x%x\n", command);
 		result = -ENOTTY;
 		break;
 	}
@@ -771,37 +750,39 @@ static int ft1000_release(struct inode *inode, struct file *file)
 	int i;
 	struct dpram_blk *pdpram_blk;
 
+	DEBUG("ft1000_release called\n");
+
 	dev = file->private_data;
 	info = netdev_priv(dev);
 	ft1000dev = info->priv;
 
-    if (ft1000_flarion_cnt == 0) {
-        ft1000dev->appcnt--;
-        return -EBADF;
-    }
+	if (ft1000_flarion_cnt == 0) {
+		ft1000dev->appcnt--;
+		return -EBADF;
+	}
 
-    /* Search for matching file object */
-    for (i=0; i<MAX_NUM_APP; i++) {
-        if (ft1000dev->app_info[i].fileobject == &file->f_owner) {
-            /* DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", ft1000dev->app_info[i].app_id); */
-            break;
-        }
-    }
+	/* Search for matching file object */
+	for (i = 0; i < MAX_NUM_APP; i++) {
+		if (ft1000dev->app_info[i].fileobject == &file->f_owner) {
+			/* DEBUG("FT1000:ft1000_ioctl: Message is for AppId = %d\n", ft1000dev->app_info[i].app_id); */
+			break;
+		}
+	}
 
-    if (i==MAX_NUM_APP)
-	    return 0;
+	if (i == MAX_NUM_APP)
+		return 0;
 
-    while (list_empty(&ft1000dev->app_info[i].app_sqlist) == 0) {
-        DEBUG("Remove and free memory queue up on slow queue\n");
-        pdpram_blk = list_entry(ft1000dev->app_info[i].app_sqlist.next, struct dpram_blk, list);
-        list_del(&pdpram_blk->list);
-        ft1000_free_buffer(pdpram_blk, &freercvpool);
-    }
+	while (list_empty(&ft1000dev->app_info[i].app_sqlist) == 0) {
+		DEBUG("Remove and free memory queue up on slow queue\n");
+		pdpram_blk = list_entry(ft1000dev->app_info[i].app_sqlist.next, struct dpram_blk, list);
+		list_del(&pdpram_blk->list);
+		ft1000_free_buffer(pdpram_blk, &freercvpool);
+	}
 
-    /* initialize application information */
-    ft1000dev->appcnt--;
-    DEBUG("ft1000_chdev:%s:appcnt = %d\n", __func__, ft1000dev->appcnt);
-    ft1000dev->app_info[i].fileobject = NULL;
+	/* initialize application information */
+	ft1000dev->appcnt--;
+	DEBUG("ft1000_chdev:%s:appcnt = %d\n", __func__, ft1000dev->appcnt);
+	ft1000dev->app_info[i].fileobject = NULL;
 
-    return 0;
+	return 0;
 }
