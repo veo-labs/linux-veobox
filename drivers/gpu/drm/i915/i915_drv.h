@@ -1477,33 +1477,8 @@ struct ilk_wm_values {
 	enum intel_ddb_partitioning partitioning;
 };
 
-struct skl_ddb_entry {
-	uint16_t start, end;	/* in number of blocks, 'end' is exclusive */
-};
-
-static inline uint16_t skl_ddb_entry_size(const struct skl_ddb_entry *entry)
-{
-	return entry->end - entry->start;
-}
-
-static inline bool skl_ddb_entry_equal(const struct skl_ddb_entry *e1,
-				       const struct skl_ddb_entry *e2)
-{
-	if (e1->start == e2->start && e1->end == e2->end)
-		return true;
-
-	return false;
-}
-
-struct skl_ddb_allocation {
-	struct skl_ddb_entry pipe[I915_MAX_PIPES];
-	struct skl_ddb_entry plane[I915_MAX_PIPES][I915_MAX_PLANES];
-	struct skl_ddb_entry cursor[I915_MAX_PIPES];
-};
-
 struct skl_wm_values {
 	bool dirty[I915_MAX_PIPES];
-	struct skl_ddb_allocation ddb;
 	uint32_t wm_linetime[I915_MAX_PIPES];
 	uint32_t plane[I915_MAX_PIPES][I915_MAX_PLANES][8];
 	uint32_t cursor[I915_MAX_PIPES][8];
@@ -1513,9 +1488,9 @@ struct skl_wm_values {
 
 struct skl_wm_level {
 	bool plane_en[I915_MAX_PLANES];
-	bool cursor_en;
 	uint16_t plane_res_b[I915_MAX_PLANES];
 	uint8_t plane_res_l[I915_MAX_PLANES];
+	bool cursor_en;
 	uint16_t cursor_res_b;
 	uint8_t cursor_res_l;
 };

@@ -413,6 +413,12 @@ struct intel_mmio_flip {
 	struct work_struct work;
 };
 
+struct skl_pipe_wm {
+	struct skl_wm_level wm[8];
+	struct skl_wm_level trans_wm;
+	uint32_t linetime;
+};
+
 struct intel_crtc {
 	struct drm_crtc base;
 	enum pipe pipe;
