@@ -988,10 +988,6 @@ static int device_tx_srv(struct vnt_private *pDevice, unsigned int uIdx)
 			}
 			device_free_tx_buf(pDevice, pTD);
 			pDevice->iTDUsed[uIdx]--;
-
-			/* Make sure queue is available */
-			if (AVAIL_TD(pDevice, uIdx))
-				ieee80211_wake_queues(pDevice->hw);
 		}
 	}
 
@@ -1200,6 +1196,22 @@ static void vnt_remove_interface(struct ieee80211_hw *hw,
 					vnt_beacon_make(pDevice, pDevice->vif);
 			}
 		}
+
+		/* If both buffers available wake the queue */
+		if (pDevice->vif) {
+			if (AVAIL_TD(pDevice, TYPE_TXDMA0) &&
+			    AVAIL_TD(pDevice, TYPE_AC0DMA) &&
+			    ieee80211_queue_stopped(pDevice->hw, 0))
+				ieee80211_wake_queues(pDevice->hw);
+		}
+
+		MACvReadISR(pDevice->PortOffset, &pDevice->dwIsr);
+
+		MACvReceive0(pDevice->PortOffset);
+		MACvReceive1(pDevice->PortOffset);
+
+		if (max_count > pDevice->sOpts.int_works)
+			break;
 	}
 
 	if (changed & IEEE80211_CONF_CHANGE_POWER) {
