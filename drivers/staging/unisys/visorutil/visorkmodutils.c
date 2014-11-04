@@ -49,10 +49,10 @@ visorutil_spar_detect(void)
 			(edx == UNISYS_SPAR_ID_EDX);
 	} else {
 		return 0;
-	}
 }
 
-static __init int visorutil_mod_init(void)
+static __init int
+visorutil_mod_init(void)
 {
 	if (visorutil_spar_detect()) {
 		unisys_spar_platform = TRUE;
