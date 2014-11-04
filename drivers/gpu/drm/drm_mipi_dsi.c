@@ -1142,8 +1142,9 @@ static void mipi_dsi_drv_shutdown(struct device *dev)
 }
 
 /**
- * mipi_dsi_driver_register() - register a driver for DSI devices
+ * mipi_dsi_driver_register_full() - register a driver for DSI devices
  * @drv: DSI driver structure
+ * @owner: owner module
  *
  * Return: 0 on success or a negative error code on failure.
  */
