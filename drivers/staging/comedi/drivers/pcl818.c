@@ -300,8 +300,8 @@ struct pcl818_private {
 	/*  manimal allowed delay between samples (in us) for actual card */
 	unsigned int ns_min;
 	int i8253_osc_base;	/*  1/frequency of on board oscilator in ns */
-	/*  MUX setting for actual AI operations */
-	unsigned int act_chanlist[16];
+	int ai_act_scan;	/*  how many scans we finished */
+	unsigned int act_chanlist[16];	/*  MUX setting for actual AI operations */
 	unsigned int act_chanlist_len;	/*  how long is actual MUX list */
 	unsigned int act_chanlist_pos;	/*  actual position in MUX list */
 	unsigned int divisor1;
@@ -756,6 +756,8 @@ static int pcl818_ai_cmd(struct comedi_device *dev,
 		return -EINVAL;
 	pcl818_ai_setup_chanlist(dev, cmd->chanlist, seglen);
 
+	devpriv->ai_data_len = s->async->prealloc_bufsz;
+	devpriv->ai_act_scan = cmd->stop_arg;
 	devpriv->ai_cmd_running = 1;
 	devpriv->ai_cmd_canceled = 0;
 	devpriv->act_chanlist_pos = 0;
