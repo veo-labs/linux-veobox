@@ -356,6 +356,9 @@ struct cb_pcidas_private {
 	/* divisors of master clock for analog output pacing */
 	unsigned int ao_divisor1;
 	unsigned int ao_divisor2;
+	unsigned int caldac_value[NUM_CHANNELS_8800];
+	unsigned int trimpot_value[NUM_CHANNELS_8402];
+	unsigned int dac08_value;
 	unsigned int calibration_source;
 };
 
@@ -1096,17 +1099,12 @@ static void cb_pcidas_ao_load_fifo(struct comedi_device *dev,
 				   unsigned int nsamples)
 {
 	struct cb_pcidas_private *devpriv = dev->private;
-	struct comedi_cmd *cmd = &s->async->cmd;
 	unsigned int nbytes;
 
-	if (cmd->stop_src == TRIG_COUNT && devpriv->ao_count < nsamples)
-		nsamples = devpriv->ao_count;
-
+	nsamples = comedi_nsamples_left(s, nsamples);
 	nbytes = comedi_buf_read_samples(s, devpriv->ao_buffer, nsamples);
-	nsamples = comedi_bytes_to_samples(s, nbytes);
-	if (cmd->stop_src == TRIG_COUNT)
-		devpriv->ao_count -= nsamples;
 
+	nsamples = comedi_bytes_to_samples(s, nbytes);
 	outsw(devpriv->ao_registers + DACDATA, devpriv->ao_buffer, nsamples);
 }
 
