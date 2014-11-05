@@ -161,11 +161,6 @@ static int m25p80_erase(struct spi_nor *nor, loff_t offset)
 	dev_dbg(nor->dev, "%dKiB at 0x%08x\n",
 		flash->mtd.erasesize / 1024, (u32)offset);
 
-	/* Send write enable, then erase commands. */
-	ret = nor->write_reg(nor, SPINOR_OP_WREN, NULL, 0, 0);
-	if (ret)
-		return ret;
-
 	/* Set up command buffer. */
 	flash->command[0] = nor->erase_opcode;
 	m25p_addr2cmd(nor, offset, flash->command);
