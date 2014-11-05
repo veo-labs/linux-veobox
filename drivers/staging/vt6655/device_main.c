@@ -36,7 +36,6 @@
  *   device_rx_srv - rx service function
  *   device_alloc_rx_buf - rx buffer pre-allocated function
  *   device_free_tx_buf - free tx buffer function
- *   device_free_frag_buf- free de-fragement buffer
  *   device_init_rd0_ring- initial rd dma0 ring
  *   device_init_rd1_ring- initial rd dma1 ring
  *   device_init_td0_ring- initial tx dma0 ring buffer
@@ -102,7 +101,50 @@ DEVICE_PARAM(int_works, "Number of packets per interrupt services");
 
 #define RTS_THRESH_DEF     2347
 
+DEVICE_PARAM(RTSThreshold, "RTS threshold");
+
 #define FRAG_THRESH_DEF     2346
+
+#define DATA_RATE_MIN     0
+#define DATA_RATE_MAX     13
+#define DATA_RATE_DEF     13
+/* datarate[] index
+   0: indicate 1 Mbps   0x02
+   1: indicate 2 Mbps   0x04
+   2: indicate 5.5 Mbps 0x0B
+   3: indicate 11 Mbps  0x16
+   4: indicate 6 Mbps   0x0c
+   5: indicate 9 Mbps   0x12
+   6: indicate 12 Mbps  0x18
+   7: indicate 18 Mbps  0x24
+   8: indicate 24 Mbps  0x30
+   9: indicate 36 Mbps  0x48
+   10: indicate 48 Mbps  0x60
+   11: indicate 54 Mbps  0x6c
+   12: indicate 72 Mbps  0x90
+   13: indicate auto rate
+*/
+
+DEVICE_PARAM(ConnectionRate, "Connection data rate");
+
+#define OP_MODE_DEF     0
+
+DEVICE_PARAM(OPMode, "Infrastruct, adhoc, AP mode ");
+
+/* OpMode[] is used for transmit.
+   0: indicate infrastruct mode used
+   1: indicate adhoc mode used
+   2: indicate AP mode used
+*/
+
+/* PSMode[]
+   0: indicate disable power saving mode
+   1: indicate enable power saving mode
+*/
+
+#define PS_MODE_DEF     0
+
+DEVICE_PARAM(PSMode, "Power saving mode");
 
 #define SHORT_RETRY_MIN     0
 #define SHORT_RETRY_MAX     31
@@ -175,7 +217,6 @@ static void device_free_td1_ring(struct vnt_private *pDevice);
 static void device_free_rd0_ring(struct vnt_private *pDevice);
 static void device_free_rd1_ring(struct vnt_private *pDevice);
 static void device_free_rings(struct vnt_private *pDevice);
-static void device_free_frag_buf(struct vnt_private *pDevice);
 
 /*---------------------  Export Variables  --------------------------*/
 
@@ -209,6 +250,9 @@ static void device_get_options(struct vnt_private *pDevice)
 	pOpts->nTxDescs[0] = TX_DESC_DEF0;
 	pOpts->nTxDescs[1] = TX_DESC_DEF1;
 	pOpts->int_works = INT_WORKS_DEF;
+	pOpts->rts_thresh = RTS_THRESH_DEF;
+	pOpts->data_rate = DATA_RATE_DEF;
+	pOpts->channel_num = CHANNEL_DEF;
 
 	pOpts->short_retry = SHORT_RETRY_DEF;
 	pOpts->long_retry = LONG_RETRY_DEF;
@@ -228,7 +272,6 @@ device_set_options(struct vnt_private *pDevice)
 
 	pDevice->uChannel = pDevice->sOpts.channel_num;
 	pDevice->wRTSThreshold = pDevice->sOpts.rts_thresh;
-	pDevice->wFragmentationThreshold = pDevice->sOpts.frag_thresh;
 	pDevice->byShortRetryLimit = pDevice->sOpts.short_retry;
 	pDevice->byLongRetryLimit = pDevice->sOpts.long_retry;
 	pDevice->wMaxTransmitMSDULifetime = DEFAULT_MSDU_LIFETIME;
@@ -757,20 +800,6 @@ static void device_free_rd1_ring(struct vnt_private *pDevice)
 	}
 }
 
-static void device_free_frag_buf(struct vnt_private *pDevice)
-{
-	PSDeFragControlBlock pDeF;
-	int i;
-
-	for (i = 0; i < CB_MAX_RX_FRAG; i++) {
-		pDeF = &(pDevice->sRxDFCB[i]);
-
-		if (pDeF->skb)
-			dev_kfree_skb(pDeF->skb);
-
-	}
-}
-
 static void device_init_td0_ring(struct vnt_private *pDevice)
 {
 	int i;
@@ -909,73 +938,6 @@ static bool device_alloc_rx_buf(struct vnt_private *pDevice, PSRxDesc pRD)
 	pRD->buff_addr = cpu_to_le32(pRDInfo->skb_dma);
 
 	return true;
-}
-
-static const u8 fallback_rate0[5][5] = {
-	{RATE_18M, RATE_18M, RATE_12M, RATE_12M, RATE_12M},
-	{RATE_24M, RATE_24M, RATE_18M, RATE_12M, RATE_12M},
-	{RATE_36M, RATE_36M, RATE_24M, RATE_18M, RATE_18M},
-	{RATE_48M, RATE_48M, RATE_36M, RATE_24M, RATE_24M},
-	{RATE_54M, RATE_54M, RATE_48M, RATE_36M, RATE_36M}
-};
-
-static const u8 fallback_rate1[5][5] = {
-	{RATE_18M, RATE_18M, RATE_12M, RATE_6M, RATE_6M},
-	{RATE_24M, RATE_24M, RATE_18M, RATE_6M, RATE_6M},
-	{RATE_36M, RATE_36M, RATE_24M, RATE_12M, RATE_12M},
-	{RATE_48M, RATE_48M, RATE_24M, RATE_12M, RATE_12M},
-	{RATE_54M, RATE_54M, RATE_36M, RATE_18M, RATE_18M}
-};
-
-static int vnt_int_report_rate(struct vnt_private *priv,
-			       PDEVICE_TD_INFO context, u8 tsr0, u8 tsr1)
-{
-	pDeF->skb = dev_alloc_skb((int)pDevice->rx_buf_sz);
-	if (pDeF->skb == NULL)
-		return false;
-	ASSERT(pDeF->skb);
-
-	if (!context->skb)
-		return -EINVAL;
-
-	fifo_head = (struct vnt_tx_fifo_head *)context->buf;
-	fb_option = (le16_to_cpu(fifo_head->fifo_ctl) &
-			(FIFOCTL_AUTO_FB_0 | FIFOCTL_AUTO_FB_1));
-
-	info = IEEE80211_SKB_CB(context->skb);
-	idx = info->control.rates[0].idx;
-
-	if (fb_option && !(tsr1 & TSR1_TERR)) {
-		u8 tx_rate;
-		u8 retry = tx_retry;
-
-		rate = ieee80211_get_tx_rate(priv->hw, info);
-		tx_rate = rate->hw_value - RATE_18M;
-
-		if (retry > 4)
-			retry = 4;
-
-		if (fb_option & FIFOCTL_AUTO_FB_0)
-			tx_rate = fallback_rate0[tx_rate][retry];
-		else if (fb_option & FIFOCTL_AUTO_FB_1)
-			tx_rate = fallback_rate1[tx_rate][retry];
-
-		if (info->band == IEEE80211_BAND_5GHZ)
-			idx = tx_rate - RATE_6M;
-		else
-			idx = tx_rate;
-	}
-
-	ieee80211_tx_info_clear_status(info);
-
-	info->status.rates[0].count = tx_retry;
-
-	if (!(tsr1 & TSR1_TERR)) {
-		info->status.rates[0].idx = idx;
-		info->flags |= IEEE80211_TX_STAT_ACK;
-	}
-
-	return 0;
 }
 
 static const u8 fallback_rate0[5][5] = {
@@ -1409,7 +1371,6 @@ static int vnt_start(struct ieee80211_hw *hw)
 	dev_dbg(&priv->pcid->dev, "call device init rd0 ring\n");
 	device_init_rd0_ring(priv);
 	device_init_rd1_ring(priv);
-	device_init_defrag_cb(priv);
 	device_init_td0_ring(priv);
 	device_init_td1_ring(priv);
 
@@ -1437,7 +1398,6 @@ static void vnt_stop(struct ieee80211_hw *hw)
 	device_free_td1_ring(priv);
 	device_free_rd0_ring(priv);
 	device_free_rd1_ring(priv);
-	device_free_frag_buf(priv);
 	device_free_rings(priv);
 
 	free_irq(priv->pcid->irq, priv);
