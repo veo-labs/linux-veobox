@@ -55,6 +55,50 @@
 #include "tmacro.h"
 #include "mac.h"
 
+/*---------------------  Static Classes  ----------------------------*/
+
+/*---------------------  Static Variables  --------------------------*/
+
+/*---------------------  Static Functions  --------------------------*/
+
+/*---------------------  Export Variables  --------------------------*/
+
+/*---------------------  Export Functions  --------------------------*/
+
+/*
+ * Description:
+ *      Read All MAC Registers to buffer
+ *
+ * Parameters:
+ *  In:
+ *      dwIoBase    - Base Address for MAC
+ *  Out:
+ *      pbyMacRegs  - buffer to read
+ *
+ * Return Value: none
+ *
+ */
+void MACvReadAllRegs(void __iomem *dwIoBase, unsigned char *pbyMacRegs)
+{
+	int ii;
+
+	// read page0 register
+	for (ii = 0; ii < MAC_MAX_CONTEXT_SIZE_PAGE0; ii++) {
+		VNSvInPortB(dwIoBase + ii, pbyMacRegs);
+		pbyMacRegs++;
+	}
+
+	MACvSelectPage1(dwIoBase);
+
+	// read page1 register
+	for (ii = 0; ii < MAC_MAX_CONTEXT_SIZE_PAGE1; ii++) {
+		VNSvInPortB(dwIoBase + ii, pbyMacRegs);
+		pbyMacRegs++;
+	}
+
+	MACvSelectPage0(dwIoBase);
+}
+
 /*
  * Description:
  *      Test if all test bits on

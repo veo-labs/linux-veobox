@@ -890,10 +890,16 @@ do {								\
 #define MACvSetRFLE_LatchBase(dwIoBase)                                 \
 	MACvWordRegBitsOn(dwIoBase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_RFLEOPT)
 
-bool MACbIsRegBitsOn(void __iomem *dwIoBase, unsigned char byRegOfs,
-		     unsigned char byTestBits);
-bool MACbIsRegBitsOff(void __iomem *dwIoBase, unsigned char byRegOfs,
-		      unsigned char byTestBits);
+/*---------------------  Export Classes  ----------------------------*/
+
+/*---------------------  Export Variables  --------------------------*/
+
+/*---------------------  Export Functions  --------------------------*/
+
+void MACvReadAllRegs(void __iomem *dwIoBase, unsigned char *pbyMacRegs);
+
+bool MACbIsRegBitsOn(void __iomem *dwIoBase, unsigned char byRegOfs, unsigned char byTestBits);
+bool MACbIsRegBitsOff(void __iomem *dwIoBase, unsigned char byRegOfs, unsigned char byTestBits);
 
 bool MACbIsIntDisable(void __iomem *dwIoBase);
 
