@@ -11106,6 +11106,7 @@ intel_modeset_compute_config(struct drm_crtc *crtc,
 	}
 	intel_dump_pipe_config(to_intel_crtc(crtc), pipe_config,
 			       "[modeset]");
+	to_intel_crtc(crtc)->new_config = pipe_config;
 
 out:
 	return pipe_config;
@@ -11160,9 +11161,6 @@ static int __intel_set_mode(struct drm_crtc *crtc,
 		return -ENOMEM;
 
 	*saved_mode = crtc->mode;
-
-	if (modeset_pipes)
-		to_intel_crtc(crtc)->new_config = pipe_config;
 
 	/*
 	 * See if the config requires any additional preparation, e.g.
