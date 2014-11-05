@@ -513,18 +513,10 @@ static void pci224_ao_handle_fifo(struct comedi_device *dev,
 {
 	struct pci224_private *devpriv = dev->private;
 	struct comedi_cmd *cmd = &s->async->cmd;
-	unsigned int num_scans;
+	unsigned int num_scans = comedi_nscans_left(s, 0);
 	unsigned int room;
 	unsigned short dacstat;
 	unsigned int i, n;
-
-	/* Determine number of scans available in buffer. */
-	num_scans = comedi_buf_read_n_available(s) / comedi_bytes_per_scan(s);
-	if (cmd->stop_src == TRIG_COUNT) {
-		/* Fixed number of scans. */
-		if (num_scans > devpriv->ao_stop_count)
-			num_scans = devpriv->ao_stop_count;
-	}
 
 	/* Determine how much room is in the FIFO (in samples). */
 	dacstat = inw(dev->iobase + PCI224_DACCON);
