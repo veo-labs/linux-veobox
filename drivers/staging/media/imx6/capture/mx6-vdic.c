@@ -818,7 +818,7 @@ static int vdic_start(struct vdic_priv *priv)
 		(priv->inf.width * dev->sensor_pixfmt->depth) >> 3;
 	priv->in_cs = ipu_mbus_code_to_colorspace(priv->inf.code);
 
-	priv->outf = dev->user_fmt.fmt.pix;
+	priv->outf = dev->format;
 	priv->out_cs = ipu_pixelformat_to_colorspace(priv->outf.pixelformat);
 	priv->out_stride = dev->user_pixfmt->y_depth ?
 		(priv->outf.width * dev->user_pixfmt->y_depth) >> 3 :

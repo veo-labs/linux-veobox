@@ -214,6 +214,8 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 	if (frame) {
 		do_gettimeofday(&cur_time);
 		frame->vb.v4l2_buf.timestamp = cur_time;
+		frame->vb.v4l2_buf.sequence = dev->sequence++;
+		frame->vb.v4l2_buf.field = V4L2_FIELD_NONE;
 		state = dev->signal_locked ?
 			VB2_BUF_STATE_DONE : VB2_BUF_STATE_ERROR;
 		vb2_buffer_done(&frame->vb, state);
@@ -580,6 +582,8 @@ static int encoder_start(struct encoder_priv *priv)
 	if (err)
 		return err;
 
+	dev->sequence = 0;
+
 	list_for_each_entry_safe(frame, tmp, &dev->buf_list, list) {
 		phys[i] = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
@@ -597,7 +601,7 @@ static int encoder_start(struct encoder_priv *priv)
 	priv->inf.height = dev->crop.height;
 	priv->in_cs = ipu_mbus_code_to_colorspace(priv->inf.code);
 
-	priv->outf = dev->user_fmt.fmt.pix;
+	priv->outf = dev->format;
 	priv->out_cs = ipu_pixelformat_to_colorspace(priv->outf.pixelformat);
 
 	priv->buf_num = 0;

@@ -112,6 +112,7 @@ struct mx6cam_dev {
 
 	/* buffer queue used in videobuf2 */
 	struct vb2_queue        buffer_queue;
+	unsigned int sequence;
 	void *alloc_ctx;
 
 	/* v4l2 controls */
@@ -125,7 +126,6 @@ struct mx6cam_dev {
 	enum ipu_rotate_mode     rot_mode;
 
 	/* the format from sensor and from userland */
-	struct v4l2_format        user_fmt;
 	struct v4l2_pix_format	format;
 	struct mx6cam_pixfmt      *user_pixfmt;
 	struct v4l2_mbus_framefmt sensor_fmt;
@@ -184,16 +184,19 @@ struct mx6cam_dev {
 
 	/* streaming buffer queue */
 	struct list_head        buf_list;
-};
-
-struct mx6cam_ctx {
-	struct v4l2_fh          fh;
-	struct mx6cam_dev       *dev;
 
 	/* stream/preview stop and restart handling */
 	struct work_struct      restart_work;
 	struct work_struct      stop_work;
 	struct timer_list       restart_timer;
+
+	/* The following will be replaced by pad->type later */
+	enum v4l2_buf_type	type;
+};
+
+struct mx6cam_ctx {
+	struct v4l2_fh          fh;
+	struct mx6cam_dev       *dev;
 
 	/* is this ctx allowed to do IO */
 	bool                    io_allowed;
