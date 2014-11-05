@@ -490,7 +490,6 @@ struct pci230_private {
 	spinlock_t ai_stop_spinlock;	/* Spin lock for stopping AI command */
 	spinlock_t ao_stop_spinlock;	/* Spin lock for stopping AO command */
 	unsigned long daqio;		/* PCI230's DAQ I/O space */
-	unsigned int ai_scan_count;	/* Number of AI scans remaining */
 	int intr_cpuid;			/* ID of CPU running ISR */
 	unsigned short hwver;		/* Hardware version (for '+' models) */
 	unsigned short adccon;		/* ADCCON register value */
@@ -1725,13 +1724,10 @@ static void pci230_ai_update_fifo_trigger_level(struct comedi_device *dev,
 	unsigned short adccon;
 
 	if (cmd->flags & CMDF_WAKE_EOS)
-		wake = scanlen - s->async->cur_chan;
-	else if (cmd->stop_src != TRIG_COUNT ||
-		 devpriv->ai_scan_count >= PCI230_ADC_FIFOLEVEL_HALFFULL ||
-		 scanlen >= PCI230_ADC_FIFOLEVEL_HALFFULL)
-		wake = PCI230_ADC_FIFOLEVEL_HALFFULL;
+		wake = cmd->scan_end_arg - s->async->cur_chan;
 	else
-		wake = devpriv->ai_scan_count * scanlen - s->async->cur_chan;
+		wake = comedi_nsamples_left(s, PCI230_ADC_FIFOLEVEL_HALFFULL);
+
 	if (wake >= PCI230_ADC_FIFOLEVEL_HALFFULL) {
 		triglev = PCI230_ADC_INT_FIFO_HALF;
 	} else if (wake > 1 && devpriv->hwver > 0) {
@@ -2031,18 +2027,7 @@ static void pci230_handle_ai(struct comedi_device *dev,
 	unsigned short val;
 
 	/* Determine number of samples to read. */
-	if (cmd->stop_src != TRIG_COUNT) {
-		todo = PCI230_ADC_FIFOLEVEL_HALFFULL;
-	} else if (devpriv->ai_scan_count == 0) {
-		todo = 0;
-	} else if (devpriv->ai_scan_count > PCI230_ADC_FIFOLEVEL_HALFFULL ||
-		   scanlen > PCI230_ADC_FIFOLEVEL_HALFFULL) {
-		todo = PCI230_ADC_FIFOLEVEL_HALFFULL;
-	} else {
-		todo = devpriv->ai_scan_count * scanlen - async->cur_chan;
-		if (todo > PCI230_ADC_FIFOLEVEL_HALFFULL)
-			todo = PCI230_ADC_FIFOLEVEL_HALFFULL;
-	}
+	todo = comedi_nsamples_left(s, PCI230_ADC_FIFOLEVEL_HALFFULL);
 	if (todo == 0)
 		return;
 
@@ -2078,19 +2063,20 @@ static void pci230_handle_ai(struct comedi_device *dev,
 		}
 
 		val = pci230_ai_read(dev);
-		comedi_buf_write_samples(s, &val, 1);
+		if (!comedi_buf_write_samples(s, &val, 1))
+			break;
 
 		fifoamount--;
-		if (async->cur_chan == 0)
-			devpriv->ai_scan_count--;
+
+		if (cmd->stop_src == TRIG_COUNT &&
+		    async->scans_done >= cmd->stop_arg) {
+			async->events |= COMEDI_CB_EOA;
+			break;
+		}
 	}
-	if (cmd->stop_src == TRIG_COUNT && devpriv->ai_scan_count == 0) {
-		/* End of acquisition. */
-		events |= COMEDI_CB_EOA;
-	}
-	async->events |= events;
-	if (!(async->events & COMEDI_CB_CANCEL_MASK)) {
-		/* update FIFO interrupt trigger level */
+
+	/* update FIFO interrupt trigger level if still running */
+	if (!(async->events & COMEDI_CB_CANCEL_MASK))
 		pci230_ai_update_fifo_trigger_level(dev, s);
 }
 
@@ -2126,8 +2112,6 @@ static int pci230_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 	/* Claim resources. */
 	if (!pci230_claim_shared(dev, res_mask, OWNER_AICMD))
 		return -EBUSY;
-
-	devpriv->ai_scan_count = cmd->stop_arg;
 
 	/*
 	 * Steps:
