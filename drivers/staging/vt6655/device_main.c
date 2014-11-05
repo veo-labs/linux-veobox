@@ -101,50 +101,7 @@ DEVICE_PARAM(int_works, "Number of packets per interrupt services");
 
 #define RTS_THRESH_DEF     2347
 
-DEVICE_PARAM(RTSThreshold, "RTS threshold");
-
 #define FRAG_THRESH_DEF     2346
-
-#define DATA_RATE_MIN     0
-#define DATA_RATE_MAX     13
-#define DATA_RATE_DEF     13
-/* datarate[] index
-   0: indicate 1 Mbps   0x02
-   1: indicate 2 Mbps   0x04
-   2: indicate 5.5 Mbps 0x0B
-   3: indicate 11 Mbps  0x16
-   4: indicate 6 Mbps   0x0c
-   5: indicate 9 Mbps   0x12
-   6: indicate 12 Mbps  0x18
-   7: indicate 18 Mbps  0x24
-   8: indicate 24 Mbps  0x30
-   9: indicate 36 Mbps  0x48
-   10: indicate 48 Mbps  0x60
-   11: indicate 54 Mbps  0x6c
-   12: indicate 72 Mbps  0x90
-   13: indicate auto rate
-*/
-
-DEVICE_PARAM(ConnectionRate, "Connection data rate");
-
-#define OP_MODE_DEF     0
-
-DEVICE_PARAM(OPMode, "Infrastruct, adhoc, AP mode ");
-
-/* OpMode[] is used for transmit.
-   0: indicate infrastruct mode used
-   1: indicate adhoc mode used
-   2: indicate AP mode used
-*/
-
-/* PSMode[]
-   0: indicate disable power saving mode
-   1: indicate enable power saving mode
-*/
-
-#define PS_MODE_DEF     0
-
-DEVICE_PARAM(PSMode, "Power saving mode");
 
 #define SHORT_RETRY_MIN     0
 #define SHORT_RETRY_MAX     31
@@ -250,9 +207,6 @@ static void device_get_options(struct vnt_private *pDevice)
 	pOpts->nTxDescs[0] = TX_DESC_DEF0;
 	pOpts->nTxDescs[1] = TX_DESC_DEF1;
 	pOpts->int_works = INT_WORKS_DEF;
-	pOpts->rts_thresh = RTS_THRESH_DEF;
-	pOpts->data_rate = DATA_RATE_DEF;
-	pOpts->channel_num = CHANNEL_DEF;
 
 	pOpts->short_retry = SHORT_RETRY_DEF;
 	pOpts->long_retry = LONG_RETRY_DEF;
@@ -270,14 +224,8 @@ device_set_options(struct vnt_private *pDevice)
 	ether_addr_copy(pDevice->abySNAP_RFC1042, abySNAP_RFC1042);
 	ether_addr_copy(pDevice->abySNAP_Bridgetunnel, abySNAP_Bridgetunnel);
 
-	pDevice->uChannel = pDevice->sOpts.channel_num;
-	pDevice->wRTSThreshold = pDevice->sOpts.rts_thresh;
 	pDevice->byShortRetryLimit = pDevice->sOpts.short_retry;
 	pDevice->byLongRetryLimit = pDevice->sOpts.long_retry;
-	pDevice->wMaxTransmitMSDULifetime = DEFAULT_MSDU_LIFETIME;
-	pDevice->byShortPreamble = (pDevice->sOpts.flags & DEVICE_FLAGS_PREAMBLE_TYPE) ? 1 : 0;
-	pDevice->byOpMode = (pDevice->sOpts.flags & DEVICE_FLAGS_OP_MODE) ? 1 : 0;
-	pDevice->b11hEnable = (pDevice->sOpts.flags & DEVICE_FLAGS_80211h_MODE) ? 1 : 0;
 	pDevice->bDiversityRegCtlON = (pDevice->sOpts.flags & DEVICE_FLAGS_DiversityANT) ? 1 : 0;
 	pDevice->byBBType = pDevice->sOpts.bbp_type;
 	pDevice->byPacketType = pDevice->byBBType;
