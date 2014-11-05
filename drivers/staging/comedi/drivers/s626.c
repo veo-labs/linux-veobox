@@ -1498,13 +1498,8 @@ static bool s626_handle_eos_interrupt(struct comedi_device *dev)
 	if (cmd->stop_src == TRIG_COUNT && async->scans_done >= cmd->stop_arg)
 		async->events |= COMEDI_CB_EOA;
 
-	if (cmd->stop_src == TRIG_COUNT) {
-		devpriv->ai_sample_count--;
-		if (devpriv->ai_sample_count <= 0) {
-			devpriv->ai_cmd_running = 0;
-			async->events |= COMEDI_CB_EOA;
-		}
-	}
+	if (async->events & COMEDI_CB_CANCEL_MASK)
+		devpriv->ai_cmd_running = 0;
 
 	if (devpriv->ai_cmd_running && cmd->scan_begin_src == TRIG_EXT)
 		s626_dio_set_irq(dev, cmd->scan_begin_arg);
