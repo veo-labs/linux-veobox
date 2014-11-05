@@ -1299,19 +1299,6 @@ static void snb_gt_irq_handler(struct drm_device *dev,
 		ivybridge_parity_error_irq_handler(dev, gt_iir);
 }
 
-static void gen8_rps_irq_handler(struct drm_i915_private *dev_priv, u32 pm_iir)
-{
-	if ((pm_iir & dev_priv->pm_rps_events) == 0)
-		return;
-
-	spin_lock(&dev_priv->irq_lock);
-	dev_priv->rps.pm_iir |= pm_iir & dev_priv->pm_rps_events;
-	gen6_disable_pm_irq(dev_priv, pm_iir & dev_priv->pm_rps_events);
-	spin_unlock(&dev_priv->irq_lock);
-
-	queue_work(dev_priv->wq, &dev_priv->rps.work);
-}
-
 static irqreturn_t gen8_gt_irq_handler(struct drm_device *dev,
 				       struct drm_i915_private *dev_priv,
 				       u32 master_ctl)
