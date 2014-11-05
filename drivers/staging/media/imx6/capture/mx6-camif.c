@@ -603,8 +603,8 @@ static int set_stream(struct mx6cam_ctx *ctx, bool on)
 		 * the encoder now. Otherwise the encoding will start once
 		 * two frames have been queued.
 		 */
-		if (!list_empty(&ctx->ready_q) &&
-		    !list_is_singular(&ctx->ready_q))
+		if (!list_empty(&dev->buf_list) &&
+		    !list_is_singular(&dev->buf_list))
 			ret = start_encoder(dev);
 
 		if (dev->preview_on)
@@ -1714,91 +1714,69 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
  * Queue operations
  */
 
+/*
+ * Setup the constraints of the queue
+ */
 static int mx6cam_queue_setup(struct vb2_queue *vq,
 			      const struct v4l2_format *fmt,
 			      unsigned int *nbuffers, unsigned int *nplanes,
 			      unsigned int sizes[], void *alloc_ctxs[])
 {
 	struct mx6cam_dev *dev = vb2_get_drv_priv(vq);
-	unsigned int count = *nbuffers;
 
 	if (vq->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	*nplanes = 1;
-	*nbuffers = count;
-	sizes[0] = dev->format.sizeimage;
+	/* Check sufficient buffer numbers have been allocated
+	 * 3 is a good minimum
+	 */
+	if (vq->num_buffers + *nbuffers < 3)
+		*nbuffers = 3 - vq->num_buffers;
 
+	if (fmt && fmt->fmt.pix.sizeimage < dev->format.sizeimage)
+		return -EINVAL;
+
+	*nplanes = 1;
+	sizes[0] = fmt ? fmt->fmt.pix.sizeimage : dev->format.sizeimage;
 	alloc_ctxs[0] = dev->alloc_ctx;
 
-	dprintk(dev, "get %d buffer(s) of size %d each.\n", count, dev->format.sizeimage);
-
+	dprintk(dev, "get %d buffer(s) of size %d each.\n",
+			*nbuffers, sizes[0]);
 	return 0;
 }
 
-static int mx6cam_buf_init(struct vb2_buffer *vb)
-{
-	struct mx6cam_buffer *buf = to_mx6cam_vb(vb);
-
-	INIT_LIST_HEAD(&buf->list);
-	return 0;
-}
-
+/*
+ * Prepare the buffer for queueing to the DMA engine
+ */
 static int mx6cam_buf_prepare(struct vb2_buffer *vb)
 {
-	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
-	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_dev *dev = vb2_get_drv_priv(vb->vb2_queue);
+	unsigned long size = dev->format.sizeimage;
 
-	if (vb2_plane_size(vb, 0) < dev->user_fmt.fmt.pix.sizeimage) {
-		v4l2_err(&dev->v4l2_dev,
-			 "data will not fit into plane (%lu < %lu)\n",
-			 vb2_plane_size(vb, 0),
-			 (long)dev->user_fmt.fmt.pix.sizeimage);
+	if (vb2_plane_size(vb, 0) < size) {
+		dprintk(dev, "buffer too small (%lu < %lu)\n",
+				vb2_plane_size(vb, 0), size);
 		return -EINVAL;
 	}
 
-	vb2_set_plane_payload(vb, 0, dev->user_fmt.fmt.pix.sizeimage);
+	vb2_set_plane_payload(vb, 0, size);
 
 	return 0;
 }
 
+/*
+ * Queue this buffer to the DMA engine
+ */
 static void mx6cam_buf_queue(struct vb2_buffer *vb)
 {
-	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
-	struct mx6cam_dev *dev = ctx->dev;
+	struct mx6cam_dev *dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct mx6cam_buffer *buf = to_mx6cam_vb(vb);
 	unsigned long flags;
-	bool kickstart;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
-
-	list_add_tail(&buf->list, &ctx->ready_q);
-
-	/* kickstart DMA chain if we have two frames in active q */
-	kickstart = (vb2_is_streaming(vb->vb2_queue) &&
-		     !(list_empty(&ctx->ready_q) ||
-		       list_is_singular(&ctx->ready_q)));
-
+	list_add_tail(&buf->list, &dev->buf_list);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
-	if (kickstart)
-		start_encoder(dev);
-}
-
-static void mx6cam_lock(struct vb2_queue *vq)
-{
-	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vq);
-	struct mx6cam_dev *dev = ctx->dev;
-
-	mutex_lock(&dev->mutex);
-}
-
-static void mx6cam_unlock(struct vb2_queue *vq)
-{
-	struct mx6cam_ctx *ctx = vb2_get_drv_priv(vq);
-	struct mx6cam_dev *dev = ctx->dev;
-
-	mutex_unlock(&dev->mutex);
 }
 
 static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
@@ -1826,8 +1804,8 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 	spin_lock_irqsave(&dev->irqlock, flags);
 
 	/* release all active buffers */
-	while (!list_empty(&ctx->ready_q)) {
-		frame = list_entry(ctx->ready_q.next,
+	while (!list_empty(&dev->buf_list)) {
+		frame = list_entry(dev->buf_list.next,
 				   struct mx6cam_buffer, list);
 		list_del(&frame->list);
 		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
@@ -1838,11 +1816,10 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 
 static struct vb2_ops mx6cam_qops = {
 	.queue_setup	 = mx6cam_queue_setup,
-	.buf_init        = mx6cam_buf_init,
 	.buf_prepare	 = mx6cam_buf_prepare,
 	.buf_queue	 = mx6cam_buf_queue,
-	.wait_prepare	 = mx6cam_unlock,
-	.wait_finish	 = mx6cam_lock,
+	.wait_prepare	 = vb2_ops_wait_prepare,
+	.wait_finish	 = vb2_ops_wait_finish,
 	.start_streaming = mx6cam_start_streaming,
 	.stop_streaming  = mx6cam_stop_streaming,
 };
@@ -2418,6 +2395,8 @@ static int mx6cam_probe(struct platform_device *pdev)
 		v4l2_err(&dev->v4l2_dev, "Failed to init vb2 queue: %d\n", ret);
 		goto cleanup_ctx;
 	}
+
+	INIT_LIST_HEAD(&dev->buf_list);
 
 	/* init our controls */
 	ret = mx6cam_init_controls(dev);
