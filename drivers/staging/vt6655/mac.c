@@ -55,16 +55,6 @@
 #include "tmacro.h"
 #include "mac.h"
 
-/*---------------------  Static Classes  ----------------------------*/
-
-/*---------------------  Static Variables  --------------------------*/
-
-/*---------------------  Static Functions  --------------------------*/
-
-/*---------------------  Export Variables  --------------------------*/
-
-/*---------------------  Export Functions  --------------------------*/
-
 /*
  * Description:
  *      Read All MAC Registers to buffer
