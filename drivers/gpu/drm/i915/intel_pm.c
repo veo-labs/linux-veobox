@@ -4445,16 +4445,6 @@ static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
 		if (!crtc->active)
 			continue;
 
-static u32 gen6_pm_iir(struct drm_i915_private *dev_priv)
-{
-	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IIR(2) : GEN6_PMIIR;
-}
-
-static u32 gen6_pm_ier(struct drm_i915_private *dev_priv)
-{
-	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IER(2) : GEN6_PMIER;
-}
-
 static void gen9_disable_rps(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -4462,34 +4452,7 @@ static void gen9_disable_rps(struct drm_device *dev)
 	I915_WRITE(GEN6_RC_CONTROL, 0);
 }
 
-static void gen6_disable_rps_interrupts(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
-	I915_WRITE(GEN6_PMINTRMSK, INTEL_INFO(dev_priv)->gen >= 8 ?
-		   ~GEN8_PMINTR_REDIRECT_TO_NON_DISP : ~0);
-	I915_WRITE(gen6_pm_ier(dev_priv), I915_READ(gen6_pm_ier(dev_priv)) &
-				~dev_priv->pm_rps_events);
-	/* Complete PM interrupt masking here doesn't race with the rps work
-	 * item again unmasking PM interrupts because that is using a different
-	 * register (PMIMR) to mask PM interrupts. The only risk is in leaving
-	 * stale bits in PMIIR and PMIMR which gen6_enable_rps will clean up. */
-
-		/*
-		 * At this point, only the pipes more space than before are
-		 * left to re-allocate.
-		 */
-		if (reallocated[pipe])
-			continue;
-
-	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
-}
-
-static bool skl_update_pipe_wm(struct drm_crtc *crtc,
-			       struct skl_pipe_wm_parameters *params,
-			       struct intel_wm_config *config,
-			       struct skl_ddb_allocation *ddb, /* out */
-			       struct skl_pipe_wm *pipe_wm /* out */)
+static void gen6_disable_rps(struct drm_device *dev)
 {
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 
@@ -4701,20 +4664,7 @@ static void skl_pipe_wm_active_state(uint32_t val,
 	}
 }
 
-static void gen6_enable_rps_interrupts(struct drm_device *dev)
-{
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct skl_ddb_allocation *ddb = &dev_priv->wm.skl_hw.ddb;
-	struct drm_crtc *crtc;
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	WARN_ON(dev_priv->rps.pm_iir);
-	gen6_enable_pm_irq(dev_priv, dev_priv->pm_rps_events);
-	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
-	spin_unlock_irq(&dev_priv->irq_lock);
-}
-
-static void ilk_pipe_wm_get_hw_state(struct drm_crtc *crtc)
+static void parse_rp_state_cap(struct drm_i915_private *dev_priv, u32 rp_state_cap)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
