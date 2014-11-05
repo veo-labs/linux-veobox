@@ -407,13 +407,13 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 {
 	void __user *argp = (void __user *)argument;
 	struct ft1000_info *info;
-	struct ft1000_usb *ft1000dev;
-	int result = 0;
-	int cmd;
-	int i;
-	u16 tempword;
-	unsigned long flags;
-	struct timeval tv;
+    struct ft1000_usb *ft1000dev;
+    int result=0;
+    int cmd;
+    int i;
+    u16 tempword;
+    unsigned long flags;
+	time64_t time;
 	struct IOCTL_GET_VER get_ver_data;
 	struct IOCTL_GET_DSP_STAT get_stat_data;
 	u8 ConnectionMsg[] = {0x00, 0x44, 0x10, 0x20, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x93, 0x64,
@@ -507,22 +507,22 @@ static long ft1000_ioctl(struct file *file, unsigned int command,
 		}
 
 
-		get_stat_data.nTxPkts = info->stats.tx_packets;
-		get_stat_data.nRxPkts = info->stats.rx_packets;
-		get_stat_data.nTxBytes = info->stats.tx_bytes;
-		get_stat_data.nRxBytes = info->stats.rx_bytes;
-		do_gettimeofday(&tv);
-		get_stat_data.ConTm = (u32)(tv.tv_sec - info->ConTm);
-		pr_debug("Connection Time = %d\n", (int)get_stat_data.ConTm);
-		if (copy_to_user(argp, &get_stat_data, sizeof(get_stat_data))) {
-			pr_debug("copy fault occurred\n");
-			result = -EFAULT;
-			break;
-		}
-		pr_debug("GET_DSP_STAT succeed\n");
-		break;
-	case IOCTL_SET_DPRAM_CMD:
-	{
+        get_stat_data.nTxPkts = info->stats.tx_packets;
+        get_stat_data.nRxPkts = info->stats.rx_packets;
+        get_stat_data.nTxBytes = info->stats.tx_bytes;
+        get_stat_data.nRxBytes = info->stats.rx_bytes;
+	time = get_seconds();
+	get_stat_data.ConTm = time - info->ConTm;
+        DEBUG("Connection Time = %d\n", (int)get_stat_data.ConTm);
+        if (copy_to_user(argp, &get_stat_data, sizeof(get_stat_data))) {
+            DEBUG("FT1000:ft1000_ioctl: copy fault occurred\n");
+            result = -EFAULT;
+            break;
+        }
+        DEBUG("ft1000_chioctl: GET_DSP_STAT succeed\n");
+        break;
+    case IOCTL_SET_DPRAM_CMD:
+        {
 		struct IOCTL_DPRAM_BLK *dpram_data = NULL;
 		/* struct IOCTL_DPRAM_COMMAND dpram_command; */
 		u16 qtype;
