@@ -4445,18 +4445,15 @@ static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
 		if (!crtc->active)
 			continue;
 
-		pipe = crtc->pipe;
+static u32 gen6_pm_iir(struct drm_i915_private *dev_priv)
+{
+	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IIR(2) : GEN6_PMIIR;
+}
 
-		if (reallocated[pipe])
-			continue;
-
-		if (skl_ddb_entry_size(&new_ddb->pipe[pipe]) <
-		    skl_ddb_entry_size(&cur_ddb->pipe[pipe])) {
-			skl_wm_flush_pipe(dev_priv, pipe, 2);
-			intel_wait_for_vblank(dev, pipe);
-			reallocated[pipe] = true;
-		}
-	}
+static u32 gen6_pm_ier(struct drm_i915_private *dev_priv)
+{
+	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IER(2) : GEN6_PMIER;
+}
 
 static void gen9_disable_rps(struct drm_device *dev)
 {
@@ -4469,7 +4466,14 @@ static void gen6_disable_rps_interrupts(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-		pipe = crtc->pipe;
+	I915_WRITE(GEN6_PMINTRMSK, INTEL_INFO(dev_priv)->gen >= 8 ?
+		   ~GEN8_PMINTR_REDIRECT_TO_NON_DISP : ~0);
+	I915_WRITE(gen6_pm_ier(dev_priv), I915_READ(gen6_pm_ier(dev_priv)) &
+				~dev_priv->pm_rps_events);
+	/* Complete PM interrupt masking here doesn't race with the rps work
+	 * item again unmasking PM interrupts because that is using a different
+	 * register (PMIMR) to mask PM interrupts. The only risk is in leaving
+	 * stale bits in PMIIR and PMIMR which gen6_enable_rps will clean up. */
 
 		/*
 		 * At this point, only the pipes more space than before are
@@ -4478,8 +4482,7 @@ static void gen6_disable_rps_interrupts(struct drm_device *dev)
 		if (reallocated[pipe])
 			continue;
 
-		skl_wm_flush_pipe(dev_priv, pipe, 3);
-	}
+	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
 }
 
 static bool skl_update_pipe_wm(struct drm_crtc *crtc,
@@ -4494,11 +4497,7 @@ static bool skl_update_pipe_wm(struct drm_crtc *crtc,
 	skl_allocate_pipe_ddb(crtc, config, params, ddb);
 	skl_compute_pipe_wm(crtc, ddb, params, pipe_wm);
 
-	if (!memcmp(&intel_crtc->wm.skl_active, pipe_wm, sizeof(*pipe_wm)))
-		return false;
-
-	intel_crtc->wm.skl_active = *pipe_wm;
-	return true;
+	gen6_disable_rps_interrupts(dev);
 }
 
 static void skl_update_other_pipe_wm(struct drm_device *dev,
@@ -4509,14 +4508,8 @@ static void skl_update_other_pipe_wm(struct drm_device *dev,
 	struct intel_crtc *intel_crtc;
 	struct intel_crtc *this_crtc = to_intel_crtc(crtc);
 
-	/*
-	 * If the WM update hasn't changed the allocation for this_crtc (the
-	 * crtc we are currently computing the new WM values for), other
-	 * enabled crtcs will keep the same allocation and we don't need to
-	 * recompute anything for them.
-	 */
-	if (!skl_ddb_allocation_changed(&r->ddb, this_crtc))
-		return;
+	gen6_disable_rps_interrupts(dev);
+}
 
 	/*
 	 * Otherwise, because of this_crtc being freshly enabled/disabled, the
@@ -4708,59 +4701,17 @@ static void skl_pipe_wm_active_state(uint32_t val,
 	}
 }
 
-static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
-{
-	struct drm_device *dev = crtc->dev;
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	struct skl_wm_values *hw = &dev_priv->wm.skl_hw;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct skl_pipe_wm *active = &intel_crtc->wm.skl_active;
-	enum pipe pipe = intel_crtc->pipe;
-	int level, i, max_level;
-	uint32_t temp;
-
-		if (HAS_RC6p(dev))
-			mask = INTEL_RC6_ENABLE | INTEL_RC6p_ENABLE |
-			       INTEL_RC6pp_ENABLE;
-		else
-			mask = INTEL_RC6_ENABLE;
-
-	hw->wm_linetime[pipe] = I915_READ(PIPE_WM_LINETIME(pipe));
-
-	for (level = 0; level <= max_level; level++) {
-		for (i = 0; i < intel_num_planes(intel_crtc); i++)
-			hw->plane[pipe][i][level] =
-					I915_READ(PLANE_WM(pipe, i, level));
-		hw->cursor[pipe][level] = I915_READ(CUR_WM(pipe, level));
-	}
-
-	for (i = 0; i < intel_num_planes(intel_crtc); i++)
-		hw->plane_trans[pipe][i] = I915_READ(PLANE_WM_TRANS(pipe, i));
-	hw->cursor_trans[pipe] = I915_READ(CUR_WM_TRANS(pipe));
-
-	if (!intel_crtc_active(crtc))
-		return;
-
-	hw->dirty[pipe] = true;
-
-	active->linetime = hw->wm_linetime[pipe];
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	WARN_ON(dev_priv->rps.pm_iir);
-	gen6_enable_pm_irq(dev_priv, dev_priv->pm_rps_events);
-	I915_WRITE(GEN8_GT_IIR(2), dev_priv->pm_rps_events);
-	spin_unlock_irq(&dev_priv->irq_lock);
-}
-
-void skl_wm_get_hw_state(struct drm_device *dev)
+static void gen6_enable_rps_interrupts(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct skl_ddb_allocation *ddb = &dev_priv->wm.skl_hw.ddb;
 	struct drm_crtc *crtc;
 
-	skl_ddb_get_hw_state(dev_priv, ddb);
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		skl_pipe_wm_get_hw_state(crtc);
+	spin_lock_irq(&dev_priv->irq_lock);
+	WARN_ON(dev_priv->rps.pm_iir);
+	gen6_enable_pm_irq(dev_priv, dev_priv->pm_rps_events);
+	I915_WRITE(gen6_pm_iir(dev_priv), dev_priv->pm_rps_events);
+	spin_unlock_irq(&dev_priv->irq_lock);
 }
 
 static void ilk_pipe_wm_get_hw_state(struct drm_crtc *crtc)
@@ -4923,14 +4874,7 @@ void intel_update_watermarks(struct drm_crtc *crtc)
 		dev_priv->display.update_wm(crtc);
 }
 
-void intel_update_sprite_watermarks(struct drm_plane *plane,
-				    struct drm_crtc *crtc,
-				    uint32_t sprite_width,
-				    uint32_t sprite_height,
-				    int pixel_size,
-				    bool enabled, bool scaled)
-{
-	struct drm_i915_private *dev_priv = plane->dev->dev_private;
+	gen6_enable_rps_interrupts(dev);
 
 	if (dev_priv->display.update_sprite_wm)
 		dev_priv->display.update_sprite_wm(plane, crtc,
@@ -5564,18 +5508,7 @@ static void gen9_enable_rc6(struct drm_device *dev)
 	I915_WRITE(GEN6_RC_SLEEP, 0);
 	I915_WRITE(GEN6_RC6_THRESHOLD, 37500); /* 37.5/125ms per EI */
 
-	/* 2c: Program Coarse Power Gating Policies. */
-	I915_WRITE(GEN9_MEDIA_PG_IDLE_HYSTERESIS, 25);
-	I915_WRITE(GEN9_RENDER_PG_IDLE_HYSTERESIS, 25);
-
-	/* 3a: Enable RC6 */
-	if (intel_enable_rc6(dev) & INTEL_RC6_ENABLE)
-		rc6_mask = GEN6_RC_CTL_RC6_ENABLE;
-	DRM_INFO("RC6 %s\n", (rc6_mask & GEN6_RC_CTL_RC6_ENABLE) ?
-			"on" : "off");
-	I915_WRITE(GEN6_RC_CONTROL, GEN6_RC_CTL_HW_ENABLE |
-				   GEN6_RC_CTL_EI_MODE(1) |
-				   rc6_mask);
+	gen6_enable_rps_interrupts(dev);
 
 	/* 3b: Enable Coarse Power Gating only when RC6 is enabled */
 	I915_WRITE(GEN9_PG_ENABLE, (rc6_mask & GEN6_RC_CTL_RC6_ENABLE) ? 3 : 0);
