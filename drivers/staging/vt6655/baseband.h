@@ -80,8 +80,8 @@ void vnt_get_phy_field(struct vnt_private *, u32 frame_length,
 bool BBbReadEmbedded(struct vnt_private *, unsigned char byBBAddr, unsigned char *pbyData);
 bool BBbWriteEmbedded(struct vnt_private *, unsigned char byBBAddr, unsigned char byData);
 
-void BBvSetShortSlotTime(struct vnt_private *);
-void BBvSetVGAGainOffset(struct vnt_private *, unsigned char byData);
+void BBvSetShortSlotTime(struct vnt_private *pDevice);
+void BBvSetVGAGainOffset(struct vnt_private *pDevice, unsigned char byData);
 
 /* VT3253 Baseband */
 bool BBbVT3253Init(struct vnt_private *);
