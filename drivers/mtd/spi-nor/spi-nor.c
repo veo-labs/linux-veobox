@@ -234,7 +234,7 @@ static int spi_nor_ready(struct spi_nor *nor)
 static int spi_nor_wait_till_ready(struct spi_nor *nor)
 {
 	unsigned long deadline;
-	int ret;
+	int timeout = 0, ret;
 
 	deadline = jiffies + MAX_READY_WAIT_JIFFIES;
 
@@ -251,12 +251,7 @@ static int spi_nor_wait_till_ready(struct spi_nor *nor)
 		cond_resched();
 	}
 
-		ret = spi_nor_ready(nor);
-		if (ret < 0)
-			return ret;
-		if (ret)
-			return 0;
-	} while (!time_after_eq(jiffies, deadline));
+	dev_err(nor->dev, "flash operation timed out\n");
 
 	return -ETIMEDOUT;
 }
