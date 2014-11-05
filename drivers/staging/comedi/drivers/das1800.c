@@ -475,15 +475,9 @@ static void das1800_handle_fifo_half_full(struct comedi_device *dev,
 	struct das1800_private *devpriv = dev->private;
 	unsigned int nsamples = comedi_nsamples_left(s, FIFO_SIZE / 2);
 
-	numPoints = FIFO_SIZE / 2;
-	/* if we only need some of the points */
-	if (cmd->stop_src == TRIG_COUNT && devpriv->count < numPoints)
-		numPoints = devpriv->count;
-	insw(dev->iobase + DAS1800_FIFO, devpriv->ai_buf0, numPoints);
-	munge_data(dev, devpriv->ai_buf0, numPoints);
-	comedi_buf_write_samples(s, devpriv->ai_buf0, numPoints);
-	if (cmd->stop_src == TRIG_COUNT)
-		devpriv->count -= numPoints;
+	insw(dev->iobase + DAS1800_FIFO, devpriv->ai_buf0, nsamples);
+	munge_data(dev, devpriv->ai_buf0, nsamples);
+	comedi_buf_write_samples(s, devpriv->ai_buf0, nsamples);
 }
 
 static void das1800_handle_fifo_not_empty(struct comedi_device *dev,
@@ -502,8 +496,10 @@ static void das1800_handle_fifo_not_empty(struct comedi_device *dev,
 			;
 		dpnt = munge_bipolar_sample(dev, dpnt);
 		comedi_buf_write_samples(s, &dpnt, 1);
-		if (cmd->stop_src == TRIG_COUNT)
-			devpriv->count--;
+
+		if (cmd->stop_src == TRIG_COUNT &&
+		    s->async->scans_done >= cmd->stop_arg)
+			break;
 	}
 }
 
@@ -517,17 +513,12 @@ static void das1800_flush_dma_channel(struct comedi_device *dev,
 	unsigned int nsamples;
 
 	/*  figure out how many points to read */
-	num_bytes = devpriv->dma_transfer_size - get_dma_residue(channel);
-	num_samples = comedi_bytes_to_samples(s, num_bytes);
+	nbytes = devpriv->dma_transfer_size - get_dma_residue(channel);
+	nsamples = comedi_bytes_to_samples(s, nbytes);
+	nsamples = comedi_nsamples_left(s, nsamples);
 
-	/* if we only need some of the points */
-	if (cmd->stop_src == TRIG_COUNT && devpriv->count < num_samples)
-		num_samples = devpriv->count;
-
-	munge_data(dev, buffer, num_samples);
-	comedi_buf_write_samples(s, buffer, num_samples);
-	if (cmd->stop_src == TRIG_COUNT)
-		devpriv->count -= num_samples;
+	munge_data(dev, buffer, nsamples);
+	comedi_buf_write_samples(s, buffer, nsamples);
 }
 
 /* flushes remaining data from board when external trigger has stopped acquisition
