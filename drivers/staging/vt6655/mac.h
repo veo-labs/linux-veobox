@@ -890,8 +890,6 @@ do {								\
 #define MACvSetRFLE_LatchBase(dwIoBase)                                 \
 	MACvWordRegBitsOn(dwIoBase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_RFLEOPT)
 
-void MACvReadAllRegs(void __iomem *dwIoBase, unsigned char *pbyMacRegs);
-
 bool MACbIsRegBitsOn(void __iomem *dwIoBase, unsigned char byRegOfs, unsigned char byTestBits);
 bool MACbIsRegBitsOff(void __iomem *dwIoBase, unsigned char byRegOfs, unsigned char byTestBits);
 
@@ -904,6 +902,8 @@ void MACvGetLongRetryLimit(void __iomem *dwIoBase,
 			   unsigned char *pbyRetryLimit);
 
 void MACvSetLoopbackMode(void __iomem *dwIoBase, unsigned char byLoopbackMode);
+
+void MACvSetPacketFilter(void __iomem *dwIoBase, unsigned short wFilterType);
 
 void MACvSaveContext(void __iomem *dwIoBase, unsigned char *pbyCxtBuf);
 void MACvRestoreContext(void __iomem *dwIoBase, unsigned char *pbyCxtBuf);
