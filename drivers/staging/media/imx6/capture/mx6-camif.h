@@ -181,14 +181,14 @@ struct mx6cam_dev {
 	struct mx6cam_ctx       *io_ctx;
 
 	struct ipu_soc          *ipu;
+
+	/* streaming buffer queue */
+	struct list_head        buf_list;
 };
 
 struct mx6cam_ctx {
 	struct v4l2_fh          fh;
 	struct mx6cam_dev       *dev;
-
-	/* streaming buffer queue */
-	struct list_head        ready_q;
 
 	/* stream/preview stop and restart handling */
 	struct work_struct      restart_work;

@@ -230,8 +230,8 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 	mod_timer(&priv->eof_timeout_timer,
 		  jiffies + msecs_to_jiffies(MX6CAM_EOF_TIMEOUT));
 
-	if (!list_empty(&ctx->ready_q)) {
-		frame = list_entry(ctx->ready_q.next,
+	if (!list_empty(&dev->buf_list)) {
+		frame = list_entry(dev->buf_list.next,
 				   struct mx6cam_buffer, list);
 		phys = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
@@ -580,7 +580,7 @@ static int encoder_start(struct encoder_priv *priv)
 	if (err)
 		return err;
 
-	list_for_each_entry_safe(frame, tmp, &ctx->ready_q, list) {
+	list_for_each_entry_safe(frame, tmp, &dev->buf_list, list) {
 		phys[i] = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
 		priv->active_frame[i++] = frame;
