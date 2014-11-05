@@ -1699,6 +1699,46 @@ static const unsigned short awcFrameTime[MAX_RATE] = {
 		10, 20, 55, 110, 24, 36, 48, 72, 96, 144, 192, 216
 };
 
+/*---------------------  Static Functions  --------------------------*/
+
+static
+unsigned long
+s_ulGetRatio(struct vnt_private *priv);
+
+static
+void
+s_vChangeAntenna(
+	struct vnt_private *priv
+);
+
+static
+void
+s_vChangeAntenna(
+	struct vnt_private *priv
+)
+{
+	if (priv->dwRxAntennaSel == 0) {
+		priv->dwRxAntennaSel = 1;
+		if (priv->bTxRxAntInv == true)
+			BBvSetRxAntennaMode(priv->PortOffset, ANT_A);
+		else
+			BBvSetRxAntennaMode(priv->PortOffset, ANT_B);
+	} else {
+		priv->dwRxAntennaSel = 0;
+		if (priv->bTxRxAntInv == true)
+			BBvSetRxAntennaMode(priv->PortOffset, ANT_B);
+		else
+			BBvSetRxAntennaMode(priv->PortOffset, ANT_A);
+	}
+	if (priv->dwTxAntennaSel == 0) {
+		priv->dwTxAntennaSel = 1;
+		BBvSetTxAntennaMode(priv->PortOffset, ANT_B);
+	} else {
+		priv->dwTxAntennaSel = 0;
+		BBvSetTxAntennaMode(priv->PortOffset, ANT_A);
+	}
+}
+
 /*---------------------  Export Variables  --------------------------*/
 /*
  * Description: Calculate data frame transmitting time
@@ -2046,7 +2086,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AIROHA2230[ii][0], byVT3253B0_AIROHA2230[ii][1]);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2066,14 +2106,14 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		VNSvOutPortB(dwIoBase + MAC_REG_ITRTMSET, 0x23);
 		MACvRegBitsOn(dwIoBase, MAC_REG_PAPEDELAY, BIT(0));
 
-		pDevice->abyBBVGA[0] = 0x14;
-		pDevice->abyBBVGA[1] = 0x0A;
-		pDevice->abyBBVGA[2] = 0x0;
-		pDevice->abyBBVGA[3] = 0x0;
-		pDevice->ldBmThreshold[0] = -60;
-		pDevice->ldBmThreshold[1] = -50;
-		pDevice->ldBmThreshold[2] = 0;
-		pDevice->ldBmThreshold[3] = 0;
+		priv->abyBBVGA[0] = 0x14;
+		priv->abyBBVGA[1] = 0x0A;
+		priv->abyBBVGA[2] = 0x0;
+		priv->abyBBVGA[3] = 0x0;
+		priv->ldBmThreshold[0] = -60;
+		priv->ldBmThreshold[1] = -50;
+		priv->ldBmThreshold[2] = 0;
+		priv->ldBmThreshold[3] = 0;
 	} else if (byRFType == RF_UW2452) {
 		for (ii = 0; ii < CB_VT3253B0_INIT_FOR_UW2451; ii++)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_UW2451[ii][0], byVT3253B0_UW2451[ii][1]);
@@ -2097,7 +2137,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		bResult &= BBbWriteEmbedded(priv, 0xb0, 0x58);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x14;
 		priv->abyBBVGA[1] = 0x0A;
@@ -2114,7 +2154,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AIROHA2230[ii][0], byVT3253B0_AIROHA2230[ii][1]);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2142,7 +2182,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		/* }} */
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2185,7 +2225,7 @@ BBvSetShortSlotTime(struct vnt_private *priv)
 	unsigned char byBBRxConf = 0;
 	unsigned char byBBVGA = 0;
 
-	BBbReadEmbedded(priv, 0x0A, &byBBRxConf); /* CR10 */
+	BBbReadEmbedded(priv->PortOffset, 0x0A, &byBBRxConf); /* CR10 */
 
 	if (priv->bShortSlotTime)
 		byBBRxConf &= 0xDF; /* 1101 1111 */
@@ -2193,20 +2233,20 @@ BBvSetShortSlotTime(struct vnt_private *priv)
 		byBBRxConf |= 0x20; /* 0010 0000 */
 
 	/* patch for 3253B0 Baseband with Cardbus module */
-	BBbReadEmbedded(priv, 0xE7, &byBBVGA);
+	BBbReadEmbedded(priv->PortOffset, 0xE7, &byBBVGA);
 	if (byBBVGA == priv->abyBBVGA[0])
 		byBBRxConf |= 0x20; /* 0010 0000 */
 
-	BBbWriteEmbedded(priv, 0x0A, byBBRxConf); /* CR10 */
+	BBbWriteEmbedded(priv->PortOffset, 0x0A, byBBRxConf); /* CR10 */
 }
 
 void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 {
 	unsigned char byBBRxConf = 0;
 
-	BBbWriteEmbedded(priv, 0xE7, byData);
+	BBbWriteEmbedded(priv->PortOffset, 0xE7, byData);
 
-	BBbReadEmbedded(priv, 0x0A, &byBBRxConf); /* CR10 */
+	BBbReadEmbedded(priv->PortOffset, 0x0A, &byBBRxConf); /* CR10 */
 	/* patch for 3253B0 Baseband with Cardbus module */
 	if (byData == priv->abyBBVGA[0])
 		byBBRxConf |= 0x20; /* 0010 0000 */
@@ -2215,7 +2255,7 @@ void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 	else
 		byBBRxConf |= 0x20; /* 0010 0000 */
 	priv->byBBVGACurrent = byData;
-	BBbWriteEmbedded(priv, 0x0A, byBBRxConf); /* CR10 */
+	BBbWriteEmbedded(priv->PortOffset, 0x0A, byBBRxConf); /* CR10 */
 }
 
 /*
@@ -2587,12 +2627,12 @@ TimerSQ3CallBack(
 	unsigned long data
 )
 {
-	struct vnt_private *pDevice = (struct vnt_private *)data;
+	struct vnt_private *priv = (struct vnt_private *)data;
 	unsigned long flags;
 
 	pr_debug("TimerSQ3CallBack...\n");
 
-	spin_lock_irqsave(&pDevice->lock, flags);
+	spin_lock_irqsave(&priv->lock, flags);
 
 	pr_debug("3.[%08x][%08x], %d\n",
 		 (int)priv->ulRatio_State0, (int)priv->ulRatio_State1,
@@ -2607,7 +2647,7 @@ TimerSQ3CallBack(
 	add_timer(&priv->TimerSQ3Tmax3);
 	add_timer(&priv->TimerSQ3Tmax2);
 
-	spin_unlock_irqrestore(&pDevice->lock, flags);
+	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /*+
@@ -2633,19 +2673,19 @@ TimerState1CallBack(
 	unsigned long data
 )
 {
-	struct vnt_private *pDevice = (struct vnt_private *)data;
+	struct vnt_private *priv = (struct vnt_private *)data;
 	unsigned long flags;
 
 	pr_debug("TimerState1CallBack...\n");
 
-	spin_lock_irqsave(&pDevice->lock, flags);
+	spin_lock_irqsave(&priv->lock, flags);
 
-	if (pDevice->uDiversityCnt < pDevice->ulDiversityMValue/100) {
-		s_vChangeAntenna(pDevice);
-		pDevice->TimerSQ3Tmax3.expires =  RUN_AT(pDevice->byTMax3 * HZ);
-		pDevice->TimerSQ3Tmax2.expires =  RUN_AT(pDevice->byTMax2 * HZ);
-		add_timer(&pDevice->TimerSQ3Tmax3);
-		add_timer(&pDevice->TimerSQ3Tmax2);
+	if (priv->uDiversityCnt < priv->ulDiversityMValue/100) {
+		s_vChangeAntenna(priv);
+		priv->TimerSQ3Tmax3.expires =  RUN_AT(priv->byTMax3 * HZ);
+		priv->TimerSQ3Tmax2.expires =  RUN_AT(priv->byTMax2 * HZ);
+		add_timer(&priv->TimerSQ3Tmax3);
+		add_timer(&priv->TimerSQ3Tmax2);
 	} else {
 		priv->ulRatio_State1 = s_ulGetRatio(priv);
 		pr_debug("SQ3_State1, rate0 = %08x,rate1 = %08x\n",
@@ -2668,8 +2708,8 @@ TimerState1CallBack(
 			add_timer(&priv->TimerSQ3Tmax2);
 		}
 	}
-	pDevice->byAntennaState = 0;
-	BBvClearAntDivSQ3Value(pDevice);
+	priv->byAntennaState = 0;
+	BBvClearAntDivSQ3Value(priv);
 
-	spin_unlock_irqrestore(&pDevice->lock, flags);
+	spin_unlock_irqrestore(&priv->lock, flags);
 }
