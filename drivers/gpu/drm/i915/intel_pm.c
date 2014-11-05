@@ -4745,23 +4745,11 @@ static void skl_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 
 	active->linetime = hw->wm_linetime[pipe];
 
-	for (level = 0; level <= max_level; level++) {
-		for (i = 0; i < intel_num_planes(intel_crtc); i++) {
-			temp = hw->plane[pipe][i][level];
-			skl_pipe_wm_active_state(temp, active, false,
-						false, i, level);
-		}
-		temp = hw->cursor[pipe][level];
-		skl_pipe_wm_active_state(temp, active, false, true, i, level);
-	}
-
-	for (i = 0; i < intel_num_planes(intel_crtc); i++) {
-		temp = hw->plane_trans[pipe][i];
-		skl_pipe_wm_active_state(temp, active, true, false, i, 0);
-	}
-
-	temp = hw->cursor_trans[pipe];
-	skl_pipe_wm_active_state(temp, active, true, true, i, 0);
+	spin_lock_irq(&dev_priv->irq_lock);
+	WARN_ON(dev_priv->rps.pm_iir);
+	gen6_enable_pm_irq(dev_priv, dev_priv->pm_rps_events);
+	I915_WRITE(GEN8_GT_IIR(2), dev_priv->pm_rps_events);
+	spin_unlock_irq(&dev_priv->irq_lock);
 }
 
 void skl_wm_get_hw_state(struct drm_device *dev)

@@ -204,19 +204,9 @@ void gen5_disable_gt_irq(struct drm_i915_private *dev_priv, uint32_t mask)
 	ilk_update_gt_irq(dev_priv, mask, 0);
 }
 
-static u32 gen6_pm_iir(struct drm_i915_private *dev_priv)
-{
-	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IIR(2) : GEN6_PMIIR;
-}
-
 static u32 gen6_pm_imr(struct drm_i915_private *dev_priv)
 {
 	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IMR(2) : GEN6_PMIMR;
-}
-
-static u32 gen6_pm_ier(struct drm_i915_private *dev_priv)
-{
-	return INTEL_INFO(dev_priv)->gen >= 8 ? GEN8_GT_IER(2) : GEN6_PMIER;
 }
 
 /**
@@ -258,34 +248,6 @@ static void __gen6_disable_pm_irq(struct drm_i915_private *dev_priv,
 				  uint32_t mask)
 {
 	snb_update_pm_irq(dev_priv, mask, 0);
-}
-
-/**
-  * bdw_update_pm_irq - update GT interrupt 2
-  * @dev_priv: driver private
-  * @interrupt_mask: mask of interrupt bits to update
-  * @enabled_irq_mask: mask of interrupt bits to enable
-  *
-  * Copied from the snb function, updated with relevant register offsets
-  */
-static void bdw_update_pm_irq(struct drm_i915_private *dev_priv,
-			      uint32_t interrupt_mask,
-			      uint32_t enabled_irq_mask)
-{
-	if (WARN_ON(!intel_irqs_enabled(dev_priv)))
-		return;
-
-	__gen6_disable_pm_irq(dev_priv, mask);
-}
-
-void gen8_enable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
-{
-	bdw_update_pm_irq(dev_priv, mask, mask);
-}
-
-void gen8_disable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask)
-{
-	bdw_update_pm_irq(dev_priv, mask, 0);
 }
 
 /**
@@ -1335,6 +1297,19 @@ static void snb_gt_irq_handler(struct drm_device *dev,
 
 	if (gt_iir & GT_PARITY_ERROR(dev))
 		ivybridge_parity_error_irq_handler(dev, gt_iir);
+}
+
+static void gen8_rps_irq_handler(struct drm_i915_private *dev_priv, u32 pm_iir)
+{
+	if ((pm_iir & dev_priv->pm_rps_events) == 0)
+		return;
+
+	spin_lock(&dev_priv->irq_lock);
+	dev_priv->rps.pm_iir |= pm_iir & dev_priv->pm_rps_events;
+	gen6_disable_pm_irq(dev_priv, pm_iir & dev_priv->pm_rps_events);
+	spin_unlock(&dev_priv->irq_lock);
+
+	queue_work(dev_priv->wq, &dev_priv->rps.work);
 }
 
 static irqreturn_t gen8_gt_irq_handler(struct drm_device *dev,
