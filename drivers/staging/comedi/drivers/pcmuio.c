@@ -336,14 +336,9 @@ static void pcmuio_handle_intr_subdev(struct comedi_device *dev,
 
 	comedi_buf_write_samples(s, &val, 1);
 
-	/* Check for end of acquisition. */
-	if (cmd->stop_src == TRIG_COUNT) {
-		if (chip->stop_count > 0) {
-			chip->stop_count--;
-			if (chip->stop_count == 0)
-				s->async->events |= COMEDI_CB_EOA;
-		}
-	}
+	if (cmd->stop_src == TRIG_COUNT &&
+	    s->async->scans_done >= cmd->stop_arg)
+		s->async->events |= COMEDI_CB_EOA;
 
 done:
 	spin_unlock_irqrestore(&chip->spinlock, flags);
