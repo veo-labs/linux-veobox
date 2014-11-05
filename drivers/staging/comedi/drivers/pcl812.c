@@ -778,9 +778,6 @@ static bool pcl812_ai_next_chan(struct comedi_device *dev,
 {
 	struct comedi_cmd *cmd = &s->async->cmd;
 
-	if (s->async->cur_chan == 0)
-		devpriv->ai_act_scan++;
-
 	if (cmd->stop_src == TRIG_COUNT &&
 	    s->async->scans_done >= cmd->stop_arg) {
 		s->async->events |= COMEDI_CB_EOA;
