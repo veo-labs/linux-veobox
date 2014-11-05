@@ -163,6 +163,8 @@ struct usbduxsigma_private {
 	unsigned ao_cmd_running:1;
 	unsigned pwm_cmd_running:1;
 
+	/* number of samples to acquire */
+	int ai_sample_count;
 	/* time between samples in units of the timer */
 	unsigned int ai_timer;
 	unsigned int ao_timer;
@@ -353,12 +355,10 @@ static void usbduxsigma_ao_handle_urb(struct comedi_device *dev,
 	if (devpriv->ao_counter == 0) {
 		devpriv->ao_counter = devpriv->ao_timer;
 
-		if (cmd->stop_src == TRIG_COUNT) {
-			devpriv->ao_sample_count--;
-			if (devpriv->ao_sample_count < 0) {
-				async->events |= COMEDI_CB_EOA;
-				return;
-			}
+		if (cmd->stop_src == TRIG_COUNT &&
+		    async->scans_done >= cmd->stop_arg) {
+			async->events |= COMEDI_CB_EOA;
+			return;
 		}
 
 		/* transmit data to the USB bus */
