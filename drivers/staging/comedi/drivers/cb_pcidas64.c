@@ -2901,20 +2901,13 @@ static unsigned int cb_pcidas64_ao_fill_buffer(struct comedi_device *dev,
 					       unsigned short *dest,
 					       unsigned int max_bytes)
 {
-	struct pcidas64_private *devpriv = dev->private;
-	struct comedi_cmd *cmd = &s->async->cmd;
 	unsigned int nsamples = comedi_bytes_to_samples(s, max_bytes);
 	unsigned int actual_bytes;
 
-	if (cmd->stop_src == TRIG_COUNT && devpriv->ao_count < nsamples)
-		nsamples = devpriv->ao_count;
-
+	nsamples = comedi_nsamples_left(s, nsamples);
 	actual_bytes = comedi_buf_read_samples(s, dest, nsamples);
-	nsamples = comedi_bytes_to_samples(s, actual_bytes);
-	if (cmd->stop_src == TRIG_COUNT)
-		devpriv->ao_count -= nsamples;
 
-	return nsamples;
+	return comedi_bytes_to_samples(s, actual_bytes);
 }
 
 static unsigned int load_ao_dma_buffer(struct comedi_device *dev,
@@ -3212,7 +3205,8 @@ static int prep_ao_dma(struct comedi_device *dev, const struct comedi_cmd *cmd)
 		       devpriv->main_iobase + DAC_FIFO_REG);
 	}
 
-	if (cmd->stop_src == TRIG_COUNT && devpriv->ao_count == 0)
+	if (cmd->stop_src == TRIG_COUNT &&
+	    s->async->scans_done >= cmd->stop_arg)
 		return 0;
 
 	nbytes = load_ao_dma_buffer(dev, cmd);
