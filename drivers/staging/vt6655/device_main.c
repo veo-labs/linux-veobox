@@ -225,9 +225,6 @@ device_set_options(struct vnt_private *pDevice)
 	pDevice->bUpdateBBVGA = true;
 	pDevice->byPreambleType = 0;
 
-	pr_debug(" uChannel= %d\n", (int)pDevice->uChannel);
-	pr_debug(" byOpMode= %d\n", (int)pDevice->byOpMode);
-	pr_debug(" wRTSThreshold= %d\n", (int)pDevice->wRTSThreshold);
 	pr_debug(" byShortRetryLimit= %d\n", (int)pDevice->byShortRetryLimit);
 	pr_debug(" byLongRetryLimit= %d\n", (int)pDevice->byLongRetryLimit);
 	pr_debug(" byPreambleType= %d\n", (int)pDevice->byPreambleType);
