@@ -68,7 +68,6 @@ struct waveform_private {
 	unsigned long usec_period;	/* waveform period in microseconds */
 	unsigned long usec_current;	/* current time (mod waveform period) */
 	unsigned long usec_remainder;	/* usec since last scan */
-	unsigned long ai_count;		/* number of conversions remaining */
 	unsigned long state_bits;
 	unsigned int scan_period;	/* scan period in usec */
 	unsigned int convert_period;	/* conversion period in usec */
@@ -178,7 +177,6 @@ static void waveform_ai_interrupt(unsigned long arg)
 	unsigned long elapsed_time;
 	unsigned int num_scans;
 	ktime_t now;
-	bool stopping = false;
 
 	/* check command is still active */
 	if (!test_bit(WAVEFORM_AI_RUNNING, &devpriv->state_bits))
