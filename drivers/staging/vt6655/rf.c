@@ -625,8 +625,8 @@ bool RFbInit(
 		bResult = RFbAL2230Init(priv);
 		break;
 	case RF_AIROHA7230:
-		priv->byMaxPwrLevel = AL7230_PWR_IDX_LEN;
-		bResult = s_bAL7230Init(priv);
+		pDevice->byMaxPwrLevel = AL7230_PWR_IDX_LEN;
+		bResult = s_bAL7230Init(pDevice);
 		break;
 	case RF_NOTHING:
 		bResult = true;
