@@ -339,6 +339,8 @@ bool CARDbSetPhyParameter(struct vnt_private *pDevice, u8 bb_type)
 		VNSvOutPortB(pDevice->PortOffset + MAC_REG_CWMAXMIN0, pDevice->byCWMaxMin);
 	}
 
+	pDevice->byPacketType = CARDbyGetPktType(pDevice);
+
 	CARDvSetRSPINF(pDevice, ePHYType);
 
 	return true;
