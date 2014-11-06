@@ -1035,7 +1035,7 @@ static int __init init_ceph(void)
 
 	return 0;
 
-out_snap:
+out_icache:
 	ceph_snap_exit();
 out_xattr:
 	ceph_xattr_exit();

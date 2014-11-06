@@ -340,8 +340,8 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 
 	if (num == 0 && realm->seq == empty_snapc->seq) {
 		ceph_get_snap_context(empty_snapc);
-		snapc = empty_snapc;
-		goto done;
+		realm->cached_context = empty_snapc;
+		return 0;
 	}
 
 	/* alloc new snap context */
@@ -961,12 +961,13 @@ out:
 	return;
 }
 
-int __init ceph_snap_init(void)
+int ceph_snap_init(void)
 {
 	empty_snapc = ceph_create_snap_context(0, GFP_NOFS);
 	if (!empty_snapc)
 		return -ENOMEM;
 	empty_snapc->seq = 1;
+	empty_snapc->num_snaps = 0;
 	return 0;
 }
 
