@@ -80,17 +80,17 @@ void vnt_get_phy_field(struct vnt_private *, u32 frame_length,
 bool BBbReadEmbedded(struct vnt_private *, unsigned char byBBAddr, unsigned char *pbyData);
 bool BBbWriteEmbedded(struct vnt_private *, unsigned char byBBAddr, unsigned char byData);
 
-void BBvSetShortSlotTime(struct vnt_private *pDevice);
-void BBvSetVGAGainOffset(struct vnt_private *pDevice, unsigned char byData);
+void BBvSetShortSlotTime(struct vnt_private *);
+void BBvSetVGAGainOffset(struct vnt_private *, unsigned char byData);
 
 /* VT3253 Baseband */
 bool BBbVT3253Init(struct vnt_private *);
-void BBvSoftwareReset(struct vnt_private *);
-void BBvPowerSaveModeON(struct vnt_private *);
-void BBvPowerSaveModeOFF(struct vnt_private *);
-void BBvSetTxAntennaMode(struct vnt_private *, unsigned char byAntennaMode);
-void BBvSetRxAntennaMode(struct vnt_private *, unsigned char byAntennaMode);
-void BBvSetDeepSleep(struct vnt_private *, unsigned char byLocalID);
-void BBvExitDeepSleep(struct vnt_private *, unsigned char byLocalID);
+void BBvSoftwareReset(void __iomem *dwIoBase);
+void BBvPowerSaveModeON(void __iomem *dwIoBase);
+void BBvPowerSaveModeOFF(void __iomem *dwIoBase);
+void BBvSetTxAntennaMode(void __iomem *dwIoBase, unsigned char byAntennaMode);
+void BBvSetRxAntennaMode(void __iomem *dwIoBase, unsigned char byAntennaMode);
+void BBvSetDeepSleep(void __iomem *dwIoBase, unsigned char byLocalID);
+void BBvExitDeepSleep(void __iomem *dwIoBase, unsigned char byLocalID);
 
 #endif /* __BASEBAND_H__ */
