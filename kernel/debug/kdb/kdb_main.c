@@ -1053,13 +1053,20 @@ int kdb_parse(const char *cmdstr)
 		if (result && ignore_errors && result > KDB_CMD_GO)
 			result = 0;
 		KDB_STATE_CLEAR(CMD);
-
-		if (tp->cmd_flags & KDB_REPEAT_WITH_ARGS)
-			return result;
-
-		argc = tp->cmd_flags & KDB_REPEAT_NO_ARGS ? 1 : 0;
-		if (argv[argc])
-			*(argv[argc]) = '\0';
+		switch (tp->cmd_flags) {
+		case KDB_REPEAT_NONE:
+			argc = 0;
+			if (argv[0])
+				*(argv[0]) = '\0';
+			break;
+		case KDB_REPEAT_NO_ARGS:
+			argc = 1;
+			if (argv[1])
+				*(argv[1]) = '\0';
+			break;
+		case KDB_REPEAT_WITH_ARGS:
+			break;
+		}
 		return result;
 	}
 
@@ -2689,12 +2696,12 @@ static int kdb_grep_help(int argc, const char **argv)
  *	zero for success, one if a duplicate command.
  */
 #define kdb_command_extend 50	/* arbitrary */
-int kdb_register_flags(char *cmd,
-		       kdb_func_t func,
-		       char *usage,
-		       char *help,
-		       short minlen,
-		       kdb_cmdflags_t flags)
+int kdb_register_repeat(char *cmd,
+			kdb_func_t func,
+			char *usage,
+			char *help,
+			short minlen,
+			kdb_cmdflags_t flags)
 {
 	int i;
 	kdbtab_t *kp;
