@@ -5052,8 +5052,6 @@ static void valleyview_modeset_global_resources(struct drm_device *dev)
 			cherryview_set_cdclk(dev, req_cdclk);
 		else
 			valleyview_set_cdclk(dev, req_cdclk);
-
-		intel_display_power_put(dev_priv, POWER_DOMAIN_PIPE_A);
 	}
 }
 
@@ -8140,16 +8138,6 @@ static int haswell_crtc_compute_clock(struct intel_crtc *crtc,
 				      struct intel_crtc_state *crtc_state)
 {
 	if (!intel_ddi_pll_select(crtc, crtc_state))
-		return -EINVAL;
-
-	crtc->lowfreq_avail = false;
-
-	return 0;
-}
-
-static int haswell_crtc_compute_clock(struct intel_crtc *crtc)
-{
-	if (!intel_ddi_pll_select(crtc))
 		return -EINVAL;
 
 	crtc->lowfreq_avail = false;
@@ -13081,8 +13069,6 @@ static void intel_init_display(struct drm_device *dev)
 		dev_priv->display.fdi_link_train = ironlake_fdi_link_train;
 	} else if (IS_GEN6(dev)) {
 		dev_priv->display.fdi_link_train = gen6_fdi_link_train;
-		dev_priv->display.modeset_global_resources =
-			snb_modeset_global_resources;
 	} else if (IS_IVYBRIDGE(dev)) {
 		/* FIXME: detect B0+ stepping and use auto training */
 		dev_priv->display.fdi_link_train = ivb_manual_fdi_link_train;
@@ -13090,14 +13076,9 @@ static void intel_init_display(struct drm_device *dev)
 			ivb_modeset_global_resources;
 	} else if (IS_HASWELL(dev) || IS_BROADWELL(dev)) {
 		dev_priv->display.fdi_link_train = hsw_fdi_link_train;
-		dev_priv->display.modeset_global_resources =
-			haswell_modeset_global_resources;
 	} else if (IS_VALLEYVIEW(dev)) {
 		dev_priv->display.modeset_global_resources =
 			valleyview_modeset_global_resources;
-	} else if (INTEL_INFO(dev)->gen >= 9) {
-		dev_priv->display.modeset_global_resources =
-			haswell_modeset_global_resources;
 	}
 
 	/* Default just returns -ENODEV to indicate unsupported */
