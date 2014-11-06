@@ -162,7 +162,8 @@ static void recalculate_apic_map(struct kvm *kvm)
 		if (apic_x2apic_mode(apic)) {
 			new->ldr_bits = 32;
 			new->cid_shift = 16;
-			new->cid_mask = new->lid_mask = 0xffff;
+			new->cid_mask = (1 << KVM_X2APIC_CID_BITS) - 1;
+			new->lid_mask = 0xffff;
 			new->broadcast = X2APIC_BROADCAST;
 		} else if (kvm_apic_get_reg(apic, APIC_LDR)) {
 			if (kvm_apic_get_reg(apic, APIC_DFR) ==
@@ -184,22 +185,8 @@ static void recalculate_apic_map(struct kvm *kvm)
 		 * we find apic with different setting we assume this is the mode
 		 * OS wants all apics to be in; build lookup table accordingly.
 		 */
-		if (apic_x2apic_mode(apic)) {
-			new->ldr_bits = 32;
-			new->cid_shift = 16;
-			new->cid_mask = (1 << KVM_X2APIC_CID_BITS) - 1;
-			new->lid_mask = 0xffff;
-			new->broadcast = X2APIC_BROADCAST;
+		if (kvm_apic_sw_enabled(apic))
 			break;
-		} else if (kvm_apic_sw_enabled(apic)) {
-			if (kvm_apic_get_reg(apic, APIC_DFR) ==
-							APIC_DFR_CLUSTER) {
-				new->cid_shift = 4;
-				new->cid_mask = 0xf;
-				new->lid_mask = 0xf;
-			}
-			break;
-		}
 	}
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
