@@ -228,7 +228,7 @@ visorchannel_read(struct visorchannel *channel, ulong offset,
 	int rc = visor_memregion_read(channel->memregion, offset,
 				      local, nbytes);
 	if ((rc >= 0) && (offset == 0) &&
-	   (nbytes >= sizeof(struct channel_header))) {
+	    (nbytes >= sizeof(struct channel_header))) {
 		memcpy(&channel->chan_hdr, local,
 		       sizeof(struct channel_header));
 	}
@@ -403,7 +403,7 @@ safe_sig_queue_validate(struct signal_queue_header *psafe_sqh,
 		punsafe_sqh->tail = *ptail;
 
 		ERRDRV("safe_sig_queue_validate: head = 0x%x, tail = 0x%x, MaxSlots = 0x%x",
-		     *phead, *ptail, psafe_sqh->max_slots);
+		       *phead, *ptail, psafe_sqh->max_slots);
 		return 0;
 	}
 	return 1;
@@ -637,9 +637,10 @@ visorchannel_debug(struct visorchannel *channel, int num_queues,
 			struct signal_queue_header q;
 
 			errcode = visorchannel_read(channel,
-					off + phdr->ch_space_offset +
-						(i * sizeof(q)),
-					&q, sizeof(q));
+						    off +
+						    phdr->ch_space_offset +
+						    (i * sizeof(q)),
+						    &q, sizeof(q));
 			if (errcode < 0) {
 				seq_printf(seq,
 					   "failed to read signal queue #%d from channel @0x%-16.16Lx errcode=%d\n",
