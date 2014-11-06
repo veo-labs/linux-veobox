@@ -234,8 +234,6 @@ static int tegra_fbdev_probe(struct drm_fb_helper *helper,
 	fbdev->fb = tegra_fb_alloc(drm, &cmd, &bo, 1);
 	if (IS_ERR(fbdev->fb)) {
 		err = PTR_ERR(fbdev->fb);
-		dev_err(drm->dev, "failed to allocate DRM framebuffer: %d\n",
-			err);
 		drm_gem_object_unreference_unlocked(&bo->gem);
 		goto release;
 	}
