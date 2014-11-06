@@ -2086,7 +2086,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AIROHA2230[ii][0], byVT3253B0_AIROHA2230[ii][1]);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2137,7 +2137,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		bResult &= BBbWriteEmbedded(priv, 0xb0, 0x58);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x14;
 		priv->abyBBVGA[1] = 0x0A;
@@ -2154,7 +2154,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AIROHA2230[ii][0], byVT3253B0_AIROHA2230[ii][1]);
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2182,7 +2182,7 @@ bool BBbVT3253Init(struct vnt_private *priv)
 		/* }} */
 
 		for (ii = 0; ii < CB_VT3253B0_AGC; ii++)
-			bResult &= BBbWriteEmbedded(dwIoBase, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
+			bResult &= BBbWriteEmbedded(priv, byVT3253B0_AGC[ii][0], byVT3253B0_AGC[ii][1]);
 
 		priv->abyBBVGA[0] = 0x1C;
 		priv->abyBBVGA[1] = 0x10;
@@ -2237,14 +2237,14 @@ BBvSetShortSlotTime(struct vnt_private *priv)
 	if (byBBVGA == priv->abyBBVGA[0])
 		byBBRxConf |= 0x20; /* 0010 0000 */
 
-	BBbWriteEmbedded(priv->PortOffset, 0x0A, byBBRxConf); /* CR10 */
+	BBbWriteEmbedded(priv, 0x0A, byBBRxConf); /* CR10 */
 }
 
 void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 {
 	unsigned char byBBRxConf = 0;
 
-	BBbWriteEmbedded(priv->PortOffset, 0xE7, byData);
+	BBbWriteEmbedded(priv, 0xE7, byData);
 
 	BBbReadEmbedded(priv->PortOffset, 0x0A, &byBBRxConf); /* CR10 */
 	/* patch for 3253B0 Baseband with Cardbus module */
@@ -2255,7 +2255,7 @@ void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 	else
 		byBBRxConf |= 0x20; /* 0010 0000 */
 	priv->byBBVGACurrent = byData;
-	BBbWriteEmbedded(priv->PortOffset, 0x0A, byBBRxConf); /* CR10 */
+	BBbWriteEmbedded(priv, 0x0A, byBBRxConf); /* CR10 */
 }
 
 /*
@@ -2273,12 +2273,10 @@ void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 void
 BBvSoftwareReset(struct vnt_private *priv)
 {
-	void __iomem *dwIoBase = priv->PortOffset;
-
-	BBbWriteEmbedded(dwIoBase, 0x50, 0x40);
-	BBbWriteEmbedded(dwIoBase, 0x50, 0);
-	BBbWriteEmbedded(dwIoBase, 0x9C, 0x01);
-	BBbWriteEmbedded(dwIoBase, 0x9C, 0);
+	BBbWriteEmbedded(priv, 0x50, 0x40);
+	BBbWriteEmbedded(priv, 0x50, 0);
+	BBbWriteEmbedded(priv, 0x9C, 0x01);
+	BBbWriteEmbedded(priv, 0x9C, 0);
 }
 
 /*
@@ -2301,7 +2299,7 @@ BBvPowerSaveModeON(struct vnt_private *priv)
 
 	BBbReadEmbedded(dwIoBase, 0x0D, &byOrgData);
 	byOrgData |= BIT(0);
-	BBbWriteEmbedded(dwIoBase, 0x0D, byOrgData);
+	BBbWriteEmbedded(priv, 0x0D, byOrgData);
 }
 
 /*
@@ -2324,7 +2322,7 @@ BBvPowerSaveModeOFF(struct vnt_private *priv)
 
 	BBbReadEmbedded(dwIoBase, 0x0D, &byOrgData);
 	byOrgData &= ~(BIT(0));
-	BBbWriteEmbedded(dwIoBase, 0x0D, byOrgData);
+	BBbWriteEmbedded(priv, 0x0D, byOrgData);
 }
 
 /*
@@ -2409,19 +2407,15 @@ BBvSetRxAntennaMode(struct vnt_private *priv, unsigned char byAntennaMode)
 void
 BBvSetDeepSleep(struct vnt_private *priv, unsigned char byLocalID)
 {
-	void __iomem *dwIoBase = priv->PortOffset;
-
-	BBbWriteEmbedded(dwIoBase, 0x0C, 0x17); /* CR12 */
-	BBbWriteEmbedded(dwIoBase, 0x0D, 0xB9); /* CR13 */
+	BBbWriteEmbedded(priv, 0x0C, 0x17); /* CR12 */
+	BBbWriteEmbedded(priv, 0x0D, 0xB9); /* CR13 */
 }
 
 void
 BBvExitDeepSleep(struct vnt_private *priv, unsigned char byLocalID)
 {
-	void __iomem *dwIoBase = priv->PortOffset;
-
-	BBbWriteEmbedded(dwIoBase, 0x0C, 0x00); /* CR12 */
-	BBbWriteEmbedded(dwIoBase, 0x0D, 0x01); /* CR13 */
+	BBbWriteEmbedded(priv, 0x0C, 0x00); /* CR12 */
+	BBbWriteEmbedded(priv, 0x0D, 0x01); /* CR13 */
 }
 
 static
