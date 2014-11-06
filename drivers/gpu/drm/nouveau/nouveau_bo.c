@@ -348,7 +348,6 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 	ret = nouveau_bo_validate(nvbo, false, false);
 	if (ret)
 		goto out;
-	nvbo->pin_refcnt++;
 
 	switch (bo->mem.mem_type) {
 	case TTM_PL_VRAM:
@@ -363,7 +362,6 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 
 ref_inc:
 	nvbo->pin_refcnt++;
-
 out:
 	if (force && ret)
 		nvbo->tile_flags |= NOUVEAU_GEM_TILE_NONCONTIG;
