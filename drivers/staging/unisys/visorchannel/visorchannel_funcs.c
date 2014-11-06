@@ -339,7 +339,7 @@ sig_read_header(struct visorchannel *channel, u32 queue,
 		       queue, (int)SIG_QUEUE_OFFSET(&channel->chan_hdr, queue));
 		ERRDRV("visor_memregion_read of signal queue failed: (status=%d)\n",
 		       rc);
-		goto cleanup;
+		goto Away;
 	}
 	rc = TRUE;
 cleanup:
@@ -358,13 +358,15 @@ sig_do_data(struct visorchannel *channel, u32 queue,
 		if (visor_memregion_write(channel->memregion,
 					  signal_data_offset,
 					  data, sig_hdr->signal_size) < 0) {
-			ERRDRV("visor_memregion_write of signal data failed: (status=%d)\n", rc);
+			ERRDRV("visor_memregion_write of signal data failed: (status=%d)\n",
+			       rc);
 			goto Away;
 		}
 	} else {
 		if (visor_memregion_read(channel->memregion, signal_data_offset,
 					 data, sig_hdr->signal_size) < 0) {
-			ERRDRV("visor_memregion_read of signal data failed: (status=%d)\n", rc);
+			ERRDRV("visor_memregion_read of signal data failed: (status=%d)\n",
+			       rc);
 			goto Away;
 		}
 	}
@@ -436,7 +438,8 @@ signalremove_inner(struct visorchannel *channel, u32 queue, void *msg)
 		return FALSE;
 	}
 	if (!SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_received)) {
-		ERRDRV("visor_memregion_write of NumSignalsReceived failed: (status=%d)\n", rc);
+		ERRDRV("visor_memregion_write of NumSignalsReceived failed: (status=%d)\n",
+		       rc);
 		goto Away;
 	}
 	return TRUE;
@@ -472,7 +475,8 @@ signalinsert_inner(struct visorchannel *channel, u32 queue, void *msg)
 	if (sig_hdr.head == sig_hdr.tail) {
 		sig_hdr.num_overflows++;
 		if (!SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_overflows)) {
-			ERRDRV("visor_memregion_write of NumOverflows failed: (status=%d)\n", rc);
+			ERRDRV("visor_memregion_write of NumOverflows failed: (status=%d)\n",
+			       rc);
 			goto Away;
 		}
 		rc = FALSE;
@@ -494,7 +498,8 @@ signalinsert_inner(struct visorchannel *channel, u32 queue, void *msg)
 		return FALSE;
 	}
 	if (!SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_sent)) {
-		ERRDRV("visor_memregion_write of NumSignalsSent failed: (status=%d)\n", rc);
+		ERRDRV("visor_memregion_write of NumSignalsSent failed: (status=%d)\n",
+		       rc);
 		goto Away;
 	}
 
