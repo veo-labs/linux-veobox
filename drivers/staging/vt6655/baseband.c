@@ -1720,22 +1720,22 @@ s_vChangeAntenna(
 	if (priv->dwRxAntennaSel == 0) {
 		priv->dwRxAntennaSel = 1;
 		if (priv->bTxRxAntInv == true)
-			BBvSetRxAntennaMode(priv->PortOffset, ANT_A);
+			BBvSetRxAntennaMode(priv, ANT_A);
 		else
-			BBvSetRxAntennaMode(priv->PortOffset, ANT_B);
+			BBvSetRxAntennaMode(priv, ANT_B);
 	} else {
 		priv->dwRxAntennaSel = 0;
 		if (priv->bTxRxAntInv == true)
-			BBvSetRxAntennaMode(priv->PortOffset, ANT_B);
+			BBvSetRxAntennaMode(priv, ANT_B);
 		else
-			BBvSetRxAntennaMode(priv->PortOffset, ANT_A);
+			BBvSetRxAntennaMode(priv, ANT_A);
 	}
 	if (priv->dwTxAntennaSel == 0) {
 		priv->dwTxAntennaSel = 1;
-		BBvSetTxAntennaMode(priv->PortOffset, ANT_B);
+		BBvSetTxAntennaMode(priv, ANT_B);
 	} else {
 		priv->dwTxAntennaSel = 0;
-		BBvSetTxAntennaMode(priv->PortOffset, ANT_A);
+		BBvSetTxAntennaMode(priv, ANT_A);
 	}
 }
 
@@ -2273,10 +2273,12 @@ void BBvSetVGAGainOffset(struct vnt_private *priv, unsigned char byData)
 void
 BBvSoftwareReset(struct vnt_private *priv)
 {
-	BBbWriteEmbedded(priv, 0x50, 0x40);
-	BBbWriteEmbedded(priv, 0x50, 0);
-	BBbWriteEmbedded(priv, 0x9C, 0x01);
-	BBbWriteEmbedded(priv, 0x9C, 0);
+	void __iomem *dwIoBase = priv->PortOffset;
+
+	BBbWriteEmbedded(dwIoBase, 0x50, 0x40);
+	BBbWriteEmbedded(dwIoBase, 0x50, 0);
+	BBbWriteEmbedded(dwIoBase, 0x9C, 0x01);
+	BBbWriteEmbedded(dwIoBase, 0x9C, 0);
 }
 
 /*
@@ -2340,6 +2342,7 @@ BBvPowerSaveModeOFF(struct vnt_private *priv)
 void
 BBvSetTxAntennaMode(struct vnt_private *priv, unsigned char byAntennaMode)
 {
+	void __iomem *dwIoBase = priv->PortOffset;
 	unsigned char byBBTxConf;
 
 	BBbReadEmbedded(priv, 0x09, &byBBTxConf); /* CR09 */
@@ -2373,6 +2376,7 @@ BBvSetTxAntennaMode(struct vnt_private *priv, unsigned char byAntennaMode)
 void
 BBvSetRxAntennaMode(struct vnt_private *priv, unsigned char byAntennaMode)
 {
+	void __iomem *dwIoBase = priv->PortOffset;
 	unsigned char byBBRxConf;
 
 	BBbReadEmbedded(priv, 0x0A, &byBBRxConf); /* CR10 */
@@ -2403,15 +2407,19 @@ BBvSetRxAntennaMode(struct vnt_private *priv, unsigned char byAntennaMode)
 void
 BBvSetDeepSleep(struct vnt_private *priv, unsigned char byLocalID)
 {
-	BBbWriteEmbedded(priv, 0x0C, 0x17); /* CR12 */
-	BBbWriteEmbedded(priv, 0x0D, 0xB9); /* CR13 */
+	void __iomem *dwIoBase = priv->PortOffset;
+
+	BBbWriteEmbedded(dwIoBase, 0x0C, 0x17); /* CR12 */
+	BBbWriteEmbedded(dwIoBase, 0x0D, 0xB9); /* CR13 */
 }
 
 void
 BBvExitDeepSleep(struct vnt_private *priv, unsigned char byLocalID)
 {
-	BBbWriteEmbedded(priv, 0x0C, 0x00); /* CR12 */
-	BBbWriteEmbedded(priv, 0x0D, 0x01); /* CR13 */
+	void __iomem *dwIoBase = priv->PortOffset;
+
+	BBbWriteEmbedded(dwIoBase, 0x0C, 0x00); /* CR12 */
+	BBbWriteEmbedded(dwIoBase, 0x0D, 0x01); /* CR13 */
 }
 
 static
