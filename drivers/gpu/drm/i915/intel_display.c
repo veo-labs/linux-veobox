@@ -9695,18 +9695,6 @@ static void intel_do_mmio_flip(struct intel_crtc *intel_crtc)
 
 	if (atomic_update)
 		intel_pipe_update_end(intel_crtc, start_vbl_count);
-
-	spin_lock_irq(&dev_priv->mmio_flip_lock);
-	intel_crtc->mmio_flip.status = INTEL_MMIO_FLIP_IDLE;
-	spin_unlock_irq(&dev_priv->mmio_flip_lock);
-}
-
-static void intel_mmio_flip_work_func(struct work_struct *work)
-{
-	struct intel_crtc *intel_crtc =
-		container_of(work, struct intel_crtc, mmio_flip.work);
-
-	intel_do_mmio_flip(intel_crtc);
 }
 
 static void intel_mmio_flip_work_func(struct work_struct *work)
@@ -9729,7 +9717,7 @@ static void intel_mmio_flip_work_func(struct work_struct *work)
 	}
 }
 
-static int intel_queue_mmio_flip(struct drm_device *dev,
+static int intel_gen9_queue_flip(struct drm_device *dev,
 				 struct drm_crtc *crtc,
 				 struct drm_framebuffer *fb,
 				 struct drm_i915_gem_object *obj,
@@ -9742,53 +9730,6 @@ static int intel_queue_mmio_flip(struct drm_device *dev,
 				obj->last_write_req);
 
 	schedule_work(&intel_crtc->mmio_flip.work);
-
-		mmio_flip = &intel_crtc->mmio_flip;
-		if (mmio_flip->status != INTEL_MMIO_FLIP_WAIT_RING)
-			continue;
-
-		if (ring->id != mmio_flip->ring_id)
-			continue;
-
-		if (i915_seqno_passed(seqno, mmio_flip->seqno)) {
-			schedule_work(&intel_crtc->mmio_flip.work);
-			mmio_flip->status = INTEL_MMIO_FLIP_WORK_SCHEDULED;
-			ring->irq_put(ring);
-		}
-	}
-	spin_unlock_irqrestore(&dev_priv->mmio_flip_lock, irq_flags);
-}
-
-static int intel_gen9_queue_flip(struct drm_device *dev,
-				 struct drm_crtc *crtc,
-				 struct drm_framebuffer *fb,
-				 struct drm_i915_gem_object *obj,
-				 struct intel_engine_cs *ring,
-				 uint32_t flags)
-{
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	int ret;
-
-	if (WARN_ON(intel_crtc->mmio_flip.status != INTEL_MMIO_FLIP_IDLE))
-		return -EBUSY;
-
-	switch (obj->tiling_mode) {
-	case I915_TILING_NONE:
-		stride = fb->pitches[0] >> 6;
-		break;
-	case I915_TILING_X:
-		stride = fb->pitches[0] >> 9;
-		break;
-	default:
-		WARN_ONCE(1, "unknown tiling in flip command\n");
-		return -ENODEV;
-	}
-
-	spin_lock_irq(&dev_priv->mmio_flip_lock);
-	intel_crtc->mmio_flip.status = INTEL_MMIO_FLIP_WAIT_RING;
-	intel_crtc->mmio_flip.seqno = obj->last_write_seqno;
-	intel_crtc->mmio_flip.ring_id = obj->ring->id;
-	spin_unlock_irq(&dev_priv->mmio_flip_lock);
 
 	return 0;
 }
