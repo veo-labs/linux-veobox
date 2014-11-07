@@ -108,7 +108,7 @@ s_vCalculateOFDMRParameter(
 {
 	switch (byRate) {
 	case RATE_6M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9B;
 			*pbyRsvTime = 44;
 		} else {
@@ -118,7 +118,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_9M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9F;
 			*pbyRsvTime = 36;
 		} else {
@@ -128,7 +128,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_12M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9A;
 			*pbyRsvTime = 32;
 		} else {
@@ -138,7 +138,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_18M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9E;
 			*pbyRsvTime = 28;
 		} else {
@@ -148,7 +148,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_36M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9D;
 			*pbyRsvTime = 24;
 		} else {
@@ -158,7 +158,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_48M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x98;
 			*pbyRsvTime = 24;
 		} else {
@@ -168,7 +168,7 @@ s_vCalculateOFDMRParameter(
 		break;
 
 	case RATE_54M:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x9C;
 			*pbyRsvTime = 24;
 		} else {
@@ -179,7 +179,7 @@ s_vCalculateOFDMRParameter(
 
 	case RATE_24M:
 	default:
-		if (ePHYType == PHY_TYPE_11A) { /* 5GHZ */
+		if (bb_type == BB_TYPE_11A) { /* 5GHZ */
 			*pbyTxRate = 0x99;
 			*pbyRsvTime = 28;
 		} else {
