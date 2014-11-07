@@ -25,6 +25,7 @@
 struct mdp4_crtc {
 	struct drm_crtc base;
 	char name[8];
+	struct drm_plane *planes[8];
 	int id;
 	int ovlp;
 	enum mdp4_dma dma;
@@ -118,6 +119,32 @@ static void complete_flip(struct drm_crtc *crtc, struct drm_file *file)
 		}
 	}
 	spin_unlock_irqrestore(&dev->event_lock, flags);
+}
+
+static void pageflip_cb(struct msm_fence_cb *cb)
+{
+	struct mdp4_crtc *mdp4_crtc =
+		container_of(cb, struct mdp4_crtc, pageflip_cb);
+	struct drm_crtc *crtc = &mdp4_crtc->base;
+	struct drm_framebuffer *fb = crtc->primary->fb;
+
+	if (!fb)
+		return;
+
+	drm_framebuffer_reference(fb);
+	mdp4_plane_set_scanout(crtc->primary, fb);
+	update_scanout(crtc, fb);
+}
+
+static void unref_fb_worker(struct drm_flip_work *work, void *val)
+{
+	struct mdp4_crtc *mdp4_crtc =
+		container_of(work, struct mdp4_crtc, unref_fb_work);
+	struct drm_device *dev = mdp4_crtc->base.dev;
+
+	mutex_lock(&dev->mode_config.mutex);
+	drm_framebuffer_unreference(val);
+	mutex_unlock(&dev->mode_config.mutex);
 }
 
 static void unref_cursor_worker(struct drm_flip_work *work, void *val)
@@ -258,6 +285,20 @@ static void mdp4_crtc_mode_set_nofb(struct drm_crtc *crtc)
 			mode->vsync_end, mode->vtotal,
 			mode->type, mode->flags);
 
+	/* grab extra ref for update_scanout() */
+	drm_framebuffer_reference(crtc->primary->fb);
+
+	ret = mdp4_plane_mode_set(crtc->primary, crtc, crtc->primary->fb,
+			0, 0, mode->hdisplay, mode->vdisplay,
+			x << 16, y << 16,
+			mode->hdisplay << 16, mode->vdisplay << 16);
+	if (ret) {
+		drm_framebuffer_unreference(crtc->primary->fb);
+		dev_err(crtc->dev->dev, "%s: failed to set mode on plane: %d\n",
+				mdp4_crtc->name, ret);
+		return ret;
+	}
+
 	mdp4_write(mdp4_kms, REG_MDP4_DMA_SRC_SIZE(dma),
 			MDP4_DMA_SRC_SIZE_WIDTH(mode->hdisplay) |
 			MDP4_DMA_SRC_SIZE_HEIGHT(mode->vdisplay));
@@ -315,8 +356,26 @@ static void mdp4_crtc_enable(struct drm_crtc *crtc)
 
 	crtc_flush(crtc);
 
-	mdp4_crtc->enabled = true;
-}
+static void mdp4_crtc_load_lut(struct drm_crtc *crtc)
+{
+	struct drm_plane *plane = crtc->primary;
+	struct drm_display_mode *mode = &crtc->mode;
+	int ret;
+
+	/* grab extra ref for update_scanout() */
+	drm_framebuffer_reference(crtc->primary->fb);
+
+	ret = mdp4_plane_mode_set(plane, crtc, crtc->primary->fb,
+			0, 0, mode->hdisplay, mode->vdisplay,
+			x << 16, y << 16,
+			mode->hdisplay << 16, mode->vdisplay << 16);
+	if (ret) {
+		drm_framebuffer_unreference(crtc->primary->fb);
+		return ret;
+	}
+
+	update_fb(crtc, crtc->primary->fb);
+	update_scanout(crtc, crtc->primary->fb);
 
 static int mdp4_crtc_atomic_check(struct drm_crtc *crtc,
 		struct drm_crtc_state *state)
@@ -598,6 +657,35 @@ void mdp4_crtc_set_intf(struct drm_crtc *crtc, enum mdp4_intf intf, int mixer)
 	DBG("%s: intf_sel=%08x", mdp4_crtc->name, intf_sel);
 
 	mdp4_write(mdp4_kms, REG_MDP4_DISP_INTF_SEL, intf_sel);
+}
+
+static void set_attach(struct drm_crtc *crtc, enum mdp4_pipe pipe_id,
+		struct drm_plane *plane)
+{
+	struct mdp4_crtc *mdp4_crtc = to_mdp4_crtc(crtc);
+
+	BUG_ON(pipe_id >= ARRAY_SIZE(mdp4_crtc->planes));
+
+	if (mdp4_crtc->planes[pipe_id] == plane)
+		return;
+
+	mdp4_crtc->planes[pipe_id] = plane;
+	blend_setup(crtc);
+	if (mdp4_crtc->enabled && (plane != crtc->primary))
+		crtc_flush(crtc);
+}
+
+void mdp4_crtc_attach(struct drm_crtc *crtc, struct drm_plane *plane)
+{
+	set_attach(crtc, mdp4_plane_pipe(plane), plane);
+}
+
+void mdp4_crtc_detach(struct drm_crtc *crtc, struct drm_plane *plane)
+{
+	/* don't actually detatch our primary plane: */
+	if (crtc->primary == plane)
+		return;
+	set_attach(crtc, mdp4_plane_pipe(plane), NULL);
 }
 
 static const char *dma_names[] = {
