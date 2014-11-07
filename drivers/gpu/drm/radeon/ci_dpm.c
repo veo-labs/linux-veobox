@@ -5473,7 +5473,7 @@ int ci_dpm_init(struct radeon_device *rdev)
 			tmp |= DPM_ENABLED;
 			break;
 		default:
-			DRM_ERROR("Invalid PCC GPIO: %u!\n", gpio.shift);
+			DRM_ERROR("Invalid PCC GPIO!");
 			break;
 		}
 		WREG32_SMC(CNB_PWRMGT_CNTL, tmp);
