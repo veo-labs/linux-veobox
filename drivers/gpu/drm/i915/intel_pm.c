@@ -5109,10 +5109,17 @@ static u32 gen6_rps_pm_mask(struct drm_i915_private *dev_priv, u8 val)
 	if (val < dev_priv->rps.max_freq_softlimit)
 		mask |= GEN6_PM_RP_UP_THRESHOLD;
 
-	mask |= dev_priv->pm_rps_events & (GEN6_PM_RP_DOWN_EI_EXPIRED | GEN6_PM_RP_UP_EI_EXPIRED);
-	mask &= dev_priv->pm_rps_events;
+	pcbr = I915_READ(VLV_PCBR);
+	if ((pcbr >> VLV_PCBR_ADDR_SHIFT) == 0) {
+		DRM_DEBUG_DRIVER("BIOS didn't set up PCBR, fixing up\n");
+		paddr = (dev_priv->mm.stolen_base +
+			 (gtt->stolen_size - pctx_size));
 
-	return gen6_sanitize_rps_pm_mask(dev_priv, ~mask);
+		pctx_paddr = (paddr & (~4095));
+		I915_WRITE(VLV_PCBR, pctx_paddr);
+	}
+
+	DRM_DEBUG_DRIVER("PCBR: 0x%08x\n", I915_READ(VLV_PCBR));
 }
 
 /* gen6_set_rps is called to update the frequency request, but should also be
@@ -5142,16 +5149,24 @@ void gen6_set_rps(struct drm_device *dev, u8 val)
 				   GEN6_AGGRESSIVE_TURBO);
 	}
 
-	/* Make sure we continue to get interrupts
-	 * until we hit the minimum or maximum frequencies.
+	DRM_DEBUG_DRIVER("BIOS didn't set up PCBR, fixing up\n");
+
+	/*
+	 * From the Gunit register HAS:
+	 * The Gfx driver is expected to program this register and ensure
+	 * proper allocation within Gfx stolen memory.  For example, this
+	 * register should be programmed such than the PCBR range does not
+	 * overlap with other ranges, such as the frame buffer, protected
+	 * memory, or any other relevant ranges.
 	 */
 	I915_WRITE(GEN6_RP_INTERRUPT_LIMITS, gen6_rps_limits(dev_priv, val));
 	I915_WRITE(GEN6_PMINTRMSK, gen6_rps_pm_mask(dev_priv, val));
 
 	POSTING_READ(GEN6_RPNSWREQ);
 
-	dev_priv->rps.cur_freq = val;
-	trace_intel_gpu_freq_change(val * 50);
+out:
+	DRM_DEBUG_DRIVER("PCBR: 0x%08x\n", I915_READ(VLV_PCBR));
+	dev_priv->vlv_pctx = pctx;
 }
 
 /* vlv_set_rps_idle: Set the frequency to Rpn if Gfx clocks are down
@@ -5334,13 +5349,10 @@ static int sanitize_rc6_option(const struct drm_device *dev, int enable_rc6)
 	if (INTEL_INFO(dev)->gen < 5)
 		return 0;
 
-	/* RC6 is only on Ironlake mobile not on desktop */
-	if (INTEL_INFO(dev)->gen == 5 && !IS_IRONLAKE_M(dev))
-		return 0;
-
-	/* Respect the kernel parameter if it is set */
-	if (enable_rc6 >= 0) {
-		int mask;
+	/* 3: Enable RC6 */
+	if ((intel_enable_rc6(dev) & INTEL_RC6_ENABLE) &&
+						(pcbr >> VLV_PCBR_ADDR_SHIFT))
+		rc6_mode = GEN6_RC_CTL_EI_MODE(1);
 
 		if (HAS_RC6p(dev))
 			mask = INTEL_RC6_ENABLE | INTEL_RC6p_ENABLE |
