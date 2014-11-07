@@ -539,7 +539,8 @@ static u32 intel_panel_get_backlight(struct intel_connector *connector)
 {
 	struct drm_device *dev = connector->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	u32 val;
+	struct intel_panel *panel = &connector->panel;
+	u32 val = 0;
 
 	mutex_lock(&dev_priv->backlight_lock);
 
