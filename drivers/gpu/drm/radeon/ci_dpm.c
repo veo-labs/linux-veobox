@@ -3937,14 +3937,6 @@ int ci_dpm_force_performance_level(struct radeon_device *rdev,
 			}
 		}
 	} else if (level == RADEON_DPM_FORCED_LEVEL_AUTO) {
-		if (!pi->pcie_dpm_key_disabled) {
-			PPSMC_Result smc_result;
-
-			smc_result = ci_send_msg_to_smc(rdev,
-							PPSMC_MSG_PCIeDPM_UnForceLevel);
-			if (smc_result != PPSMC_Result_OK)
-				return -EINVAL;
-		}
 		ret = ci_upload_dpm_level_enable_mask(rdev);
 		if (ret)
 			return ret;
