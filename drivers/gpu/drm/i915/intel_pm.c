@@ -5365,6 +5365,9 @@ static int sanitize_rc6_option(const struct drm_device *dev, int enable_rc6)
 	return INTEL_RC6_ENABLE;
 }
 
+	/* RPS code assumes GPLL is used */
+	WARN_ONCE((val & GPLLENABLE) == 0, "GPLL not enabled\n");
+
 	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", val & GPLLENABLE ? "yes" : "no");
 	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
 
@@ -5631,6 +5634,9 @@ static void gen6_enable_rps(struct drm_device *dev)
 		   rc6_mask |
 		   GEN6_RC_CTL_EI_MODE(1) |
 		   GEN6_RC_CTL_HW_ENABLE);
+
+	/* RPS code assumes GPLL is used */
+	WARN_ONCE((val & GPLLENABLE) == 0, "GPLL not enabled\n");
 
 	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", val & GPLLENABLE ? "yes" : "no");
 	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
