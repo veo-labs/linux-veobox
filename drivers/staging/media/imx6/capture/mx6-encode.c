@@ -718,6 +718,8 @@ static int encoder_stop(struct encoder_priv *priv)
 		if (frame && frame->vb.state == VB2_BUF_STATE_ACTIVE) {
 			do_gettimeofday(&cur_time);
 			frame->vb.v4l2_buf.timestamp = cur_time;
+			frame->vb.v4l2_buf.field = V4L2_FIELD_NONE;
+			frame->vb.v4l2_buf.sequence = dev->sequence++;
 			vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
 		}
 	}
