@@ -745,7 +745,6 @@ void intel_panel_disable_backlight(struct intel_connector *connector)
 	struct drm_device *dev = connector->base.dev;
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_panel *panel = &connector->panel;
-	enum pipe pipe = intel_get_pipe_from_connector(connector);
 
 	if (!panel->backlight.present)
 		return;
