@@ -4422,16 +4422,8 @@ static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
 		if (!crtc->active)
 			continue;
 
-		pipe = crtc->pipe;
-
-		if (!skl_ddb_allocation_included(cur_ddb, new_ddb, pipe))
-			continue;
-
-		skl_wm_flush_pipe(dev_priv, pipe, 1);
-		intel_wait_for_vblank(dev, pipe);
-
-		reallocated[pipe] = true;
-	}
+	if (val != dev_priv->rps.cur_freq)
+		vlv_punit_write(dev_priv, PUNIT_REG_GPU_FREQ_REQ, val);
 
 
 	/*
