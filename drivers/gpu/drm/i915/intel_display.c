@@ -13822,8 +13822,6 @@ void intel_modeset_cleanup(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct drm_connector *connector;
 
-	intel_disable_gt_powersave(dev);
-
 	intel_backlight_unregister(dev);
 
 	/*
