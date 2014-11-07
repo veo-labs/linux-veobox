@@ -5365,10 +5365,8 @@ static int sanitize_rc6_option(const struct drm_device *dev, int enable_rc6)
 	return INTEL_RC6_ENABLE;
 }
 
-int intel_enable_rc6(const struct drm_device *dev)
-{
-	return i915.enable_rc6;
-}
+	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", val & GPLLENABLE ? "yes" : "no");
+	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
 
 static void gen6_init_rps_frequencies(struct drm_device *dev)
 {
@@ -5634,9 +5632,8 @@ static void gen6_enable_rps(struct drm_device *dev)
 		   GEN6_RC_CTL_EI_MODE(1) |
 		   GEN6_RC_CTL_HW_ENABLE);
 
-	/* Power down if completely idle for over 50ms */
-	I915_WRITE(GEN6_RP_DOWN_TIMEOUT, 50000);
-	I915_WRITE(GEN6_RP_IDLE_HYSTERSIS, 10);
+	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", val & GPLLENABLE ? "yes" : "no");
+	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
 
 	ret = sandybridge_pcode_write(dev_priv, GEN6_PCODE_WRITE_MIN_FREQ_TABLE, 0);
 	if (ret)
