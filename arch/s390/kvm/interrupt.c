@@ -714,6 +714,50 @@ static int __must_check __deliver_floating_interrupt(struct kvm_vcpu *vcpu,
 	int rc;
 
 	switch (inti->type) {
+	case KVM_S390_INT_EMERGENCY:
+		VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp emerg");
+		vcpu->stat.deliver_emergency_signal++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 inti->emerg.code, 0);
+		rc  = put_guest_lc(vcpu, 0x1201, (u16 *)__LC_EXT_INT_CODE);
+		rc |= put_guest_lc(vcpu, inti->emerg.code,
+				   (u16 *)__LC_EXT_CPU_ADDR);
+		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
+				     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
+				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		break;
+	case KVM_S390_INT_EXTERNAL_CALL:
+		VCPU_EVENT(vcpu, 4, "%s", "interrupt: sigp ext call");
+		vcpu->stat.deliver_external_call++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 inti->extcall.code, 0);
+		rc  = put_guest_lc(vcpu, 0x1202, (u16 *)__LC_EXT_INT_CODE);
+		rc |= put_guest_lc(vcpu, inti->extcall.code,
+				   (u16 *)__LC_EXT_CPU_ADDR);
+		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
+				     &vcpu->arch.sie_block->gpsw,
+				     sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
+				    &vcpu->arch.sie_block->gpsw,
+				    sizeof(psw_t));
+		break;
+	case KVM_S390_INT_CLOCK_COMP:
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 0, 0);
+		rc = deliver_ckc_interrupt(vcpu);
+		break;
+	case KVM_S390_INT_CPU_TIMER:
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 0, 0);
+		rc  = put_guest_lc(vcpu, EXT_IRQ_CPU_TIMER,
+				   (u16 *)__LC_EXT_INT_CODE);
+		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
+				     &vcpu->arch.sie_block->gpsw,
+				     sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
+				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		break;
 	case KVM_S390_INT_SERVICE:
 		rc = __deliver_service(vcpu, inti);
 		break;
