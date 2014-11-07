@@ -5229,12 +5229,33 @@ void gen6_rps_boost(struct drm_i915_private *dev_priv)
 	struct drm_device *dev = dev_priv->dev;
 
 	mutex_lock(&dev_priv->rps.hw_lock);
-	if (dev_priv->rps.enabled) {
-		if (IS_VALLEYVIEW(dev))
-			valleyview_set_rps(dev_priv->dev, dev_priv->rps.max_freq_softlimit);
-		else
-			gen6_set_rps(dev_priv->dev, dev_priv->rps.max_freq_softlimit);
-		dev_priv->rps.last_adj = 0;
+
+	mutex_lock(&dev_priv->dpio_lock);
+	val = vlv_cck_read(dev_priv, CCK_FUSE_REG);
+	mutex_unlock(&dev_priv->dpio_lock);
+
+	switch ((val >> 2) & 0x7) {
+	case 0:
+	case 1:
+		dev_priv->rps.cz_freq = 200;
+		dev_priv->mem_freq = 1600;
+		break;
+	case 2:
+		dev_priv->rps.cz_freq = 267;
+		dev_priv->mem_freq = 1600;
+		break;
+	case 3:
+		dev_priv->rps.cz_freq = 333;
+		dev_priv->mem_freq = 2000;
+		break;
+	case 4:
+		dev_priv->rps.cz_freq = 320;
+		dev_priv->mem_freq = 1600;
+		break;
+	case 5:
+		dev_priv->rps.cz_freq = 400;
+		dev_priv->mem_freq = 1600;
+		break;
 	}
 	mutex_unlock(&dev_priv->rps.hw_lock);
 }
