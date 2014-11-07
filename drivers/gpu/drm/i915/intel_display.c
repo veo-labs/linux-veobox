@@ -11663,27 +11663,12 @@ static int intel_crtc_set_config(struct drm_mode_set *set)
 						   &modeset_pipes,
 						   &prepare_pipes,
 						   &disable_pipes);
-	if (IS_ERR(pipe_config)) {
-		ret = PTR_ERR(pipe_config);
+	if (IS_ERR(pipe_config))
 		goto fail;
-	} else if (pipe_config) {
-		if (pipe_config->has_audio !=
-		    to_intel_crtc(set->crtc)->config->has_audio)
-			config->mode_changed = true;
-
-		/*
-		 * Note we have an issue here with infoframes: current code
-		 * only updates them on the full mode set path per hw
-		 * requirements.  So here we should be checking for any
-		 * required changes and forcing a mode set.
-		 */
-	}
 
 	/* set_mode will free it in the mode_changed case */
 	if (!config->mode_changed)
 		kfree(pipe_config);
-
-	intel_update_pipe_size(to_intel_crtc(set->crtc));
 
 	if (config->mode_changed) {
 		ret = intel_set_mode_pipes(set->crtc, set->mode,
