@@ -231,23 +231,6 @@ static int cvm_oct_napi_poll(struct napi_struct *napi, int budget)
 							    CVMX_POW_NO_WAIT);
 			did_work_request = 1;
 		}
-
-#ifndef CONFIG_RPS
-		if (rx_count == 0) {
-			/*
-			 * First time through, see if there is enough
-			 * work waiting to merit waking another
-			 * CPU.
-			 */
-			union cvmx_pow_wq_int_cntx counts;
-			int backlog;
-			int cores_in_use = core_state.baseline_cores - atomic_read(&core_state.available_cores);
-			counts.u64 = cvmx_read_csr(CVMX_POW_WQ_INT_CNTX(pow_receive_group));
-			backlog = counts.s.iq_cnt + counts.s.ds_cnt;
-			if (backlog > budget * cores_in_use && napi != NULL)
-				cvm_oct_enable_one_cpu();
-		}
-#endif
 		rx_count++;
 
 		skb_in_hw = USE_SKBUFFS_IN_HW && work->word2.s.bufs == 1;
