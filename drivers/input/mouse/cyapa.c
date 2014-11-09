@@ -460,7 +460,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	if (cyapa->btn_capability == CAPABILITY_LEFT_BTN_MASK)
 		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
 
-	/* Handle pointer emulation and unused slots in core */
+	/* handle pointer emulation and unused slots in core */
 	error = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS,
 				    INPUT_MT_POINTER | INPUT_MT_DROP_UNUSED);
 	if (error) {
@@ -1244,7 +1244,7 @@ static int cyapa_probe(struct i2c_client *client,
 					  IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					  "cyapa", cyapa);
 	if (error) {
-		dev_err(dev, "failed to request threaded irq: %d\n", error);
+		dev_err(dev, "IRQ request failed: %d\n, ", error);
 		return error;
 	}
 
@@ -1303,7 +1303,7 @@ static int __maybe_unused cyapa_suspend(struct device *dev)
 	}
 
 	if (device_may_wakeup(dev))
-		cyapa->irq_wake = (enable_irq_wake(client->irq) == 0);
+		cyapa->irq_wake = (enable_irq_wake(cyapa->irq) == 0);
 
 	mutex_unlock(&cyapa->state_sync_lock);
 	return 0;
@@ -1329,32 +1329,15 @@ static int __maybe_unused cyapa_resume(struct device *dev)
 
 	enable_irq(client->irq);
 
-	mutex_unlock(&cyapa->state_sync_lock);
-	return 0;
-}
-
-static int __maybe_unused cyapa_runtime_suspend(struct device *dev)
-{
-	struct cyapa *cyapa = dev_get_drvdata(dev);
-	int error;
-
-	error = cyapa->ops->set_power_mode(cyapa,
-			cyapa->runtime_suspend_power_mode,
-			cyapa->runtime_suspend_sleep_time);
+	power_mode = input->users ? PWR_MODE_FULL_ACTIVE : PWR_MODE_OFF;
+	error = cyapa_set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE);
 	if (error)
-		dev_warn(dev, "runtime suspend failed: %d\n", error);
+		dev_warn(dev, "resume: set power mode to %d failed: %d\n",
+			 power_mode, error);
 
-	return 0;
-}
+	enable_irq(cyapa->irq);
 
-static int __maybe_unused cyapa_runtime_resume(struct device *dev)
-{
-	struct cyapa *cyapa = dev_get_drvdata(dev);
-	int error;
-
-	error = cyapa->ops->set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE, 0);
-	if (error)
-		dev_warn(dev, "runtime resume failed: %d\n", error);
+	mutex_unlock(&input->mutex);
 
 	return 0;
 }
