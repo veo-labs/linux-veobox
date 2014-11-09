@@ -1854,10 +1854,9 @@ static void free_module(struct module *mod)
 	mutex_lock(&module_mutex);
 	/* Unlink carefully: kallsyms could be walking list. */
 	list_del_rcu(&mod->list);
-	/* Remove this module from bug list, this uses list_del_rcu */
-	module_bug_cleanup(mod);
-	/* Wait for RCU synchronizing before releasing mod->list and buglist. */
+	/* Wait for RCU synchronizing before releasing mod->list. */
 	synchronize_rcu();
+	module_bug_cleanup(mod);
 	mutex_unlock(&module_mutex);
 
 	/* This may be NULL, but that's OK */
