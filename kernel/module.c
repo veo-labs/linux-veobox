@@ -634,11 +634,17 @@ EXPORT_TRACEPOINT_SYMBOL(module_get);
 /* Init the unload section of the module. */
 static int module_unload_init(struct module *mod)
 {
+	/*
+	 * Initialize reference counter to MODULE_REF_BASE.
+	 * refcnt == 0 means module is going.
+	 */
+	atomic_set(&mod->refcnt, MODULE_REF_BASE);
+
 	INIT_LIST_HEAD(&mod->source_list);
 	INIT_LIST_HEAD(&mod->target_list);
 
 	/* Hold reference count during initialization. */
-	atomic_set(&mod->refcnt, 1);
+	atomic_inc(&mod->refcnt);
 
 	return 0;
 }
@@ -778,7 +784,7 @@ static int try_stop_module(struct module *mod, int flags, int *forced)
  */
 int module_refcount(struct module *mod)
 {
-	return (unsigned long)atomic_read(&mod->refcnt);
+	return (unsigned long)atomic_read(&mod->refcnt) - MODULE_REF_BASE;
 }
 EXPORT_SYMBOL(module_refcount);
 
@@ -935,9 +941,9 @@ bool try_module_get(struct module *module)
 
 	if (module) {
 		preempt_disable();
-
-		if (likely(module_is_live(module))) {
-			atomic_inc(&module->refcnt);
+		/* Note: here, we can fail to get a reference */
+		if (likely(module_is_live(module) &&
+			   atomic_inc_not_zero(&module->refcnt) != 0))
 			trace_module_get(module, _RET_IP_);
 		else
 			ret = false;
@@ -954,7 +960,8 @@ void module_put(struct module *module)
 
 	if (module) {
 		preempt_disable();
-		atomic_dec(&module->refcnt);
+		ret = atomic_dec_if_positive(&module->refcnt);
+		WARN_ON(ret < 0);	/* Failed to put refcount */
 		trace_module_put(module, _RET_IP_);
 		preempt_enable();
 	}
