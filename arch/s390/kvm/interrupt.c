@@ -32,6 +32,8 @@
 #define PFAULT_DONE 0x0680
 #define VIRTIO_PARAM 0x0d00
 
+static int __must_check deliver_ckc_interrupt(struct kvm_vcpu *vcpu);
+
 static int is_ioint(u64 type)
 {
 	return ((type & 0xfffe0000u) != 0xfffe0000u);
@@ -762,10 +764,74 @@ static int __must_check __deliver_floating_interrupt(struct kvm_vcpu *vcpu,
 		rc = __deliver_service(vcpu, inti);
 		break;
 	case KVM_S390_INT_PFAULT_DONE:
-		rc = __deliver_pfault_done(vcpu, inti);
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type, 0,
+						 inti->ext.ext_params2);
+		rc  = put_guest_lc(vcpu, 0x2603, (u16 *)__LC_EXT_INT_CODE);
+		rc |= put_guest_lc(vcpu, PFAULT_DONE, (u16 *)__LC_EXT_CPU_ADDR);
+		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
+				     &vcpu->arch.sie_block->gpsw,
+				     sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
+				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
+				   (u64 *)__LC_EXT_PARAMS2);
 		break;
 	case KVM_S390_INT_VIRTIO:
-		rc = __deliver_virtio(vcpu, inti);
+		VCPU_EVENT(vcpu, 4, "interrupt: virtio parm:%x,parm64:%llx",
+			   inti->ext.ext_params, inti->ext.ext_params2);
+		vcpu->stat.deliver_virtio_interrupt++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 inti->ext.ext_params,
+						 inti->ext.ext_params2);
+		rc  = put_guest_lc(vcpu, 0x2603, (u16 *)__LC_EXT_INT_CODE);
+		rc |= put_guest_lc(vcpu, VIRTIO_PARAM, (u16 *)__LC_EXT_CPU_ADDR);
+		rc |= write_guest_lc(vcpu, __LC_EXT_OLD_PSW,
+				     &vcpu->arch.sie_block->gpsw,
+				     sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, __LC_EXT_NEW_PSW,
+				    &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc |= put_guest_lc(vcpu, inti->ext.ext_params,
+				   (u32 *)__LC_EXT_PARAMS);
+		rc |= put_guest_lc(vcpu, inti->ext.ext_params2,
+				   (u64 *)__LC_EXT_PARAMS2);
+		break;
+	case KVM_S390_SIGP_STOP:
+		VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu stop");
+		vcpu->stat.deliver_stop_signal++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 0, 0);
+		__set_intercept_indicator(vcpu, inti);
+		break;
+
+	case KVM_S390_SIGP_SET_PREFIX:
+		VCPU_EVENT(vcpu, 4, "interrupt: set prefix to %x",
+			   inti->prefix.address);
+		vcpu->stat.deliver_prefix_signal++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 inti->prefix.address, 0);
+		kvm_s390_set_prefix(vcpu, inti->prefix.address);
+		break;
+
+	case KVM_S390_RESTART:
+		VCPU_EVENT(vcpu, 4, "%s", "interrupt: cpu restart");
+		vcpu->stat.deliver_restart_signal++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 0, 0);
+		rc  = write_guest_lc(vcpu,
+				     offsetof(struct _lowcore, restart_old_psw),
+				     &vcpu->arch.sie_block->gpsw, sizeof(psw_t));
+		rc |= read_guest_lc(vcpu, offsetof(struct _lowcore, restart_psw),
+				    &vcpu->arch.sie_block->gpsw,
+				    sizeof(psw_t));
+		break;
+	case KVM_S390_PROGRAM_INT:
+		VCPU_EVENT(vcpu, 4, "interrupt: pgm check code:%x, ilc:%x",
+			   inti->pgm.code,
+			   table[vcpu->arch.sie_block->ipa >> 14]);
+		vcpu->stat.deliver_program_int++;
+		trace_kvm_s390_deliver_interrupt(vcpu->vcpu_id, inti->type,
+						 inti->pgm.code, 0);
+		rc = __deliver_prog_irq(vcpu, &inti->pgm);
 		break;
 	case KVM_S390_MCHK:
 		rc = __deliver_mchk_floating(vcpu, inti);
