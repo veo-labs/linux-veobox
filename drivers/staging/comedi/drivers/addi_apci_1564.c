@@ -107,7 +107,6 @@
 
 struct apci1564_private {
 	unsigned long counters;		/* base address of 32-bit counters */
-	unsigned int amcc_iobase;	/* base of AMCC I/O registers */
 	unsigned int mode1;		/* riding-edge/high level channels */
 	unsigned int mode2;		/* falling-edge/low level channels */
 	unsigned int ctrl;		/* interrupt mode OR (edge) . AND (level) */
@@ -135,11 +134,8 @@ static int apci1564_reset(struct comedi_device *dev)
 	addi_watchdog_reset(dev->iobase + APCI1564_WDOG_REG);
 
 	/* Reset the timer registers */
-	outl(0x0, devpriv->timer + ADDI_TCW_CTRL_REG);
-	outl(0x0, devpriv->timer + ADDI_TCW_RELOAD_REG);
-
-	if (devpriv->counters) {
-		unsigned long iobase = devpriv->counters + ADDI_TCW_CTRL_REG;
+	outl(0x0, dev->iobase + APCI1564_TIMER_CTRL_REG);
+	outl(0x0, dev->iobase + APCI1564_TIMER_RELOAD_REG);
 
 	/* Reset the counter registers */
 	outl(0x0, devpriv->counters + APCI1564_COUNTER_CTRL_REG(0));
@@ -158,14 +154,14 @@ static irqreturn_t apci1564_interrupt(int irq, void *d)
 	unsigned int ctrl;
 	unsigned int chan;
 
-	status = inl(devpriv->amcc_iobase + APCI1564_DI_IRQ_REG);
+	status = inl(dev->iobase + APCI1564_DI_IRQ_REG);
 	if (status & APCI1564_DI_INT_ENABLE) {
 		/* disable the interrupt */
 		outl(status & APCI1564_DI_INT_DISABLE,
 		     dev->iobase + APCI1564_DI_IRQ_REG);
 
-		s->state = inl(devpriv->amcc_iobase +
-			       APCI1564_DI_INT_STATUS_REG) & 0xffff;
+		s->state = inl(dev->iobase + APCI1564_DI_INT_STATUS_REG) &
+			   0xffff;
 		comedi_buf_write_samples(s, &s->state, 1);
 		comedi_handle_events(dev, s);
 
@@ -173,17 +169,17 @@ static irqreturn_t apci1564_interrupt(int irq, void *d)
 		outl(status, dev->iobase + APCI1564_DI_IRQ_REG);
 	}
 
-	status = inl(devpriv->timer + ADDI_TCW_IRQ_REG);
+	status = inl(dev->iobase + APCI1564_TIMER_IRQ_REG);
 	if (status & 0x01) {
 		/*  Disable Timer Interrupt */
-		ctrl = inl(devpriv->timer + ADDI_TCW_CTRL_REG);
-		outl(0x0, devpriv->timer + ADDI_TCW_CTRL_REG);
+		ctrl = inl(dev->iobase + APCI1564_TIMER_CTRL_REG);
+		outl(0x0, dev->iobase + APCI1564_TIMER_CTRL_REG);
 
 		/* Send a signal to from kernel to user space */
 		send_sig(SIGIO, devpriv->tsk_current, 0);
 
 		/*  Enable Timer Interrupt */
-		outl(ctrl, devpriv->timer + ADDI_TCW_CTRL_REG);
+		outl(ctrl, dev->iobase + APCI1564_TIMER_CTRL_REG);
 	}
 
 	for (chan = 0; chan < 4; chan++) {
@@ -443,7 +439,7 @@ static int apci1564_auto_attach(struct comedi_device *dev,
 		return ret;
 
 	/* PLD Revision 2.x I/O Mapping */
-	devpriv->amcc_iobase = pci_resource_start(pcidev, 0);
+	dev->iobase = pci_resource_start(pcidev, 0);
 	devpriv->counters = pci_resource_start(pcidev, 1);
 
 	apci1564_reset(dev);
@@ -509,21 +505,6 @@ static int apci1564_auto_attach(struct comedi_device *dev,
 
 	/* Counter subdevice */
 	s = &dev->subdevices[4];
-	if (devpriv->counters) {
-		s->type		= COMEDI_SUBD_COUNTER;
-		s->subdev_flags	= SDF_WRITABLE | SDF_READABLE | SDF_LSAMPL;
-		s->n_chan	= 3;
-		s->maxdata	= 0xffffffff;
-		s->range_table	= &range_digital;
-		s->insn_config	= apci1564_counter_insn_config;
-		s->insn_write	= apci1564_counter_insn_write;
-		s->insn_read	= apci1564_counter_insn_read;
-	} else {
-		s->type		= COMEDI_SUBD_UNUSED;
-	}
-
-	/* Initialize the watchdog subdevice */
-	s = &dev->subdevices[5];
 	ret = addi_watchdog_init(s, dev->iobase + APCI1564_WDOG_REG);
 	if (ret)
 		return ret;
