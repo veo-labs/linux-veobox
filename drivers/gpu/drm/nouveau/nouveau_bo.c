@@ -334,8 +334,8 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 		}
 	}
 
-	if (nvbo->pin_refcnt)
-		goto ref_inc;
+	if (nvbo->pin_refcnt++)
+		goto out;
 
 	nvbo->pin_refcnt++;
 	nouveau_bo_placement_set(nvbo, memtype, 0);
@@ -348,6 +348,7 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 	ret = nouveau_bo_validate(nvbo, false, false);
 	if (ret)
 		goto out;
+	nvbo->pin_refcnt++;
 
 	switch (bo->mem.mem_type) {
 	case TTM_PL_VRAM:
@@ -360,8 +361,6 @@ nouveau_bo_pin(struct nouveau_bo *nvbo, uint32_t memtype, bool contig)
 		break;
 	}
 
-ref_inc:
-	nvbo->pin_refcnt++;
 out:
 	if (force && ret)
 		nvbo->tile_flags |= NOUVEAU_GEM_TILE_NONCONTIG;
