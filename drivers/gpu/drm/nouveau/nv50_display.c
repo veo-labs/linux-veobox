@@ -1456,22 +1456,6 @@ nv50_crtc_create(struct drm_device *dev, int index)
 	if (ret)
 		goto out;
 
-	ret = nouveau_bo_new(dev, 64 * 64 * 4, 0x100, TTM_PL_FLAG_VRAM,
-			     0, 0x0000, NULL, NULL, &head->base.cursor.nvbo);
-	if (!ret) {
-		ret = nouveau_bo_pin(head->base.cursor.nvbo, TTM_PL_FLAG_VRAM, true);
-		if (!ret) {
-			ret = nouveau_bo_map(head->base.cursor.nvbo);
-			if (ret)
-				nouveau_bo_unpin(head->base.lut.nvbo);
-		}
-		if (ret)
-			nouveau_bo_ref(NULL, &head->base.cursor.nvbo);
-	}
-
-	if (ret)
-		goto out;
-
 	/* allocate page flip / sync resources */
 	ret = nv50_base_create(disp->disp, index, disp->sync->bo.offset,
 			      &head->sync);
