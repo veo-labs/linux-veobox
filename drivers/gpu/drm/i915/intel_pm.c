@@ -5201,7 +5201,26 @@ static void vlv_set_rps_idle(struct drm_i915_private *dev_priv)
 
 	vlv_force_gfx_clock(dev_priv, true);
 
-	dev_priv->rps.cur_freq = dev_priv->rps.min_freq_softlimit;
+	val = vlv_punit_read(dev_priv, PUNIT_REG_GPU_FREQ_STS);
+	switch ((val >> 6) & 3) {
+	case 0:
+	case 1:
+		dev_priv->mem_freq = 800;
+		break;
+	case 2:
+		dev_priv->mem_freq = 1066;
+		break;
+	case 3:
+		dev_priv->mem_freq = 1333;
+		break;
+	}
+	DRM_DEBUG_DRIVER("DDR speed: %d MHz\n", dev_priv->mem_freq);
+
+	dev_priv->rps.max_freq = valleyview_rps_max_freq(dev_priv);
+	dev_priv->rps.rp0_freq = dev_priv->rps.max_freq;
+	DRM_DEBUG_DRIVER("max GPU freq: %d MHz (%u)\n",
+			 vlv_gpu_freq(dev_priv, dev_priv->rps.max_freq),
+			 dev_priv->rps.max_freq);
 
 	vlv_punit_write(dev_priv, PUNIT_REG_GPU_FREQ_REQ,
 					dev_priv->rps.min_freq_softlimit);
@@ -5264,8 +5283,7 @@ void gen6_rps_boost(struct drm_i915_private *dev_priv)
 		dev_priv->mem_freq = 1600;
 		break;
 	}
-	mutex_unlock(&dev_priv->rps.hw_lock);
-}
+	DRM_DEBUG_DRIVER("DDR speed: %d MHz\n", dev_priv->mem_freq);
 
 void valleyview_set_rps(struct drm_device *dev, u8 val)
 {
