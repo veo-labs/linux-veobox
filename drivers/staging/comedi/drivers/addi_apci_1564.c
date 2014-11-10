@@ -28,7 +28,6 @@
 
 #include "../comedidev.h"
 #include "comedi_fc.h"
-#include "addi_tcw.h"
 #include "addi_watchdog.h"
 
 /*
@@ -160,7 +159,7 @@ static irqreturn_t apci1564_interrupt(int irq, void *d)
 	unsigned int ctrl;
 	unsigned int chan;
 
-	status = inl(dev->iobase + APCI1564_DI_IRQ_REG);
+	status = inl(devpriv->amcc_iobase + APCI1564_DI_IRQ_REG);
 	if (status & APCI1564_DI_INT_ENABLE) {
 		/* disable the interrupt */
 		outl(status & APCI1564_DI_INT_DISABLE,
