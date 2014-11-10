@@ -1232,6 +1232,25 @@ exit:
 	return res;
 }
 
+/* Logical Link Control(LLC) SubNetwork Attachment Point(SNAP) header
+ * IEEE LLC/SNAP header contains 8 octets
+ * First 3 octets comprise the LLC portion
+ * SNAP portion, 5 octets, is divided into two fields:
+ *	Organizationally Unique Identifier(OUI), 3 octets,
+ *	type, defined by that organization, 2 octets.
+ */
+s32 rtw_put_snap23a(u8 *data, u16 h_proto)
+{
+	if (h_proto == ETH_P_IPX || h_proto == ETH_P_AARP)
+		ether_addr_copy(data, bridge_tunnel_header);
+	else
+		ether_addr_copy(data, rfc1042_header);
+
+	data += ETH_ALEN;
+	*(__be16 *)data = htons(h_proto);
+	return ETH_ALEN + sizeof(u16);
+}
+
 void rtw_update_protection23a(struct rtw_adapter *padapter, u8 *ie, uint ie_len)
 {
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
