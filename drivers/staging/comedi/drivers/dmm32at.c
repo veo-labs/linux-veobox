@@ -200,13 +200,18 @@ static int dmm32at_ai_insn_read(struct comedi_device *dev,
 				struct comedi_insn *insn,
 				unsigned int *data)
 {
-	int n;
-	unsigned char chan;
-	int range;
+	unsigned int chan = CR_CHAN(insn->chanspec);
+	unsigned int range = CR_RANGE(insn->chanspec);
 	int ret;
 	int i;
 
-	dmm32at_ai_set_chanspec(dev, s, insn->chanspec, 1);
+	/* zero scan and fifo control and reset fifo */
+	outb(DMM32AT_FIFORESET, dev->iobase + DMM32AT_FIFOCNTRL);
+
+	/* set the channel and range */
+	outb(chan, dev->iobase + DMM32AT_AILOW);
+	outb(chan, dev->iobase + DMM32AT_AIHIGH);
+	outb(dmm32at_rangebits[range], dev->iobase + DMM32AT_AICONF);
 
 	/* wait for circuit to settle */
 	ret = comedi_timeout(dev, s, insn, dmm32at_ai_status,
@@ -215,17 +220,23 @@ static int dmm32at_ai_insn_read(struct comedi_device *dev,
 		return ret;
 
 	for (i = 0; i < insn->n; i++) {
-		outb(0xff, dev->iobase + DMM32AT_AI_START_CONV_REG);
+		outb(0xff, dev->iobase + DMM32AT_CONV);
 
 		ret = comedi_timeout(dev, s, insn, dmm32at_ai_status,
 				     DMM32AT_AI_STATUS_REG);
 		if (ret)
 			return ret;
 
-		data[n] = dmm32at_ai_get_sample(dev, s);
+		data[i] = dmm32at_ai_get_sample(dev, s);
 	}
 
 	return insn->n;
+}
+
+static int dmm32at_ns_to_timer(unsigned int *ns, unsigned int flags)
+{
+	/* trivial timer */
+	return *ns;
 }
 
 static int dmm32at_ai_check_chanlist(struct comedi_device *dev,
@@ -568,12 +579,14 @@ static int dmm32at_attach(struct comedi_device *dev,
 
 	/* Analog Input subdevice */
 	s = &dev->subdevices[0];
-	s->type		= COMEDI_SUBD_AI;
-	s->subdev_flags	= SDF_READABLE | SDF_GROUND | SDF_DIFF;
-	s->n_chan	= 32;
-	s->maxdata	= 0xffff;
-	s->range_table	= &dmm32at_airanges;
-	s->insn_read	= dmm32at_ai_insn_read;
+	/* analog input subdevice */
+	s->type = COMEDI_SUBD_AI;
+	/* we support single-ended (ground) and differential */
+	s->subdev_flags = SDF_READABLE | SDF_GROUND | SDF_DIFF;
+	s->n_chan = 32;
+	s->maxdata = 0xffff;
+	s->range_table = &dmm32at_airanges;
+	s->insn_read = dmm32at_ai_insn_read;
 	if (dev->irq) {
 		dev->read_subdev = s;
 		s->subdev_flags	|= SDF_CMD_READ;
