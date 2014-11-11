@@ -504,6 +504,7 @@ static int dmm32at_8255_io(struct comedi_device *dev,
 /* Make sure the board is there and put it to a known state */
 static int dmm32at_reset(struct comedi_device *dev)
 {
+	struct dmm32at_private *devpriv = dev->private;
 	unsigned char aihi, ailo, fifostat, aistat, intstat, airback;
 
 	/* reset the board */
@@ -529,23 +530,24 @@ static int dmm32at_reset(struct comedi_device *dev)
 	udelay(100);
 
 	/* read back the values */
-	ailo = inb(dev->iobase + DMM32AT_AI_LO_CHAN_REG);
-	aihi = inb(dev->iobase + DMM32AT_AI_HI_CHAN_REG);
-	fifostat = inb(dev->iobase + DMM32AT_FIFO_STATUS_REG);
-	aistat = inb(dev->iobase + DMM32AT_AI_STATUS_REG);
-	intstat = inb(dev->iobase + DMM32AT_INTCLK_REG);
-	airback = inb(dev->iobase + DMM32AT_AI_READBACK_REG);
+	ailo = inb(dev->iobase + DMM32AT_AILOW);
+	aihi = inb(dev->iobase + DMM32AT_AIHIGH);
+	fifostat = inb(dev->iobase + DMM32AT_FIFOSTAT);
+	aistat = inb(dev->iobase + DMM32AT_AISTAT);
+	intstat = inb(dev->iobase + DMM32AT_INTCLOCK);
+	airback = inb(dev->iobase + DMM32AT_AIRBACK);
 
-	/*
-	 * NOTE: The (DMM32AT_AI_STATUS_SD1 | DMM32AT_AI_STATUS_SD0)
-	 * test makes this driver only work if the board is configured
-	 * with all A/D channels set for single-ended operation.
-	 */
-	if (ailo != 0x00 || aihi != 0x1f ||
-	    fifostat != DMM32AT_FIFO_STATUS_EF ||
-	    aistat != (DMM32AT_AI_STATUS_SD1 | DMM32AT_AI_STATUS_SD0) ||
-	    intstat != 0x00 || airback != 0x0c)
+	if (ailo != 0x00 || aihi != 0x1f || fifostat != 0x80 ||
+	    aistat != 0x60 || intstat != 0x00 || airback != 0x0c)
 		return -EIO;
+
+	/* get access to the DIO regs */
+	outb(DMM32AT_DIOACC, dev->iobase + DMM32AT_CNTRL);
+	/* set the DIO's to the defualt input setting */
+	devpriv->dio_config = DMM32AT_DIRA | DMM32AT_DIRB |
+			      DMM32AT_DIRCL | DMM32AT_DIRCH |
+			      DMM32AT_DIENABLE;
+	outb(devpriv->dio_config, dev->iobase + DMM32AT_DIOCONF);
 
 	return 0;
 }
@@ -553,8 +555,13 @@ static int dmm32at_reset(struct comedi_device *dev)
 static int dmm32at_attach(struct comedi_device *dev,
 			  struct comedi_devconfig *it)
 {
+	struct dmm32at_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret;
+
+	devpriv = comedi_alloc_devpriv(dev, sizeof(*devpriv));
+	if (!devpriv)
+		return -ENOMEM;
 
 	ret = comedi_request_region(dev, it->options[0], 0x10);
 	if (ret)
@@ -611,9 +618,15 @@ static int dmm32at_attach(struct comedi_device *dev,
 
 	/* Digital I/O subdevice */
 	s = &dev->subdevices[2];
-	ret = subdev_8255_init(dev, s, dmm32at_8255_io, DMM32AT_8255_IOBASE);
-	if (ret)
-		return ret;
+	/* digital i/o subdevice */
+	s->type = COMEDI_SUBD_DIO;
+	s->subdev_flags = SDF_READABLE | SDF_WRITABLE;
+	s->n_chan = 24;
+	s->maxdata = 1;
+	s->state = 0;
+	s->range_table = &range_digital;
+	s->insn_bits = dmm32at_dio_insn_bits;
+	s->insn_config = dmm32at_dio_insn_config;
 
 	return 0;
 }
