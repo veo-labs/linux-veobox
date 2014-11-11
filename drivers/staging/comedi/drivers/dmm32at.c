@@ -45,76 +45,29 @@
 
 /* Board register addresses */
 #define DMM32AT_AI_START_CONV_REG	0x00
-#define DMM32AT_AI_LSB_REG		0x00
-#define DMM32AT_AUX_DOUT_REG		0x01
-#define DMM32AT_AUX_DOUT2		(1 << 2)  /* J3.42 - OUT2 (OUT2EN) */
-#define DMM32AT_AUX_DOUT1		(1 << 1)  /* J3.43 */
-#define DMM32AT_AUX_DOUT0		(1 << 0)  /* J3.44 - OUT0 (OUT0EN) */
-#define DMM32AT_AI_MSB_REG		0x01
-#define DMM32AT_AI_LO_CHAN_REG		0x02
-#define DMM32AT_AI_HI_CHAN_REG		0x03
-#define DMM32AT_AUX_DI_REG		0x04
-#define DMM32AT_AUX_DI_DACBUSY		(1 << 7)
-#define DMM32AT_AUX_DI_CALBUSY		(1 << 6)
-#define DMM32AT_AUX_DI3			(1 << 3)  /* J3.45 - ADCLK (CLKSEL) */
-#define DMM32AT_AUX_DI2			(1 << 2)  /* J3.46 - GATE12 (GT12EN) */
-#define DMM32AT_AUX_DI1			(1 << 1)  /* J3.47 - GATE0 (GT0EN) */
-#define DMM32AT_AUX_DI0			(1 << 0)  /* J3.48 - CLK0 (SRC0) */
-#define DMM32AT_AO_LSB_REG		0x04
-#define DMM32AT_AO_MSB_REG		0x05
-#define DMM32AT_AO_MSB_DACH(x)		((x) << 6)
-#define DMM32AT_FIFO_DEPTH_REG		0x06
-#define DMM32AT_FIFO_CTRL_REG		0x07
-#define DMM32AT_FIFO_CTRL_FIFOEN	(1 << 3)
-#define DMM32AT_FIFO_CTRL_SCANEN	(1 << 2)
-#define DMM32AT_FIFO_CTRL_FIFORST	(1 << 1)
-#define DMM32AT_FIFO_STATUS_REG		0x07
-#define DMM32AT_FIFO_STATUS_EF		(1 << 7)
-#define DMM32AT_FIFO_STATUS_HF		(1 << 6)
-#define DMM32AT_FIFO_STATUS_FF		(1 << 5)
-#define DMM32AT_FIFO_STATUS_OVF		(1 << 4)
-#define DMM32AT_FIFO_STATUS_FIFOEN	(1 << 3)
-#define DMM32AT_FIFO_STATUS_SCANEN	(1 << 2)
-#define DMM32AT_FIFO_STATUS_PAGE_MASK	(3 << 0)
-#define DMM32AT_CTRL_REG		0x08
-#define DMM32AT_CTRL_RESETA		(1 << 5)
-#define DMM32AT_CTRL_RESETD		(1 << 4)
-#define DMM32AT_CTRL_INTRST		(1 << 3)
-#define DMM32AT_CTRL_PAGE_8254		(0 << 0)
-#define DMM32AT_CTRL_PAGE_8255		(1 << 0)
-#define DMM32AT_CTRL_PAGE_CALIB		(3 << 0)
-#define DMM32AT_AI_STATUS_REG		0x08
-#define DMM32AT_AI_STATUS_STS		(1 << 7)
-#define DMM32AT_AI_STATUS_SD1		(1 << 6)
-#define DMM32AT_AI_STATUS_SD0		(1 << 5)
-#define DMM32AT_AI_STATUS_ADCH_MASK	(0x1f << 0)
-#define DMM32AT_INTCLK_REG		0x09
-#define DMM32AT_INTCLK_ADINT		(1 << 7)
-#define DMM32AT_INTCLK_DINT		(1 << 6)
-#define DMM32AT_INTCLK_TINT		(1 << 5)
-#define DMM32AT_INTCLK_CLKEN		(1 << 1)  /* 1=see below  0=software */
-#define DMM32AT_INTCLK_CLKSEL		(1 << 0)  /* 1=OUT2  0=EXTCLK */
-#define DMM32AT_CTRDIO_CFG_REG		0x0a
-#define DMM32AT_CTRDIO_CFG_FREQ12	(1 << 7)  /* CLK12 1=100KHz 0=10MHz */
-#define DMM32AT_CTRDIO_CFG_FREQ0	(1 << 6)  /* CLK0  1=10KHz  0=10MHz */
-#define DMM32AT_CTRDIO_CFG_OUT2EN	(1 << 5)  /* J3.42 1=OUT2 is DOUT2 */
-#define DMM32AT_CTRDIO_CFG_OUT0EN	(1 << 4)  /* J3,44 1=OUT0 is DOUT0 */
-#define DMM32AT_CTRDIO_CFG_GT0EN	(1 << 2)  /* J3.47 1=DIN1 is GATE0 */
-#define DMM32AT_CTRDIO_CFG_SRC0		(1 << 1)  /* CLK0 is 0=FREQ0 1=J3.48 */
-#define DMM32AT_CTRDIO_CFG_GT12EN	(1 << 0)  /* J3.46 1=DIN2 is GATE12 */
-#define DMM32AT_AI_CFG_REG		0x0b
-#define DMM32AT_AI_CFG_SCINT_20US	(0 << 4)
-#define DMM32AT_AI_CFG_SCINT_15US	(1 << 4)
-#define DMM32AT_AI_CFG_SCINT_10US	(2 << 4)
-#define DMM32AT_AI_CFG_SCINT_5US	(3 << 4)
-#define DMM32AT_AI_CFG_RANGE		(1 << 3)  /* 0=5V  1=10V */
-#define DMM32AT_AI_CFG_ADBU		(1 << 2)  /* 0=bipolar  1=unipolar */
-#define DMM32AT_AI_CFG_GAIN(x)		((x) << 0)
-#define DMM32AT_AI_READBACK_REG		0x0b
-#define DMM32AT_AI_READBACK_WAIT	(1 << 7)  /* DMM32AT_AI_STATUS_STS */
-#define DMM32AT_AI_READBACK_RANGE	(1 << 3)
-#define DMM32AT_AI_READBACK_ADBU	(1 << 2)
-#define DMM32AT_AI_READBACK_GAIN_MASK	(3 << 0)
+#define DMM32AT_AILSB 0x00
+#define DMM32AT_AUXDOUT 0x01
+#define DMM32AT_AIMSB 0x01
+#define DMM32AT_AILOW 0x02
+#define DMM32AT_AIHIGH 0x03
+
+#define DMM32AT_DACSTAT 0x04
+#define DMM32AT_DACLSB_REG	0x04
+#define DMM32AT_DACMSB_REG	0x05
+#define DMM32AT_DACMSB_CHAN(x)	((x) << 6)
+
+#define DMM32AT_FIFOCNTRL 0x07
+#define DMM32AT_FIFOSTAT 0x07
+
+#define DMM32AT_CNTRL 0x08
+#define DMM32AT_AISTAT 0x08
+
+#define DMM32AT_INTCLOCK 0x09
+
+#define DMM32AT_CNTRDIO 0x0a
+
+#define DMM32AT_AICONF 0x0b
+#define DMM32AT_AIRBACK 0x0b
 
 #define DMM32AT_CLK1 0x0d
 #define DMM32AT_CLK2 0x0e
@@ -224,7 +177,7 @@ static int dmm32at_ai_insn_read(struct comedi_device *dev,
 		return ret;
 
 	for (i = 0; i < insn->n; i++) {
-		outb(0xff, dev->iobase + DMM32AT_CONV);
+		outb(0xff, dev->iobase + DMM32AT_AI_START_CONV_REG);
 
 		ret = comedi_timeout(dev, s, insn, dmm32at_ai_status,
 				     DMM32AT_AI_STATUS_REG);
@@ -391,7 +344,7 @@ static int dmm32at_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 		dmm32at_setaitimer(dev, cmd->scan_begin_arg);
 	} else {
 		/* start the interrups and initiate a single scan */
-		outb(DMM32AT_INTCLK_ADINT, dev->iobase + DMM32AT_INTCLK_REG);
+		outb(DMM32AT_ADINT, dev->iobase + DMM32AT_INTCLOCK);
 		outb(0xff, dev->iobase + DMM32AT_AI_START_CONV_REG);
 	}
 
