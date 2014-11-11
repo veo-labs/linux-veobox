@@ -233,12 +233,6 @@ static int dmm32at_ai_insn_read(struct comedi_device *dev,
 	return insn->n;
 }
 
-static int dmm32at_ns_to_timer(unsigned int *ns, unsigned int flags)
-{
-	/* trivial timer */
-	return *ns;
-}
-
 static int dmm32at_ai_check_chanlist(struct comedi_device *dev,
 				     struct comedi_subdevice *s,
 				     struct comedi_cmd *cmd)
@@ -320,10 +314,6 @@ static int dmm32at_ai_cmdtest(struct comedi_device *dev,
 		return 3;
 
 	/* Step 4: fix up any arguments */
-
-	arg = cmd->convert_arg;
-	dmm32at_ns_to_timer(&arg, cmd->flags);
-	err |= cfc_check_trigger_arg_is(&cmd->convert_arg, arg);
 
 	arg = cmd->convert_arg * cmd->scan_end_arg;
 	err |= cfc_check_trigger_arg_min(&cmd->scan_begin_arg, arg);
