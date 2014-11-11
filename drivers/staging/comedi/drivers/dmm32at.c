@@ -164,10 +164,6 @@ static const struct comedi_lrange dmm32at_aoranges = {
 	}
 };
 
-struct dmm32at_private {
-	unsigned char dio_config;
-};
-
 static void dmm32at_ai_set_chanspec(struct comedi_device *dev,
 				    struct comedi_subdevice *s,
 				    unsigned int chanspec, int nchan)
@@ -494,7 +490,7 @@ static int dmm32at_8255_io(struct comedi_device *dev,
 			   int dir, int port, int data, unsigned long regbase)
 {
 	/* get access to the DIO regs */
-	outb(DMM32AT_CTRL_PAGE_8255, dev->iobase + DMM32AT_CTRL_REG);
+	outb(DMM32AT_DIOACC, dev->iobase + DMM32AT_CNTRL);
 
 	if (dir) {
 		outb(data, dev->iobase + regbase + port);
@@ -506,7 +502,6 @@ static int dmm32at_8255_io(struct comedi_device *dev,
 /* Make sure the board is there and put it to a known state */
 static int dmm32at_reset(struct comedi_device *dev)
 {
-	struct dmm32at_private *devpriv = dev->private;
 	unsigned char aihi, ailo, fifostat, aistat, intstat, airback;
 
 	/* reset the board */
@@ -543,27 +538,14 @@ static int dmm32at_reset(struct comedi_device *dev)
 	    aistat != 0x60 || intstat != 0x00 || airback != 0x0c)
 		return -EIO;
 
-	/* get access to the DIO regs */
-	outb(DMM32AT_DIOACC, dev->iobase + DMM32AT_CNTRL);
-	/* set the DIO's to the defualt input setting */
-	devpriv->dio_config = DMM32AT_DIRA | DMM32AT_DIRB |
-			      DMM32AT_DIRCL | DMM32AT_DIRCH |
-			      DMM32AT_DIENABLE;
-	outb(devpriv->dio_config, dev->iobase + DMM32AT_DIOCONF);
-
 	return 0;
 }
 
 static int dmm32at_attach(struct comedi_device *dev,
 			  struct comedi_devconfig *it)
 {
-	struct dmm32at_private *devpriv;
 	struct comedi_subdevice *s;
 	int ret;
-
-	devpriv = comedi_alloc_devpriv(dev, sizeof(*devpriv));
-	if (!devpriv)
-		return -ENOMEM;
 
 	ret = comedi_request_region(dev, it->options[0], 0x10);
 	if (ret)
@@ -619,13 +601,9 @@ static int dmm32at_attach(struct comedi_device *dev,
 
 	/* Digital I/O subdevice */
 	s = &dev->subdevices[2];
-	s->type		= COMEDI_SUBD_DIO;
-	s->subdev_flags	= SDF_READABLE | SDF_WRITABLE;
-	s->n_chan	= 24;
-	s->maxdata	= 1;
-	s->range_table	= &range_digital;
-	s->insn_bits	= dmm32at_dio_insn_bits;
-	s->insn_config	= dmm32at_dio_insn_config;
+	ret = subdev_8255_init(dev, s, dmm32at_8255_io, DMM32AT_8255_IOBASE);
+	if (ret)
+		return ret;
 
 	return 0;
 }
