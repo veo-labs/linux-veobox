@@ -94,8 +94,14 @@
 #define DMM32AT_INTCLK_TINT		(1 << 5)
 #define DMM32AT_INTCLK_CLKEN		(1 << 1)  /* 1=see below  0=software */
 #define DMM32AT_INTCLK_CLKSEL		(1 << 0)  /* 1=OUT2  0=EXTCLK */
-
-#define DMM32AT_CNTRDIO 0x0a
+#define DMM32AT_CTRDIO_CFG_REG		0x0a
+#define DMM32AT_CTRDIO_CFG_FREQ12	(1 << 7)  /* CLK12 1=100KHz 0=10MHz */
+#define DMM32AT_CTRDIO_CFG_FREQ0	(1 << 6)  /* CLK0  1=10KHz  0=10MHz */
+#define DMM32AT_CTRDIO_CFG_OUT2EN	(1 << 5)  /* J3.42 1=OUT2 is DOUT2 */
+#define DMM32AT_CTRDIO_CFG_OUT0EN	(1 << 4)  /* J3,44 1=OUT0 is DOUT0 */
+#define DMM32AT_CTRDIO_CFG_GT0EN	(1 << 2)  /* J3.47 1=DIN1 is GATE0 */
+#define DMM32AT_CTRDIO_CFG_SRC0		(1 << 1)  /* CLK0 is 0=FREQ0 1=J3.48 */
+#define DMM32AT_CTRDIO_CFG_GT12EN	(1 << 0)  /* J3.46 1=DIN2 is GATE12 */
 
 #define DMM32AT_AICONF 0x0b
 #define DMM32AT_AIRBACK 0x0b
@@ -107,9 +113,6 @@
 #define DMM32AT_8255_IOBASE		0x0c  /* Page 1 registers */
 
 /* Board register values. */
-
-/* DMM32AT_CNTRDIO 0x0a */
-#define DMM32AT_FREQ12 0x80
 
 /* DMM32AT_AICONF 0x0b */
 #define DMM32AT_RANGE_U10 0x0c
