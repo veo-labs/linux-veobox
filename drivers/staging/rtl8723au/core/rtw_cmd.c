@@ -891,9 +891,9 @@ static void traffic_status_watchdog(struct rtw_adapter *padapter)
 		if (!rtl8723a_BT_coexist(padapter) ||
 		    !rtl8723a_BT_using_antenna_1(padapter)) {
 		/*  check traffic for  powersaving. */
-			if (((ldi->NumRxUnicastOkInPeriod +
-			      ldi->NumTxOkInPeriod) > 8) ||
-			    ldi->NumRxUnicastOkInPeriod > 2)
+			if (((pmlmepriv->LinkDetectInfo.NumRxUnicastOkInPeriod +
+			      pmlmepriv->LinkDetectInfo.NumTxOkInPeriod) > 8) ||
+			    pmlmepriv->LinkDetectInfo.NumRxUnicastOkInPeriod > 2)
 				bEnterPS = false;
 			else
 				bEnterPS = true;
