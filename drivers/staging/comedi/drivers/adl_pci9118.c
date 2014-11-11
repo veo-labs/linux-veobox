@@ -502,15 +502,6 @@ static unsigned int valid_samples_in_act_dma_buf(struct comedi_device *dev,
 	return n_samples;
 }
 
-static void move_block_from_dma(struct comedi_device *dev,
-				struct comedi_subdevice *s,
-				unsigned short *dma_buffer,
-				unsigned int num_samples)
-{
-	num_samples = defragment_dma_buffer(dev, s, dma_buffer, num_samples);
-	comedi_buf_write_samples(s, dma_buffer, num_samples);
-}
-
 static void pci9118_exttrg_enable(struct comedi_device *dev, bool enable)
 {
 	struct pci9118_private *devpriv = dev->private;
@@ -647,13 +638,10 @@ static void interrupt_pci9118_ai_dma(struct comedi_device *dev,
 	struct pci9118_private *devpriv = dev->private;
 	struct comedi_cmd *cmd = &s->async->cmd;
 	struct pci9118_dmabuf *dmabuf = &devpriv->dmabuf[devpriv->dma_actbuf];
-	unsigned int n_all = comedi_bytes_to_samples(s, dmabuf->use_size);
-	unsigned int n_valid;
-	bool more_dma;
+	unsigned int nsamples;
+	unsigned int next_dma_buf;
 
-	/* determine whether more DMA buffers to do after this one */
-	n_valid = valid_samples_in_act_dma_buf(dev, s, n_all);
-	more_dma = n_valid < comedi_nsamples_left(s, n_valid + 1);
+	nsamples = dmabuf->use_size >> 1;	/* number of received samples */
 
 	/* switch DMA buffers and restart DMA if double buffering */
 	if (more_dma && devpriv->dma_doublebuf) {
@@ -665,8 +653,11 @@ static void interrupt_pci9118_ai_dma(struct comedi_device *dev,
 		}
 	}
 
-	if (n_all)
-		move_block_from_dma(dev, s, dmabuf->virt, n_all);
+	if (nsamples) {
+		nsamples = defragment_dma_buffer(dev, s, dmabuf->virt,
+						 nsamples);
+		comedi_buf_write_samples(s, dmabuf->virt, nsamples);
+	}
 
 	if (!devpriv->ai_neverending) {
 		if (s->async->scans_done >= cmd->stop_arg)
