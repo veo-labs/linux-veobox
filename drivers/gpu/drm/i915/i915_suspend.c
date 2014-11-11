@@ -272,7 +272,14 @@ static void i915_restore_display(struct drm_device *dev)
 		I915_WRITE(PCH_PP_OFF_DELAYS, dev_priv->regfile.savePP_OFF_DELAYS);
 		I915_WRITE(PCH_PP_DIVISOR, dev_priv->regfile.savePP_DIVISOR);
 		I915_WRITE(PCH_PP_CONTROL, dev_priv->regfile.savePP_CONTROL);
-	} else if (!IS_VALLEYVIEW(dev)) {
+	} else if (IS_VALLEYVIEW(dev)) {
+		I915_WRITE(VLV_BLC_HIST_CTL(PIPE_A),
+			   dev_priv->regfile.saveBLC_HIST_CTL);
+		I915_WRITE(VLV_BLC_HIST_CTL(PIPE_B),
+			   dev_priv->regfile.saveBLC_HIST_CTL);
+	} else {
+		I915_WRITE(PFIT_PGM_RATIOS, dev_priv->regfile.savePFIT_PGM_RATIOS);
+		I915_WRITE(BLC_HIST_CTL, dev_priv->regfile.saveBLC_HIST_CTL);
 		I915_WRITE(PP_ON_DELAYS, dev_priv->regfile.savePP_ON_DELAYS);
 		I915_WRITE(PP_OFF_DELAYS, dev_priv->regfile.savePP_OFF_DELAYS);
 		I915_WRITE(PP_DIVISOR, dev_priv->regfile.savePP_DIVISOR);
