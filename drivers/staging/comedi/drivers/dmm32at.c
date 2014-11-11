@@ -83,7 +83,11 @@
 #define DMM32AT_CTRL_PAGE_8254		(0 << 0)
 #define DMM32AT_CTRL_PAGE_8255		(1 << 0)
 #define DMM32AT_CTRL_PAGE_CALIB		(3 << 0)
-#define DMM32AT_AISTAT 0x08
+#define DMM32AT_AI_STATUS_REG		0x08
+#define DMM32AT_AI_STATUS_STS		(1 << 7)
+#define DMM32AT_AI_STATUS_SD1		(1 << 6)
+#define DMM32AT_AI_STATUS_SD0		(1 << 5)
+#define DMM32AT_AI_STATUS_ADCH_MASK	(0x1f << 0)
 
 #define DMM32AT_INTCLOCK 0x09
 
@@ -99,9 +103,6 @@
 #define DMM32AT_8255_IOBASE		0x0c  /* Page 1 registers */
 
 /* Board register values. */
-
-/* DMM32AT_AISTAT 0x08 */
-#define DMM32AT_STATUS 0x80
 
 /* DMM32AT_INTCLOCK 0x09 */
 #define DMM32AT_ADINT 0x80
@@ -517,13 +518,19 @@ static int dmm32at_reset(struct comedi_device *dev)
 	ailo = inb(dev->iobase + DMM32AT_AI_LO_CHAN_REG);
 	aihi = inb(dev->iobase + DMM32AT_AI_HI_CHAN_REG);
 	fifostat = inb(dev->iobase + DMM32AT_FIFO_STATUS_REG);
-	aistat = inb(dev->iobase + DMM32AT_AISTAT);
+	aistat = inb(dev->iobase + DMM32AT_AI_STATUS_REG);
 	intstat = inb(dev->iobase + DMM32AT_INTCLOCK);
 	airback = inb(dev->iobase + DMM32AT_AIRBACK);
 
+	/*
+	 * NOTE: The (DMM32AT_AI_STATUS_SD1 | DMM32AT_AI_STATUS_SD0)
+	 * test makes this driver only work if the board is configured
+	 * with all A/D channels set for single-ended operation.
+	 */
 	if (ailo != 0x00 || aihi != 0x1f ||
 	    fifostat != DMM32AT_FIFO_STATUS_EF ||
-	    aistat != 0x60 || intstat != 0x00 || airback != 0x0c)
+	    aistat != (DMM32AT_AI_STATUS_SD1 | DMM32AT_AI_STATUS_SD0) ||
+	    intstat != 0x00 || airback != 0x0c)
 		return -EIO;
 
 	return 0;
