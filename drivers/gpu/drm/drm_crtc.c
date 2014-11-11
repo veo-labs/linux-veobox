@@ -1167,6 +1167,8 @@ int drm_universal_plane_init(struct drm_device *dev, struct drm_plane *plane,
 
 	drm_modeset_lock_init(&plane->mutex);
 
+	drm_modeset_lock_init(&plane->mutex);
+
 	plane->base.properties = &plane->properties;
 	plane->dev = dev;
 	plane->funcs = funcs;
@@ -1192,20 +1194,9 @@ int drm_universal_plane_init(struct drm_device *dev, struct drm_plane *plane,
 				   config->plane_type_property,
 				   plane->type);
 
-	if (drm_core_check_feature(dev, DRIVER_ATOMIC)) {
-		drm_object_attach_property(&plane->base, config->prop_fb_id, 0);
-		drm_object_attach_property(&plane->base, config->prop_crtc_id, 0);
-		drm_object_attach_property(&plane->base, config->prop_crtc_x, 0);
-		drm_object_attach_property(&plane->base, config->prop_crtc_y, 0);
-		drm_object_attach_property(&plane->base, config->prop_crtc_w, 0);
-		drm_object_attach_property(&plane->base, config->prop_crtc_h, 0);
-		drm_object_attach_property(&plane->base, config->prop_src_x, 0);
-		drm_object_attach_property(&plane->base, config->prop_src_y, 0);
-		drm_object_attach_property(&plane->base, config->prop_src_w, 0);
-		drm_object_attach_property(&plane->base, config->prop_src_h, 0);
-	}
+ out:
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(drm_universal_plane_init);
 
