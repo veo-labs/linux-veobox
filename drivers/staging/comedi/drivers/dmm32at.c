@@ -102,8 +102,15 @@
 #define DMM32AT_CTRDIO_CFG_GT0EN	(1 << 2)  /* J3.47 1=DIN1 is GATE0 */
 #define DMM32AT_CTRDIO_CFG_SRC0		(1 << 1)  /* CLK0 is 0=FREQ0 1=J3.48 */
 #define DMM32AT_CTRDIO_CFG_GT12EN	(1 << 0)  /* J3.46 1=DIN2 is GATE12 */
+#define DMM32AT_AI_CFG_REG		0x0b
+#define DMM32AT_AI_CFG_SCINT_20US	(0 << 4)
+#define DMM32AT_AI_CFG_SCINT_15US	(1 << 4)
+#define DMM32AT_AI_CFG_SCINT_10US	(2 << 4)
+#define DMM32AT_AI_CFG_SCINT_5US	(3 << 4)
+#define DMM32AT_AI_CFG_RANGE		(1 << 3)  /* 0=5V  1=10V */
+#define DMM32AT_AI_CFG_ADBU		(1 << 2)  /* 0=bipolar  1=unipolar */
+#define DMM32AT_AI_CFG_GAIN(x)		((x) << 0)
 
-#define DMM32AT_AICONF 0x0b
 #define DMM32AT_AIRBACK 0x0b
 
 #define DMM32AT_CLK1 0x0d
@@ -114,7 +121,7 @@
 
 /* Board register values. */
 
-/* DMM32AT_AICONF 0x0b */
+/* DMM32AT_AI_CFG_REG 0x0b */
 #define DMM32AT_RANGE_U10 0x0c
 #define DMM32AT_RANGE_U5 0x0d
 #define DMM32AT_RANGE_B10 0x08
@@ -170,7 +177,7 @@ static void dmm32at_ai_set_chanspec(struct comedi_device *dev,
 
 	outb(chan, dev->iobase + DMM32AT_AI_LO_CHAN_REG);
 	outb(last_chan, dev->iobase + DMM32AT_AI_HI_CHAN_REG);
-	outb(dmm32at_rangebits[range], dev->iobase + DMM32AT_AICONF);
+	outb(dmm32at_rangebits[range], dev->iobase + DMM32AT_AI_CFG_REG);
 }
 
 static unsigned int dmm32at_ai_get_sample(struct comedi_device *dev,
