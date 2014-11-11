@@ -164,36 +164,11 @@ static const struct comedi_lrange dmm32at_aoranges = {
 	}
 };
 
-static void dmm32at_ai_set_chanspec(struct comedi_device *dev,
-				    struct comedi_subdevice *s,
-				    unsigned int chanspec, int nchan)
-{
-	unsigned int chan = CR_CHAN(chanspec);
-	unsigned int range = CR_RANGE(chanspec);
-	unsigned int last_chan = (chan + nchan - 1) % s->n_chan;
-
-	outb(DMM32AT_FIFO_CTRL_FIFORST, dev->iobase + DMM32AT_FIFO_CTRL_REG);
-
-	if (nchan > 1)
-		outb(DMM32AT_FIFO_CTRL_SCANEN,
-		     dev->iobase + DMM32AT_FIFO_CTRL_REG);
-
-	outb(chan, dev->iobase + DMM32AT_AI_LO_CHAN_REG);
-	outb(last_chan, dev->iobase + DMM32AT_AI_HI_CHAN_REG);
-	outb(dmm32at_rangebits[range], dev->iobase + DMM32AT_AI_CFG_REG);
-}
-
-static unsigned int dmm32at_ai_get_sample(struct comedi_device *dev,
-					  struct comedi_subdevice *s)
-{
-	unsigned int val;
-
-	val = inb(dev->iobase + DMM32AT_AI_LSB_REG);
-	val |= (inb(dev->iobase + DMM32AT_AI_MSB_REG) << 8);
-
-	/* munge two's complement value to offset binary */
-	return comedi_offset_munge(s, val);
-}
+struct dmm32at_private {
+	int data;
+	int ai_inuse;
+	unsigned char dio_config;
+};
 
 static int dmm32at_ai_status(struct comedi_device *dev,
 			     struct comedi_subdevice *s,
@@ -376,7 +351,7 @@ static int dmm32at_ai_cmd(struct comedi_device *dev, struct comedi_subdevice *s)
 	dmm32at_ai_set_chanspec(dev, s, cmd->chanlist[0], cmd->chanlist_len);
 
 	/* reset the interrupt just in case */
-	outb(DMM32AT_CTRL_INTRST, dev->iobase + DMM32AT_CTRL_REG);
+	outb(DMM32AT_INTRESET, dev->iobase + DMM32AT_CNTRL);
 
 	/*
 	 * wait for circuit to settle
@@ -436,14 +411,10 @@ static irqreturn_t dmm32at_isr(int irq, void *d)
 			comedi_buf_write_samples(s, &samp, 1);
 		}
 
-		if (devpriv->ai_scans_left != 0xffffffff) {	/* TRIG_COUNT */
-			devpriv->ai_scans_left--;
-			if (devpriv->ai_scans_left == 0) {
-				/* set the buffer to be flushed with an EOF */
-				s->async->events |= COMEDI_CB_EOA;
-			}
+		if (cmd->stop_src == TRIG_COUNT &&
+		    s->async->scans_done >= cmd->stop_arg)
+			s->async->events |= COMEDI_CB_EOA;
 
-		}
 		comedi_handle_events(dev, s);
 	}
 
