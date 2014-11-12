@@ -1829,6 +1829,8 @@ static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (vb2_is_streaming(vq))
 		return 0;
 
+	dev->sequence = 0;
+
 	return set_stream(dev, true);
 }
 
