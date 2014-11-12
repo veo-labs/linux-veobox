@@ -622,12 +622,12 @@ bool RFbInit(
 	switch (priv->byRFType) {
 	case RF_AIROHA:
 	case RF_AL2230S:
-		pDevice->byMaxPwrLevel = AL2230_PWR_IDX_LEN;
-		bResult = RFbAL2230Init(pDevice);
+		priv->byMaxPwrLevel = AL2230_PWR_IDX_LEN;
+		bResult = RFbAL2230Init(priv);
 		break;
 	case RF_AIROHA7230:
-		pDevice->byMaxPwrLevel = AL7230_PWR_IDX_LEN;
-		bResult = s_bAL7230Init(pDevice);
+		priv->byMaxPwrLevel = AL7230_PWR_IDX_LEN;
+		bResult = s_bAL7230Init(priv);
 		break;
 	case RF_NOTHING:
 		bResult = true;
@@ -853,22 +853,22 @@ bool RFbRawSetPower(
 
 	switch (priv->byRFType) {
 	case RF_AIROHA:
-		bResult &= IFRFbWriteEmbedded(pDevice, dwAL2230PowerTable[byPwr]);
+		bResult &= IFRFbWriteEmbedded(priv, dwAL2230PowerTable[byPwr]);
 		if (uRATE <= RATE_11M)
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x0001B400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x0001B400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		else
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 
 		break;
 
 	case RF_AL2230S:
-		bResult &= IFRFbWriteEmbedded(pDevice, dwAL2230PowerTable[byPwr]);
+		bResult &= IFRFbWriteEmbedded(priv, dwAL2230PowerTable[byPwr]);
 		if (uRATE <= RATE_11M) {
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x040C1400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x00299B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x040C1400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x00299B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		} else {
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
-			bResult &= IFRFbWriteEmbedded(pDevice, 0x00099B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(priv, 0x00099B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		}
 
 		break;
@@ -879,7 +879,7 @@ bool RFbRawSetPower(
 		dwMax7230Pwr = 0x080C0B00 | ((byPwr) << 12) |
 			(BY_AL7230_REG_LEN << 3)  | IFREGCTL_REGW;
 
-		bResult &= IFRFbWriteEmbedded(pDevice, dwMax7230Pwr);
+		bResult &= IFRFbWriteEmbedded(priv, dwMax7230Pwr);
 		break;
 
 	default:
