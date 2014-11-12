@@ -394,7 +394,7 @@ bool CARDbSetBeaconPeriod(struct vnt_private *pDevice,
 {
 	u64 qwNextTBTT = 0;
 
-	CARDbGetCurrentTSF(pDevice->PortOffset, &qwNextTBTT); /* Get Local TSF counter */
+	CARDbGetCurrentTSF(pDevice, &qwNextTBTT); /* Get Local TSF counter */
 
 	qwNextTBTT = CARDqGetNextTBTT(qwNextTBTT, wBeaconInterval);
 
@@ -977,7 +977,7 @@ void CARDvSetFirstNextTBTT(struct vnt_private *priv, unsigned short wBeaconInter
 	void __iomem *dwIoBase = priv->PortOffset;
 	u64 qwNextTBTT = 0;
 
-	CARDbGetCurrentTSF(dwIoBase, &qwNextTBTT); /* Get Local TSF counter */
+	CARDbGetCurrentTSF(priv, &qwNextTBTT); /* Get Local TSF counter */
 
 	qwNextTBTT = CARDqGetNextTBTT(qwNextTBTT, wBeaconInterval);
 	/* Set NextTBTT */
