@@ -78,6 +78,8 @@ struct mx6cam_sensor_input {
 	u32 caps[MX6CAM_MAX_INPUTS];
 	/* input names */
 	char name[MX6CAM_MAX_INPUTS][32];
+	/* input port */
+	unsigned int port;
 
 	/* number of inputs */
 	int num;

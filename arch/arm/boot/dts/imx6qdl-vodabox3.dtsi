@@ -75,12 +75,10 @@
 			csi0: endpoint@0 {
 				reg = <0>;
 				remote-endpoint = <&hdmi0_out>;
-				bus-width = <20>;
-				data-shift = <0>; /* Lines 19:0 used */
-				hsync-active = <1>;
-				vsync-active = <1>;
+				bus-width = <8>;
+				data-shift = <4>;
 				inputs = <1>;
-				input-names = <"hdmi input">;
+/*				input-names = <"hdmi1 input">;*/
 				input-caps = <2>;
 			};
 		};
@@ -235,7 +233,7 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					remote-endpoint = <&hdmi1_fpga_in>;
+					remote-endpoint = <&csi0>;
 				};
 			};
 		};
@@ -268,7 +266,7 @@
 			port@3 {
 				reg = <3>;
 				hdmi1_fpga_in: endpoint {
-					remote-endpoint = <&hdmi1_out>;
+					//remote-endpoint = <&hdmi1_out>;
 				};
 			};
 			port@4 {
