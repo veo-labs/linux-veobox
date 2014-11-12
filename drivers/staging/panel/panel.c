@@ -364,8 +364,8 @@ static unsigned char lcd_bits[LCD_PORTS][LCD_BITS][BIT_STATES];
  */
 #define DEFAULT_PARPORT         0
 #define DEFAULT_PROFILE         PANEL_PROFILE_LARGE
-#define DEFAULT_KEYPAD          KEYPAD_TYPE_OLD
-#define DEFAULT_LCD             LCD_TYPE_OLD
+#define DEFAULT_KEYPAD_TYPE     KEYPAD_TYPE_OLD
+#define DEFAULT_LCD_TYPE        LCD_TYPE_OLD
 #define DEFAULT_LCD_HEIGHT      2
 #define DEFAULT_LCD_WIDTH       40
 #define DEFAULT_LCD_BWIDTH      40
@@ -399,11 +399,6 @@ static unsigned char lcd_bits[LCD_PORTS][LCD_BITS][BIT_STATES];
 #ifdef CONFIG_PANEL_LCD
 #undef DEFAULT_LCD_TYPE
 #define DEFAULT_LCD_TYPE CONFIG_PANEL_LCD
-#endif
-
-#ifdef CONFIG_PANEL_LCD_HEIGHT
-#undef DEFAULT_LCD_HEIGHT
-#define DEFAULT_LCD_HEIGHT CONFIG_PANEL_LCD_HEIGHT
 #endif
 
 #ifdef CONFIG_PANEL_LCD_HEIGHT
@@ -2292,8 +2287,10 @@ static int __init panel_init_module(void)
 	switch (profile) {
 	case PANEL_PROFILE_CUSTOM:
 		/* custom profile */
-		selected_keypad_type = DEFAULT_KEYPAD_TYPE;
-		selected_lcd_type = DEFAULT_LCD_TYPE;
+		if (keypad_type < 0)
+			keypad_type = DEFAULT_KEYPAD_TYPE;
+		if (lcd_type < 0)
+			lcd_type = DEFAULT_LCD_TYPE;
 		break;
 	case PANEL_PROFILE_OLD:
 		/* 8 bits, 2*16, old keypad */
