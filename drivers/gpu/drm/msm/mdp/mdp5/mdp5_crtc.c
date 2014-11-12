@@ -32,7 +32,6 @@
 struct mdp5_crtc {
 	struct drm_crtc base;
 	char name[8];
-	struct drm_plane *planes[8];
 	int id;
 	bool enabled;
 
@@ -83,7 +82,23 @@ static void request_pending(struct drm_crtc *crtc, uint32_t pending)
 	mdp_irq_register(&get_kms(crtc)->base, &mdp5_crtc->vblank);
 }
 
-#define mdp5_lm_get_flush(lm)	mdp_ctl_flush_mask_lm(lm)
+static void crtc_flush(struct drm_crtc *crtc)
+{
+	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
+	struct mdp5_kms *mdp5_kms = get_kms(crtc);
+	int id = mdp5_crtc->id;
+	struct drm_plane *plane;
+	uint32_t flush = 0;
+
+	for_each_plane_on_crtc(crtc, plane) {
+		enum mdp5_pipe pipe = mdp5_plane_pipe(plane);
+		flush |= pipe2flush(pipe);
+	}
+
+	flush |= mixer2flush(mdp5_crtc->id);
+	flush |= MDP5_CTL_FLUSH_CTL;
+
+	DBG("%s: flush=%08x", mdp5_crtc->name, flush);
 
 static void crtc_flush(struct drm_crtc *crtc, u32 flush_mask)
 {
@@ -141,9 +156,8 @@ static void complete_flip(struct drm_crtc *crtc, struct drm_file *file)
 	}
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
-	drm_atomic_crtc_for_each_plane(plane, crtc) {
+	for_each_plane_on_crtc(crtc, plane)
 		mdp5_plane_complete_flip(plane);
-	}
 }
 
 static void pageflip_cb(struct msm_fence_cb *cb)
@@ -649,12 +663,6 @@ int mdp5_crtc_get_lm(struct drm_crtc *crtc)
 {
 	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
 
-	BUG_ON(pipe_id >= ARRAY_SIZE(mdp5_crtc->planes));
-
-	if (mdp5_crtc->planes[pipe_id] == plane)
-		return;
-
-	mdp5_crtc->planes[pipe_id] = plane;
 	blend_setup(crtc);
 	if (mdp5_crtc->enabled && (plane != crtc->primary))
 		crtc_flush(crtc);
