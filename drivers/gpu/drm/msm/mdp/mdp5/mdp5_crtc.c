@@ -32,6 +32,7 @@
 struct mdp5_crtc {
 	struct drm_crtc base;
 	char name[8];
+	struct drm_plane *planes[8];
 	int id;
 	bool enabled;
 
@@ -145,14 +146,30 @@ static void complete_flip(struct drm_crtc *crtc, struct drm_file *file)
 	}
 }
 
-static void unref_cursor_worker(struct drm_flip_work *work, void *val)
+static void pageflip_cb(struct msm_fence_cb *cb)
 {
 	struct mdp5_crtc *mdp5_crtc =
-		container_of(work, struct mdp5_crtc, unref_cursor_work);
-	struct mdp5_kms *mdp5_kms = get_kms(&mdp5_crtc->base);
+		container_of(cb, struct mdp5_crtc, pageflip_cb);
+	struct drm_crtc *crtc = &mdp5_crtc->base;
+	struct drm_framebuffer *fb = mdp5_crtc->fb;
 
-	msm_gem_put_iova(val, mdp5_kms->id);
-	drm_gem_object_unreference_unlocked(val);
+	if (!fb)
+		return;
+
+	drm_framebuffer_reference(fb);
+	mdp5_plane_set_scanout(crtc->primary, fb);
+	update_scanout(crtc, fb);
+}
+
+static void unref_fb_worker(struct drm_flip_work *work, void *val)
+{
+	struct mdp5_crtc *mdp5_crtc =
+		container_of(work, struct mdp5_crtc, unref_fb_work);
+	struct drm_device *dev = mdp5_crtc->base.dev;
+
+	mutex_lock(&dev->mode_config.mutex);
+	drm_framebuffer_unreference(val);
+	mutex_unlock(&dev->mode_config.mutex);
 }
 
 static void mdp5_crtc_destroy(struct drm_crtc *crtc)
@@ -254,8 +271,21 @@ static void mdp5_crtc_mode_set_nofb(struct drm_crtc *crtc)
 			mode->vsync_end, mode->vtotal,
 			mode->type, mode->flags);
 
-	spin_lock_irqsave(&mdp5_crtc->lm_lock, flags);
-	mdp5_write(mdp5_kms, REG_MDP5_LM_OUT_SIZE(mdp5_crtc->lm),
+	/* grab extra ref for update_scanout() */
+	drm_framebuffer_reference(crtc->primary->fb);
+
+	ret = mdp5_plane_mode_set(crtc->primary, crtc, crtc->primary->fb,
+			0, 0, mode->hdisplay, mode->vdisplay,
+			x << 16, y << 16,
+			mode->hdisplay << 16, mode->vdisplay << 16);
+	if (ret) {
+		drm_framebuffer_unreference(crtc->primary->fb);
+		dev_err(crtc->dev->dev, "%s: failed to set mode on plane: %d\n",
+				mdp5_crtc->name, ret);
+		return ret;
+	}
+
+	mdp5_write(mdp5_kms, REG_MDP5_LM_OUT_SIZE(mdp5_crtc->id),
 			MDP5_LM_OUT_SIZE_WIDTH(mode->hdisplay) |
 			MDP5_LM_OUT_SIZE_HEIGHT(mode->vdisplay));
 	spin_unlock_irqrestore(&mdp5_crtc->lm_lock, flags);
@@ -313,45 +343,20 @@ static int pstate_cmp(const void *a, const void *b)
 static int mdp5_crtc_atomic_check(struct drm_crtc *crtc,
 		struct drm_crtc_state *state)
 {
-	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
-	struct mdp5_kms *mdp5_kms = get_kms(crtc);
-	struct drm_plane *plane;
-	struct drm_device *dev = crtc->dev;
-	struct plane_state pstates[STAGE3 + 1];
-	int cnt = 0, i;
+	struct drm_plane *plane = crtc->primary;
+	struct drm_display_mode *mode = &crtc->mode;
+	int ret;
 
-	DBG("%s: check", mdp5_crtc->name);
+	/* grab extra ref for update_scanout() */
+	drm_framebuffer_reference(crtc->primary->fb);
 
-	/* request a free CTL, if none is already allocated for this CRTC */
-	if (state->enable && !mdp5_crtc->ctl) {
-		mdp5_crtc->ctl = mdp5_ctlm_request(mdp5_kms->ctlm, crtc);
-		if (WARN_ON(!mdp5_crtc->ctl))
-			return -EINVAL;
-	}
-
-	/* verify that there are not too many planes attached to crtc
-	 * and that we don't have conflicting mixer stages:
-	 */
-	drm_atomic_crtc_state_for_each_plane(plane, state) {
-		struct drm_plane_state *pstate;
-
-		if (cnt >= ARRAY_SIZE(pstates)) {
-			dev_err(dev->dev, "too many planes!\n");
-			return -EINVAL;
-		}
-
-		pstate = state->state->plane_states[drm_plane_index(plane)];
-
-		/* plane might not have changed, in which case take
-		 * current state:
-		 */
-		if (!pstate)
-			pstate = plane->state;
-
-		pstates[cnt].plane = plane;
-		pstates[cnt].state = to_mdp5_plane_state(pstate);
-
-		cnt++;
+	ret = mdp5_plane_mode_set(plane, crtc, crtc->primary->fb,
+			0, 0, mode->hdisplay, mode->vdisplay,
+			x << 16, y << 16,
+			mode->hdisplay << 16, mode->vdisplay << 16);
+	if (ret) {
+		drm_framebuffer_unreference(crtc->primary->fb);
+		return ret;
 	}
 
 	sort(pstates, cnt, sizeof(pstates[0]), pstate_cmp, NULL);
@@ -644,10 +649,28 @@ int mdp5_crtc_get_lm(struct drm_crtc *crtc)
 {
 	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
 
-	if (WARN_ON(!crtc))
-		return -EINVAL;
+	BUG_ON(pipe_id >= ARRAY_SIZE(mdp5_crtc->planes));
 
-	return mdp5_crtc->lm;
+	if (mdp5_crtc->planes[pipe_id] == plane)
+		return;
+
+	mdp5_crtc->planes[pipe_id] = plane;
+	blend_setup(crtc);
+	if (mdp5_crtc->enabled && (plane != crtc->primary))
+		crtc_flush(crtc);
+}
+
+void mdp5_crtc_attach(struct drm_crtc *crtc, struct drm_plane *plane)
+{
+	set_attach(crtc, mdp5_plane_pipe(plane), plane);
+}
+
+void mdp5_crtc_detach(struct drm_crtc *crtc, struct drm_plane *plane)
+{
+	/* don't actually detatch our primary plane: */
+	if (crtc->primary == plane)
+		return;
+	set_attach(crtc, mdp5_plane_pipe(plane), NULL);
 }
 
 /* initialize crtc */
