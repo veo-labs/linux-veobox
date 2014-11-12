@@ -2018,7 +2018,7 @@ int drm_mode_getcrtc(struct drm_device *dev,
 	}
 	drm_modeset_unlock_crtc(crtc);
 
-	return 0;
+	return ret;
 }
 
 static bool drm_mode_expose_to_userspace(const struct drm_display_mode *mode,
@@ -2261,10 +2261,7 @@ int drm_mode_getencoder(struct drm_device *dev, void *data,
 		return -ENOENT;
 
 	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
-	crtc = drm_encoder_get_crtc(encoder);
-	if (crtc)
-		enc_resp->crtc_id = crtc->base.id;
-	else if (encoder->crtc)
+	if (encoder->crtc)
 		enc_resp->crtc_id = encoder->crtc->base.id;
 	else
 		enc_resp->crtc_id = 0;
@@ -2275,7 +2272,7 @@ int drm_mode_getencoder(struct drm_device *dev, void *data,
 	enc_resp->possible_crtcs = encoder->possible_crtcs;
 	enc_resp->possible_clones = encoder->possible_clones;
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -2397,7 +2394,7 @@ int drm_mode_getplane(struct drm_device *dev, void *data,
 	}
 	plane_resp->count_format_types = plane->format_count;
 
-	return 0;
+	return ret;
 }
 
 /*
