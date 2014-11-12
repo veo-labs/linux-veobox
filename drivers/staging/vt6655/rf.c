@@ -404,8 +404,6 @@ static const unsigned long dwAL7230ChannelTable2[CB_MAX_CHANNEL] = {
 	0x77D78400+(BY_AL7230_REG_LEN<<3)+IFREGCTL_REGW  // channel = 165, Tf = 5825MHz (56)
 };
 
-/*---------------------  Static Functions  --------------------------*/
-
 /*
  * Description: AIROHA IFRF chip init function
  *
@@ -490,64 +488,6 @@ static bool s_bAL7230SelectChannel(struct vnt_private *priv, unsigned char byCha
 
 	return bResult;
 }
-
-/*
- * Description: Select channel with UW2452 chip
- *
- * Parameters:
- *  In:
- *      dwIoBase    - I/O base address
- *      uChannel    - Channel number
- *  Out:
- *      none
- *
- * Return Value: true if succeeded; false if failed.
- *
- */
-
-/*
- * Description: UW2452 IFRF chip init function
- *
- * Parameters:
- *  In:
- *      dwIoBase    - I/O base address
- *  Out:
- *      none
- *
- * Return Value: true if succeeded; false if failed.
- *
- */
-
-/*
- * Description: VT3226 IFRF chip init function
- *
- * Parameters:
- *  In:
- *      dwIoBase    - I/O base address
- *  Out:
- *      none
- *
- * Return Value: true if succeeded; false if failed.
- *
- */
-
-/*
- * Description: Select channel with VT3226 chip
- *
- * Parameters:
- *  In:
- *      dwIoBase    - I/O base address
- *      uChannel    - Channel number
- *  Out:
- *      none
- *
- * Return Value: true if succeeded; false if failed.
- *
- */
-
-/*---------------------  Export Variables  --------------------------*/
-
-/*---------------------  Export Functions  --------------------------*/
 
 /*
  * Description: Write to IF/RF, by embedded programming
