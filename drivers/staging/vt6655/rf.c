@@ -404,6 +404,8 @@ static const unsigned long dwAL7230ChannelTable2[CB_MAX_CHANNEL] = {
 	0x77D78400+(BY_AL7230_REG_LEN<<3)+IFREGCTL_REGW  // channel = 165, Tf = 5825MHz (56)
 };
 
+/*---------------------  Static Functions  --------------------------*/
+
 /*
  * Description: AIROHA IFRF chip init function
  *
@@ -490,6 +492,64 @@ static bool s_bAL7230SelectChannel(struct vnt_private *priv, unsigned char byCha
 }
 
 /*
+ * Description: Select channel with UW2452 chip
+ *
+ * Parameters:
+ *  In:
+ *      dwIoBase    - I/O base address
+ *      uChannel    - Channel number
+ *  Out:
+ *      none
+ *
+ * Return Value: true if succeeded; false if failed.
+ *
+ */
+
+/*
+ * Description: UW2452 IFRF chip init function
+ *
+ * Parameters:
+ *  In:
+ *      dwIoBase    - I/O base address
+ *  Out:
+ *      none
+ *
+ * Return Value: true if succeeded; false if failed.
+ *
+ */
+
+/*
+ * Description: VT3226 IFRF chip init function
+ *
+ * Parameters:
+ *  In:
+ *      dwIoBase    - I/O base address
+ *  Out:
+ *      none
+ *
+ * Return Value: true if succeeded; false if failed.
+ *
+ */
+
+/*
+ * Description: Select channel with VT3226 chip
+ *
+ * Parameters:
+ *  In:
+ *      dwIoBase    - I/O base address
+ *      uChannel    - Channel number
+ *  Out:
+ *      none
+ *
+ * Return Value: true if succeeded; false if failed.
+ *
+ */
+
+/*---------------------  Export Variables  --------------------------*/
+
+/*---------------------  Export Functions  --------------------------*/
+
+/*
  * Description: Write to IF/RF, by embedded programming
  *
  * Parameters:
@@ -548,16 +608,15 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 
 	MACvWordRegBitsOn(dwIoBase, MAC_REG_SOFTPWRCTL, (SOFTPWRCTL_SWPECTI  |
 							 SOFTPWRCTL_TXPEINV));
-	/* PLL  Off */
+	// PLL  Off
+
 	MACvWordRegBitsOff(dwIoBase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
 
 	//patch abnormal AL2230 frequency output
-//2008-8-21 chester <add>
 	IFRFbWriteEmbedded(priv, (0x07168700+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW));
 
 	for (ii = 0; ii < CB_AL2230_INIT_SEQ; ii++)
 		bResult &= IFRFbWriteEmbedded(priv, dwAL2230InitTable[ii]);
-//2008-8-21 chester <add>
 	MACvTimer0MicroSDelay(dwIoBase, 30); //delay 30 us
 
 	/* PLL On */
@@ -719,7 +778,7 @@ bool RFvWriteWakeProgSyn(struct vnt_private *priv, unsigned char byRFType,
 		MACvSetMISCFifo(dwIoBase, (unsigned short)(MISCFIFO_SYNDATA_IDX + ii), dwAL2230ChannelTable1[uChannel-1]);
 		break;
 
-		/* Need to check, PLLON need to be low for channel setting */
+		// Need to check, PLLON need to be low for channel setting
 	case RF_AIROHA7230:
 		 /* Init Reg + Channel Reg (3) */
 		byInitCount = CB_AL7230_INIT_SEQ + 3;
@@ -927,9 +986,6 @@ RFvRSSITodBm(
 
 	*pldBm = -1 * (a + b * 2);
 }
-
-////////////////////////////////////////////////////////////////////////////////
-//{{ RobertYu: 20050104
 
 // Post processing for the 11b/g and 11a.
 // for save time on changing Reg2,3,5,7,10,12,15
