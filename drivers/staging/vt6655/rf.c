@@ -551,11 +551,13 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 	/* PLL  Off */
 	MACvWordRegBitsOff(dwIoBase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
 
-	/* patch abnormal AL2230 frequency output */
+	//patch abnormal AL2230 frequency output
+//2008-8-21 chester <add>
 	IFRFbWriteEmbedded(priv, (0x07168700+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW));
 
 	for (ii = 0; ii < CB_AL2230_INIT_SEQ; ii++)
 		bResult &= IFRFbWriteEmbedded(priv, dwAL2230InitTable[ii]);
+//2008-8-21 chester <add>
 	MACvTimer0MicroSDelay(dwIoBase, 30); //delay 30 us
 
 	/* PLL On */
@@ -851,22 +853,22 @@ bool RFbRawSetPower(
 
 	switch (priv->byRFType) {
 	case RF_AIROHA:
-		bResult &= IFRFbWriteEmbedded(priv, dwAL2230PowerTable[byPwr]);
+		bResult &= IFRFbWriteEmbedded(pDevice, dwAL2230PowerTable[byPwr]);
 		if (uRATE <= RATE_11M)
-			bResult &= IFRFbWriteEmbedded(priv, 0x0001B400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x0001B400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		else
-			bResult &= IFRFbWriteEmbedded(priv, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 
 		break;
 
 	case RF_AL2230S:
-		bResult &= IFRFbWriteEmbedded(priv, dwAL2230PowerTable[byPwr]);
+		bResult &= IFRFbWriteEmbedded(pDevice, dwAL2230PowerTable[byPwr]);
 		if (uRATE <= RATE_11M) {
-			bResult &= IFRFbWriteEmbedded(priv, 0x040C1400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
-			bResult &= IFRFbWriteEmbedded(priv, 0x00299B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x040C1400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x00299B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		} else {
-			bResult &= IFRFbWriteEmbedded(priv, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
-			bResult &= IFRFbWriteEmbedded(priv, 0x00099B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x0005A400+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
+			bResult &= IFRFbWriteEmbedded(pDevice, 0x00099B00+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW);
 		}
 
 		break;
@@ -877,7 +879,7 @@ bool RFbRawSetPower(
 		dwMax7230Pwr = 0x080C0B00 | ((byPwr) << 12) |
 			(BY_AL7230_REG_LEN << 3)  | IFREGCTL_REGW;
 
-		bResult &= IFRFbWriteEmbedded(priv, dwMax7230Pwr);
+		bResult &= IFRFbWriteEmbedded(pDevice, dwMax7230Pwr);
 		break;
 
 	default:
@@ -935,7 +937,6 @@ bool RFbAL7230SelectChannelPostProcess(struct vnt_private *priv,
 				       u16 byOldChannel,
 				       u16 byNewChannel)
 {
-	void __iomem *dwIoBase = priv->PortOffset;
 	bool bResult;
 
 	bResult = true;
