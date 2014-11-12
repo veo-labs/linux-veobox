@@ -462,7 +462,8 @@ static bool s_bAL7230Init(struct vnt_private *priv)
 	return bResult;
 }
 
-// Need to Pull PLLON low when writing channel registers through 3-wire interface
+/* Need to Pull PLLON low when writing channel registers through
+ * 3-wire interface */
 static bool s_bAL7230SelectChannel(struct vnt_private *priv, unsigned char byChannel)
 {
 	void __iomem *dwIoBase = priv->PortOffset;
@@ -548,11 +549,10 @@ static bool RFbAL2230Init(struct vnt_private *priv)
 
 	MACvWordRegBitsOn(dwIoBase, MAC_REG_SOFTPWRCTL, (SOFTPWRCTL_SWPECTI  |
 							 SOFTPWRCTL_TXPEINV));
-	// PLL  Off
-
+	/* PLL  Off */
 	MACvWordRegBitsOff(dwIoBase, MAC_REG_SOFTPWRCTL, SOFTPWRCTL_SWPE3);
 
-	//patch abnormal AL2230 frequency output
+	/* patch abnormal AL2230 frequency output */
 	IFRFbWriteEmbedded(priv, (0x07168700+(BY_AL2230_REG_LEN<<3)+IFREGCTL_REGW));
 
 	for (ii = 0; ii < CB_AL2230_INIT_SEQ; ii++)
@@ -718,7 +718,7 @@ bool RFvWriteWakeProgSyn(struct vnt_private *priv, unsigned char byRFType,
 		MACvSetMISCFifo(dwIoBase, (unsigned short)(MISCFIFO_SYNDATA_IDX + ii), dwAL2230ChannelTable1[uChannel-1]);
 		break;
 
-		// Need to check, PLLON need to be low for channel setting
+		/* Need to check, PLLON need to be low for channel setting */
 	case RF_AIROHA7230:
 		 /* Init Reg + Channel Reg (3) */
 		byInitCount = CB_AL7230_INIT_SEQ + 3;
@@ -927,8 +927,8 @@ RFvRSSITodBm(
 	*pldBm = -1 * (a + b * 2);
 }
 
-// Post processing for the 11b/g and 11a.
-// for save time on changing Reg2,3,5,7,10,12,15
+/* Post processing for the 11b/g and 11a.
+ * for save time on changing Reg2,3,5,7,10,12,15 */
 bool RFbAL7230SelectChannelPostProcess(struct vnt_private *priv,
 				       u16 byOldChannel,
 				       u16 byNewChannel)
