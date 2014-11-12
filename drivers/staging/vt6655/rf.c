@@ -462,8 +462,7 @@ static bool s_bAL7230Init(struct vnt_private *priv)
 	return bResult;
 }
 
-/* Need to Pull PLLON low when writing channel registers through
- * 3-wire interface */
+// Need to Pull PLLON low when writing channel registers through 3-wire interface
 static bool s_bAL7230SelectChannel(struct vnt_private *priv, unsigned char byChannel)
 {
 	void __iomem *dwIoBase = priv->PortOffset;
@@ -621,8 +620,8 @@ bool RFbInit(
 	switch (priv->byRFType) {
 	case RF_AIROHA:
 	case RF_AL2230S:
-		priv->byMaxPwrLevel = AL2230_PWR_IDX_LEN;
-		bResult = RFbAL2230Init(priv);
+		pDevice->byMaxPwrLevel = AL2230_PWR_IDX_LEN;
+		bResult = RFbAL2230Init(pDevice);
 		break;
 	case RF_AIROHA7230:
 		pDevice->byMaxPwrLevel = AL7230_PWR_IDX_LEN;
@@ -927,12 +926,16 @@ RFvRSSITodBm(
 	*pldBm = -1 * (a + b * 2);
 }
 
-/* Post processing for the 11b/g and 11a.
- * for save time on changing Reg2,3,5,7,10,12,15 */
+////////////////////////////////////////////////////////////////////////////////
+//{{ RobertYu: 20050104
+
+// Post processing for the 11b/g and 11a.
+// for save time on changing Reg2,3,5,7,10,12,15
 bool RFbAL7230SelectChannelPostProcess(struct vnt_private *priv,
 				       u16 byOldChannel,
 				       u16 byNewChannel)
 {
+	void __iomem *dwIoBase = priv->PortOffset;
 	bool bResult;
 
 	bResult = true;

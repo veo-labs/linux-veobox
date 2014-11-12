@@ -73,8 +73,8 @@
 
 /*---------------------  Export Functions  --------------------------*/
 
-bool IFRFbWriteEmbedded(struct vnt_private *, unsigned long dwData);
-bool RFbSelectChannel(struct vnt_private *, unsigned char byRFType, u16);
+bool IFRFbWriteEmbedded(void __iomem *dwIoBase, unsigned long dwData);
+bool RFbSelectChannel(struct vnt_private *, unsigned char byRFType, unsigned char byChannel);
 bool RFbInit(
 	struct vnt_private *
 );
