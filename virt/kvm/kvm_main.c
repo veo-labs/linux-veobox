@@ -662,37 +662,46 @@ static int kvm_create_dirty_bitmap(struct kvm_memory_slot *memslot)
 }
 
 /*
- * Insert memslot and re-sort memslots based on their GFN,
- * so binary search could be used to lookup GFN.
- * Sorting algorithm takes advantage of having initially
- * sorted array and known changed memslot position.
+ * Insert memslot and re-sort memslots based on their size,
+ * so the larger slots will get better fit. Sorting algorithm
+ * takes advantage of having initially sorted array and
+ * known changed memslot position.
  */
+static void insert_memslot(struct kvm_memslots *slots,
+			   struct kvm_memory_slot *new)
+{
+	int i = slots->id_to_index[new->id];
+	struct kvm_memory_slot *old = id_to_memslot(slots, new->id);
+	struct kvm_memory_slot *mslots = slots->memslots;
+
+	if (new->npages == old->npages) {
+		*old = *new;
+		return;
+	}
+
+	while (1) {
+		if (i < (KVM_MEM_SLOTS_NUM - 1) &&
+			new->npages < mslots[i + 1].npages) {
+			mslots[i] = mslots[i + 1];
+			i++;
+		} else if (i > 0 && new->npages > mslots[i - 1].npages) {
+			mslots[i] = mslots[i - 1];
+			i--;
+		} else {
+			mslots[i] = *new;
+			break;
+		}
+	}
+
+	for (i = 0; i < KVM_MEM_SLOTS_NUM; i++)
+		slots->id_to_index[slots->memslots[i].id] = i;
+}
+
 static void update_memslots(struct kvm_memslots *slots,
 			    struct kvm_memory_slot *new)
 {
-	int id = new->id;
-	int i = slots->id_to_index[id];
-	struct kvm_memory_slot *mslots = slots->memslots;
-
-	WARN_ON(mslots[i].id != id);
-	if (!new->npages) {
-		WARN_ON(!mslots[i].npages);
-		new->base_gfn = 0;
-		new->flags = 0;
-		if (mslots[i].npages)
-			slots->used_slots--;
-	} else {
-		if (!mslots[i].npages)
-			slots->used_slots++;
-	}
-
-	while (i < KVM_MEM_SLOTS_NUM - 1 &&
-	       new->base_gfn <= mslots[i + 1].base_gfn) {
-		if (!mslots[i + 1].npages)
-			break;
-		mslots[i] = mslots[i + 1];
-		slots->id_to_index[mslots[i].id] = i;
-		i++;
+	if (new) {
+		insert_memslot(slots, new);
 	}
 
 	/*
