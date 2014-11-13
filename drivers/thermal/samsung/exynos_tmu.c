@@ -354,7 +354,36 @@ static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
 		else
 			threshold &= ~(0xff << 8 * i);
 
-		threshold |= temp_to_code(data, temp) << 8 * i;
+		writel(rising_threshold,
+				data->base + reg->threshold_th0);
+		writel(falling_threshold,
+				data->base + reg->threshold_th1);
+
+		exynos_tmu_clear_irqs(data);
+
+		/* if last threshold limit is also present */
+		i = pdata->max_trigger_level - 1;
+		if (pdata->trigger_levels[i] &&
+				(pdata->trigger_type[i] == HW_TRIP)) {
+			threshold_code = temp_to_code(data,
+						pdata->trigger_levels[i]);
+			if (i == EXYNOS_MAX_TRIGGER_PER_REG - 1) {
+				/* 1-4 level to be assigned in th0 reg */
+				rising_threshold &= ~(0xff << 8 * i);
+				rising_threshold |= threshold_code << 8 * i;
+				writel(rising_threshold,
+					data->base + reg->threshold_th0);
+			} else if (i == EXYNOS_MAX_TRIGGER_PER_REG) {
+				/* 5th level to be assigned in th2 reg */
+				rising_threshold =
+				threshold_code << reg->threshold_th3_l0_shift;
+				writel(rising_threshold,
+					data->base + reg->threshold_th2);
+			}
+			con = readl(data->base + reg->tmu_ctrl);
+			con |= (1 << EXYNOS_TMU_THERM_TRIP_EN_SHIFT);
+			writel(con, data->base + reg->tmu_ctrl);
+		}
 	}
 
 	return threshold;
