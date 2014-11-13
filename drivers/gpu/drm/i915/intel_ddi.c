@@ -958,9 +958,7 @@ skl_ddi_calculate_wrpll(int clock /* in Hz */,
 			struct skl_wrpll_params *wrpll_params)
 {
 	uint64_t afe_clock = clock * 5; /* AFE Clock is 5x Pixel clock */
-	uint64_t dco_central_freq[3] = {8400000000ULL,
-					9000000000ULL,
-					9600000000ULL};
+	uint64_t dco_central_freq[3] = {8400000000, 9000000000, 9600000000};
 	uint32_t min_dco_deviation = 400;
 	uint32_t min_dco_index = 3;
 	uint32_t P0[4] = {1, 2, 3, 7};
@@ -1033,13 +1031,13 @@ found:
 		 wrpll_params->central_freq = dco_central_freq[min_dco_index];
 
 		 switch (dco_central_freq[min_dco_index]) {
-		 case 9600000000ULL:
+		 case 9600000000:
 			wrpll_params->central_freq = 0;
 			break;
-		 case 9000000000ULL:
+		 case 9000000000:
 			wrpll_params->central_freq = 1;
 			break;
-		 case 8400000000ULL:
+		 case 8400000000:
 			wrpll_params->central_freq = 3;
 		 }
 
@@ -1177,11 +1175,15 @@ skl_ddi_pll_select(struct intel_crtc *intel_crtc,
 bool intel_ddi_pll_select(struct intel_crtc *intel_crtc,
 			  struct intel_crtc_state *crtc_state)
 {
+	struct drm_device *dev = intel_crtc->base.dev;
 	struct intel_encoder *intel_encoder =
 		intel_ddi_get_crtc_new_encoder(intel_crtc);
 	int clock = crtc_state->port_clock;
 
-	return hsw_ddi_pll_select(intel_crtc, intel_encoder, clock);
+	if (IS_SKYLAKE(dev))
+		return skl_ddi_pll_select(intel_crtc, intel_encoder, clock);
+	else
+		return hsw_ddi_pll_select(intel_crtc, intel_encoder, clock);
 }
 
 void intel_ddi_set_pipe_settings(struct drm_crtc *crtc)
