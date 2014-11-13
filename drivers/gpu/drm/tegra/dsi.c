@@ -825,9 +825,27 @@ static void tegra_dsi_encoder_disable(struct drm_encoder *encoder)
 
 	dsi->enabled = false;
 
-	tegra_dsi_disable(dsi);
+	return 0;
+}
 
-	return;
+static void tegra_dsi_set_timeout(struct tegra_dsi *dsi, unsigned long bclk,
+				  unsigned int vrefresh)
+{
+	unsigned int timeout;
+	u32 value;
+
+	/* one frame high-speed transmission timeout */
+	timeout = (bclk / vrefresh) / 512;
+	value = DSI_TIMEOUT_LRX(0x2000) | DSI_TIMEOUT_HTX(timeout);
+	tegra_dsi_writel(dsi, value, DSI_TIMEOUT_0);
+
+	/* 2 ms peripheral timeout for panel */
+	timeout = 2 * bclk / 512 * 1000;
+	value = DSI_TIMEOUT_PR(timeout) | DSI_TIMEOUT_TA(0x2000);
+	tegra_dsi_writel(dsi, value, DSI_TIMEOUT_1);
+
+	value = DSI_TALLY_TA(0) | DSI_TALLY_LRX(0) | DSI_TALLY_HTX(0);
+	tegra_dsi_writel(dsi, value, DSI_TO_TALLY);
 }
 
 static int
@@ -839,8 +857,8 @@ tegra_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	struct tegra_dsi_state *state = to_dsi_state(conn_state);
 	struct tegra_dc *dc = to_tegra_dc(conn_state->crtc);
 	struct tegra_dsi *dsi = to_dsi(output);
-	unsigned int scdiv;
-	unsigned long plld;
+	unsigned int mul, div, vrefresh;
+	unsigned long bclk, plld;
 	int err;
 
 	state->pclk = crtc_state->mode.clock * 1000;
@@ -901,14 +919,20 @@ tegra_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	 */
 	scdiv = ((8 * state->mul) / (state->div * state->lanes)) - 2;
 
-	err = tegra_dc_state_setup_clock(dc, crtc_state, dsi->clk_parent,
-					 plld, scdiv);
-	if (err < 0) {
-		dev_err(output->dev, "failed to setup CRTC state: %d\n", err);
-		return err;
-	}
+	return 0;
+}
 
-	return err;
+static int tegra_output_dsi_check_mode(struct tegra_output *output,
+				       struct drm_display_mode *mode,
+				       enum drm_mode_status *status)
+{
+	/*
+	 * FIXME: For now, always assume that the mode is okay.
+	 */
+
+	*status = MODE_OK;
+
+	return 0;
 }
 
 static const struct drm_encoder_helper_funcs tegra_dsi_encoder_helper_funcs = {
