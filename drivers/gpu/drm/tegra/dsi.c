@@ -535,20 +535,11 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 
 		/* set SOL delay (for non-burst mode only) */
 		tegra_dsi_writel(dsi, 8 * mul / div, DSI_SOL_DELAY);
-
-		/* TODO: implement ganged mode */
 	} else {
 		u16 bytes;
 
-		if (dsi->master || dsi->slave) {
-			/*
-			 * For ganged mode, assume symmetric left-right mode.
-			 */
-			bytes = 1 + (mode->hdisplay / 2) * mul / div;
-		} else {
-			/* 1 byte (DCS command) + pixel data */
-			bytes = 1 + mode->hdisplay * mul / div;
-		}
+		/* 1 byte (DCS command) + pixel data */
+		bytes = 1 + mode->hdisplay * mul / div;
 
 		tegra_dsi_writel(dsi, 0, DSI_PKT_LEN_0_1);
 		tegra_dsi_writel(dsi, bytes << 16, DSI_PKT_LEN_2_3);
@@ -559,56 +550,10 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 			MIPI_DCS_WRITE_MEMORY_CONTINUE;
 		tegra_dsi_writel(dsi, value, DSI_DCS_CMDS);
 
-		/* set SOL delay */
-		if (dsi->master || dsi->slave) {
-			unsigned long delay, bclk, bclk_ganged;
-			unsigned int lanes = state->lanes;
-
-			/* SOL to valid, valid to FIFO and FIFO write delay */
-			delay = 4 + 4 + 2;
-			delay = DIV_ROUND_UP(delay * mul, div * lanes);
-			/* FIFO read delay */
-			delay = delay + 6;
-
-			bclk = DIV_ROUND_UP(mode->htotal * mul, div * lanes);
-			bclk_ganged = DIV_ROUND_UP(bclk * lanes / 2, lanes);
-			value = bclk - bclk_ganged + delay + 20;
-		} else {
-			/* TODO: revisit for non-ganged mode */
-			value = 8 * mul / div;
-		}
+		value = 8 * mul / div;
 
 		tegra_dsi_writel(dsi, value, DSI_SOL_DELAY);
 	}
-
-	if (dsi->slave) {
-		tegra_dsi_configure(dsi->slave, pipe, mode);
-
-		/*
-		 * TODO: Support modes other than symmetrical left-right
-		 * split.
-		 */
-		tegra_dsi_ganged_enable(dsi, 0, mode->hdisplay / 2);
-		tegra_dsi_ganged_enable(dsi->slave, mode->hdisplay / 2,
-					mode->hdisplay / 2);
-	}
-
-	return 0;
-}
-
-static int tegra_output_dsi_enable(struct tegra_output *output)
-{
-	struct tegra_dc *dc = to_tegra_dc(output->encoder.crtc);
-	const struct drm_display_mode *mode = &dc->base.mode;
-	struct tegra_dsi *dsi = to_dsi(output);
-	u32 value;
-	int err;
-
-	if (dsi->enabled)
-		return 0;
-
-	/* set SOL delay (for non-burst mode only) */
-	tegra_dsi_writel(dsi, 8 * mul / div, DSI_SOL_DELAY);
 
 	return 0;
 }
