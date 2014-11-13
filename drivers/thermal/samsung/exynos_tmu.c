@@ -271,6 +271,52 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 {
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 
+	if (TMU_SUPPORTS(pdata, READY_STATUS)) {
+		status = readb(data->base + reg->tmu_status);
+		if (!status) {
+			ret = -EBUSY;
+			goto out;
+		}
+	}
+
+	if (TMU_SUPPORTS(pdata, TRIM_RELOAD)) {
+		for (i = 0; i < reg->triminfo_ctrl_count; i++) {
+			if (pdata->triminfo_reload[i]) {
+				ctrl = readl(data->base +
+						reg->triminfo_ctrl[i]);
+				ctrl |= pdata->triminfo_reload[i];
+				writel(ctrl, data->base +
+						reg->triminfo_ctrl[i]);
+			}
+		}
+	}
+
+	/* Save trimming info in order to perform calibration */
+	if (data->soc == SOC_ARCH_EXYNOS5440) {
+		/*
+		 * For exynos5440 soc triminfo value is swapped between TMU0 and
+		 * TMU2, so the below logic is needed.
+		 */
+		switch (data->id) {
+		case 0:
+			trim_info = readl(data->base +
+			EXYNOS5440_EFUSE_SWAP_OFFSET + EXYNOS5440_TMU_S0_7_TRIM);
+			break;
+		case 1:
+			trim_info = readl(data->base + EXYNOS5440_TMU_S0_7_TRIM);
+			break;
+		case 2:
+			trim_info = readl(data->base -
+			EXYNOS5440_EFUSE_SWAP_OFFSET + EXYNOS5440_TMU_S0_7_TRIM);
+		}
+	} else {
+		/* On exynos5420 the triminfo register is in the shared space */
+		if (data->soc == SOC_ARCH_EXYNOS5420_TRIMINFO)
+			trim_info = readl(data->base_second +
+						EXYNOS_TMU_REG_TRIMINFO);
+		else
+			trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
+	}
 	data->temp_error1 = trim_info & EXYNOS_TMU_TEMP_MASK;
 	data->temp_error2 = ((trim_info >> EXYNOS_TRIMINFO_85_SHIFT) &
 				EXYNOS_TMU_TEMP_MASK);

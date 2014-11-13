@@ -38,6 +38,107 @@ enum soc_type {
 };
 
 /**
+ * EXYNOS TMU supported features.
+ * TMU_SUPPORT_EMULATION - This features is used to set user defined
+ *			temperature to the TMU controller.
+ * TMU_SUPPORT_MULTI_INST - This features denotes that the soc
+ *			has many instances of TMU.
+ * TMU_SUPPORT_TRIM_RELOAD - This features shows that trimming can
+ *			be reloaded.
+ * TMU_SUPPORT_FALLING_TRIP - This features shows that interrupt can
+ *			be registered for falling trips also.
+ * TMU_SUPPORT_READY_STATUS - This feature tells that the TMU current
+ *			state(active/idle) can be checked.
+ * TMU_SUPPORT_EMUL_TIME - This features allows to set next temp emulation
+ *			sample time.
+ * TMU_SUPPORT_ADDRESS_MULTIPLE - This feature tells that the different TMU
+ *			sensors shares some common registers.
+ * TMU_SUPPORT - macro to compare the above features with the supplied.
+ */
+#define TMU_SUPPORT_EMULATION			BIT(0)
+#define TMU_SUPPORT_MULTI_INST			BIT(1)
+#define TMU_SUPPORT_TRIM_RELOAD			BIT(2)
+#define TMU_SUPPORT_FALLING_TRIP		BIT(3)
+#define TMU_SUPPORT_READY_STATUS		BIT(4)
+#define TMU_SUPPORT_EMUL_TIME			BIT(5)
+#define TMU_SUPPORT_ADDRESS_MULTIPLE		BIT(6)
+
+#define TMU_SUPPORTS(a, b)	(a->features & TMU_SUPPORT_ ## b)
+
+/**
+ * struct exynos_tmu_register - register descriptors to access registers and
+ * bitfields. The register validity, offsets and bitfield values may vary
+ * slightly across different exynos SOC's.
+ * @triminfo_ctrl: trim info controller register.
+ * @triminfo_ctrl_count: the number of trim info controller register.
+ * @tmu_ctrl: TMU main controller register.
+ * @test_mux_addr_shift: shift bits of test mux address.
+ * @therm_trip_mode_shift: shift bits of tripping mode in tmu_ctrl register.
+ * @therm_trip_mode_mask: mask bits of tripping mode in tmu_ctrl register.
+ * @therm_trip_en_shift: shift bits of tripping enable in tmu_ctrl register.
+ * @tmu_status: register drescribing the TMU status.
+ * @tmu_cur_temp: register containing the current temperature of the TMU.
+ * @threshold_temp: register containing the base threshold level.
+ * @threshold_th0: Register containing first set of rising levels.
+ * @threshold_th1: Register containing second set of rising levels.
+ * @threshold_th2: Register containing third set of rising levels.
+ * @threshold_th3_l0_shift: shift bits of level0 threshold temperature.
+ * @tmu_inten: register containing the different threshold interrupt
+	enable bits.
+ * @inten_rise0_shift: shift bits of rising 0 interrupt bits.
+ * @inten_rise1_shift: shift bits of rising 1 interrupt bits.
+ * @inten_rise2_shift: shift bits of rising 2 interrupt bits.
+ * @inten_rise3_shift: shift bits of rising 3 interrupt bits.
+ * @inten_fall0_shift: shift bits of falling 0 interrupt bits.
+ * @tmu_intstat: Register containing the interrupt status values.
+ * @tmu_intclear: Register for clearing the raised interrupt status.
+ * @emul_con: TMU emulation controller register.
+ * @emul_temp_shift: shift bits of emulation temperature.
+ * @emul_time_shift: shift bits of emulation time.
+ * @tmu_irqstatus: register to find which TMU generated interrupts.
+ * @tmu_pmin: register to get/set the Pmin value.
+ */
+struct exynos_tmu_registers {
+	u32	triminfo_ctrl[MAX_TRIMINFO_CTRL_REG];
+	u32	triminfo_ctrl_count;
+
+	u32	tmu_ctrl;
+	u32     test_mux_addr_shift;
+	u32	therm_trip_mode_shift;
+	u32	therm_trip_mode_mask;
+	u32	therm_trip_en_shift;
+
+	u32	tmu_status;
+
+	u32	tmu_cur_temp;
+
+	u32	threshold_temp;
+
+	u32	threshold_th0;
+	u32	threshold_th1;
+	u32	threshold_th2;
+	u32	threshold_th3_l0_shift;
+
+	u32	tmu_inten;
+	u32	inten_rise0_shift;
+	u32	inten_rise1_shift;
+	u32	inten_rise2_shift;
+	u32	inten_rise3_shift;
+	u32	inten_fall0_shift;
+
+	u32	tmu_intstat;
+
+	u32	tmu_intclear;
+
+	u32	emul_con;
+	u32	emul_temp_shift;
+	u32	emul_time_shift;
+
+	u32	tmu_irqstatus;
+	u32	tmu_pmin;
+};
+
+/**
  * struct exynos_tmu_platform_data
  * @gain: gain of amplifier in the positive-TC generator block
  *	0 < gain <= 15
