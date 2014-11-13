@@ -161,6 +161,7 @@
  * @tmu_initialize: SoC specific TMU initialization method
  * @tmu_control: SoC specific TMU control method
  * @tmu_read: SoC specific TMU temperature read method
+ * @tmu_set_emulation: SoC specific TMU emulation setting method
  */
 struct exynos_tmu_data {
 	int id;
@@ -179,6 +180,8 @@ struct exynos_tmu_data {
 	int (*tmu_initialize)(struct platform_device *pdev);
 	void (*tmu_control)(struct platform_device *pdev, bool on);
 	int (*tmu_read)(struct exynos_tmu_data *data);
+	void (*tmu_set_emulation)(struct exynos_tmu_data *data,
+				  unsigned long temp);
 };
 
 static void exynos_report_trigger(struct exynos_tmu_data *p)
@@ -611,89 +614,38 @@ static u32 get_emul_con_reg(struct exynos_tmu_data *data, unsigned int val,
 	return val;
 }
 
+static void exynos4412_tmu_set_emulation(struct exynos_tmu_data *data,
+					 unsigned long temp)
+{
+	unsigned int val;
+	u32 emul_con;
+
+	if (data->soc == SOC_ARCH_EXYNOS5260)
+		emul_con = EXYNOS5260_EMUL_CON;
+	else
+		emul_con = EXYNOS_EMUL_CON;
+
+	val = readl(data->base + emul_con);
+	val = get_emul_con_reg(data, val, temp);
+	writel(val, data->base + emul_con);
+}
+
+static void exynos5440_tmu_set_emulation(struct exynos_tmu_data *data,
+					 unsigned long temp)
+{
+	unsigned int val;
+
+	val = readl(data->base + EXYNOS5440_TMU_S0_7_DEBUG);
+	val = get_emul_con_reg(data, val, temp);
+	writel(val, data->base + EXYNOS5440_TMU_S0_7_DEBUG);
+}
+
 static int exynos_tmu_set_emulation(void *drv_data, unsigned long temp)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 	struct thermal_zone_device *tz = data->tzd;
 	struct exynos_tmu_platform_data *pdata = data->pdata;
-	unsigned int status, trim_info;
-	unsigned int rising_threshold = 0, falling_threshold = 0;
-	int ret = 0, threshold_code, i;
-	unsigned long temp, temp_hist;
-	unsigned int reg_off, bit_off;
-
-	status = readb(data->base + EXYNOS_TMU_REG_STATUS);
-	if (!status) {
-		ret = -EBUSY;
-		goto out;
-	}
-
-	trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
-
-	data->temp_error1 = trim_info & EXYNOS7_TMU_TEMP_MASK;
-	if (!data->temp_error1 ||
-	    (pdata->min_efuse_value > data->temp_error1) ||
-	    (data->temp_error1 > pdata->max_efuse_value))
-		data->temp_error1 = pdata->efuse_value & EXYNOS_TMU_TEMP_MASK;
-
-	/* Write temperature code for rising and falling threshold */
-	for (i = (of_thermal_get_ntrips(tz) - 1); i >= 0; i--) {
-		/*
-		 * On exynos7 there are 4 rising and 4 falling threshold
-		 * registers (0x50-0x5c and 0x60-0x6c respectively). Each
-		 * register holds the value of two threshold levels (at bit
-		 * offsets 0 and 16). Based on the fact that there are atmost
-		 * eight possible trigger levels, calculate the register and
-		 * bit offsets where the threshold levels are to be written.
-		 *
-		 * e.g. EXYNOS7_THD_TEMP_RISE7_6 (0x50)
-		 * [24:16] - Threshold level 7
-		 * [8:0] - Threshold level 6
-		 * e.g. EXYNOS7_THD_TEMP_RISE5_4 (0x54)
-		 * [24:16] - Threshold level 5
-		 * [8:0] - Threshold level 4
-		 *
-		 * and similarly for falling thresholds.
-		 *
-		 * Based on the above, calculate the register and bit offsets
-		 * for rising/falling threshold levels and populate them.
-		 */
-		reg_off = ((7 - i) / 2) * 4;
-		bit_off = ((8 - i) % 2);
-
-		tz->ops->get_trip_temp(tz, i, &temp);
-		temp /= MCELSIUS;
-
-		tz->ops->get_trip_hyst(tz, i, &temp_hist);
-		temp_hist = temp - (temp_hist / MCELSIUS);
-
-		/* Set 9-bit temperature code for rising threshold levels */
-		threshold_code = temp_to_code(data, temp);
-		rising_threshold = readl(data->base +
-			EXYNOS7_THD_TEMP_RISE7_6 + reg_off);
-		rising_threshold &= ~(EXYNOS7_TMU_TEMP_MASK << (16 * bit_off));
-		rising_threshold |= threshold_code << (16 * bit_off);
-		writel(rising_threshold,
-		       data->base + EXYNOS7_THD_TEMP_RISE7_6 + reg_off);
-
-		/* Set 9-bit temperature code for falling threshold levels */
-		threshold_code = temp_to_code(data, temp_hist);
-		falling_threshold &= ~(EXYNOS7_TMU_TEMP_MASK << (16 * bit_off));
-		falling_threshold |= threshold_code << (16 * bit_off);
-		writel(falling_threshold,
-		       data->base + EXYNOS7_THD_TEMP_FALL7_6 + reg_off);
-	}
-
-	data->tmu_clear_irqs(data);
-out:
-	return ret;
-}
-
-static void exynos4210_tmu_control(struct platform_device *pdev, bool on)
-{
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-	struct thermal_zone_device *tz = data->tzd;
-	unsigned int con, interrupt_en;
+	int ret = -EINVAL;
 
 	con = get_con_reg(data, readl(data->base + EXYNOS_TMU_REG_CONTROL));
 
@@ -795,18 +747,6 @@ static int exynos_get_temp(void *p, long *temp)
 
 	if (!data || !data->tmu_read)
 		return -EINVAL;
-
-	mutex_lock(&data->lock);
-	clk_enable(data->clk);
-
-	*temp = code_to_temp(data, data->tmu_read(data)) * MCELSIUS;
-
-	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
-
-	val = readl(data->base + reg->emul_con);
-	val = get_emul_con_reg(data, val, temp);
-	writel(val, data->base + reg->emul_con);
 
 	mutex_lock(&data->lock);
 	clk_enable(data->clk);
@@ -1214,11 +1154,13 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		data->tmu_initialize = exynos4412_tmu_initialize;
 		data->tmu_control = exynos4210_tmu_control;
 		data->tmu_read = exynos4412_tmu_read;
+		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
 		break;
 	case SOC_ARCH_EXYNOS5440:
 		data->tmu_initialize = exynos5440_tmu_initialize;
 		data->tmu_control = exynos5440_tmu_control;
 		data->tmu_read = exynos5440_tmu_read;
+		data->tmu_set_emulation = exynos5440_tmu_set_emulation;
 		break;
 	default:
 		ret = -EINVAL;
