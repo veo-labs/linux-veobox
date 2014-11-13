@@ -588,7 +588,30 @@ static int exynos_tmu_read(struct exynos_tmu_data *data)
 	return ret;
 }
 
-static int exynos7_tmu_initialize(struct platform_device *pdev)
+#ifdef CONFIG_THERMAL_EMULATION
+static u32 get_emul_con_reg(struct exynos_tmu_data *data, unsigned int val,
+			    unsigned long temp)
+{
+	struct exynos_tmu_platform_data *pdata = data->pdata;
+
+	if (temp) {
+		temp /= MCELSIUS;
+
+		if (TMU_SUPPORTS(pdata, EMUL_TIME)) {
+			val &= ~(EXYNOS_EMUL_TIME_MASK << EXYNOS_EMUL_TIME_SHIFT);
+			val |= (EXYNOS_EMUL_TIME << EXYNOS_EMUL_TIME_SHIFT);
+		}
+		val &= ~(EXYNOS_EMUL_DATA_MASK << EXYNOS_EMUL_DATA_SHIFT);
+		val |= (temp_to_code(data, temp) << EXYNOS_EMUL_DATA_SHIFT) |
+			EXYNOS_EMUL_ENABLE;
+	} else {
+		val &= ~EXYNOS_EMUL_ENABLE;
+	}
+
+	return val;
+}
+
+static int exynos_tmu_set_emulation(void *drv_data, unsigned long temp)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 	struct thermal_zone_device *tz = data->tzd;
@@ -781,78 +804,9 @@ static int exynos_get_temp(void *p, long *temp)
 	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 
-	return 0;
-}
-
-#ifdef CONFIG_THERMAL_EMULATION
-static u32 get_emul_con_reg(struct exynos_tmu_data *data, unsigned int val,
-			    unsigned long temp)
-{
-	if (temp) {
-		temp /= MCELSIUS;
-
-		if (TMU_SUPPORTS(pdata, EMUL_TIME)) {
-			val &= ~(EXYNOS_EMUL_TIME_MASK << EXYNOS_EMUL_TIME_SHIFT);
-			val |= (EXYNOS_EMUL_TIME << EXYNOS_EMUL_TIME_SHIFT);
-		}
-		if (data->soc == SOC_ARCH_EXYNOS7) {
-			val &= ~(EXYNOS7_EMUL_DATA_MASK <<
-				EXYNOS7_EMUL_DATA_SHIFT);
-			val |= (temp_to_code(data, temp) <<
-				EXYNOS7_EMUL_DATA_SHIFT) |
-				EXYNOS_EMUL_ENABLE;
-		} else {
-			val &= ~(EXYNOS_EMUL_DATA_MASK <<
-				EXYNOS_EMUL_DATA_SHIFT);
-			val |= (temp_to_code(data, temp) <<
-				EXYNOS_EMUL_DATA_SHIFT) |
-				EXYNOS_EMUL_ENABLE;
-		}
-	} else {
-		val &= ~EXYNOS_EMUL_ENABLE;
-	}
-
-	return val;
-}
-
-static void exynos4412_tmu_set_emulation(struct exynos_tmu_data *data,
-					 unsigned long temp)
-{
-	unsigned int val;
-	u32 emul_con;
-
-	if (data->soc == SOC_ARCH_EXYNOS5260)
-		emul_con = EXYNOS5260_EMUL_CON;
-	else if (data->soc == SOC_ARCH_EXYNOS7)
-		emul_con = EXYNOS7_TMU_REG_EMUL_CON;
-	else
-		emul_con = EXYNOS_EMUL_CON;
-
-	val = readl(data->base + emul_con);
+	val = readl(data->base + reg->emul_con);
 	val = get_emul_con_reg(data, val, temp);
-	writel(val, data->base + emul_con);
-}
-
-static void exynos5440_tmu_set_emulation(struct exynos_tmu_data *data,
-					 unsigned long temp)
-{
-	unsigned int val;
-
-	val = readl(data->base + EXYNOS5440_TMU_S0_7_DEBUG);
-	val = get_emul_con_reg(data, val, temp);
-	writel(val, data->base + EXYNOS5440_TMU_S0_7_DEBUG);
-}
-
-static int exynos_tmu_set_emulation(void *drv_data, unsigned long temp)
-{
-	struct exynos_tmu_data *data = drv_data;
-	int ret = -EINVAL;
-
-	if (data->soc == SOC_ARCH_EXYNOS4210)
-		goto out;
-
-	if (temp && temp < MCELSIUS)
-		goto out;
+	writel(val, data->base + reg->emul_con);
 
 	mutex_lock(&data->lock);
 	clk_enable(data->clk);
