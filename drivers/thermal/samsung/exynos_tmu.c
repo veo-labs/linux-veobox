@@ -348,11 +348,21 @@ static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
 			writeb(pdata->trigger_levels[i], data->base +
 			reg->threshold_th0 + i * sizeof(reg->threshold_th0));
 
-		temp = trips[i].temperature / MCELSIUS;
-		if (falling)
-			temp -= (trips[i].hysteresis / MCELSIUS);
-		else
-			threshold &= ~(0xff << 8 * i);
+		exynos_tmu_clear_irqs(data);
+	} else {
+		/* Write temperature code for rising and falling threshold */
+		for (i = 0; i < pdata->non_hw_trigger_levels; i++) {
+			threshold_code = temp_to_code(data,
+						pdata->trigger_levels[i]);
+			rising_threshold &= ~(0xff << 8 * i);
+			rising_threshold |= threshold_code << 8 * i;
+			if (data->soc != SOC_ARCH_EXYNOS5440) {
+				threshold_code = temp_to_code(data,
+						pdata->trigger_levels[i] -
+						pdata->threshold_falling);
+				falling_threshold |= threshold_code << 8 * i;
+			}
+		}
 
 		writel(rising_threshold,
 				data->base + reg->threshold_th0);
