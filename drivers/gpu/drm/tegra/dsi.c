@@ -444,18 +444,6 @@ static int tegra_dsi_get_format(enum mipi_dsi_pixel_format format,
 	return 0;
 }
 
-static void tegra_dsi_ganged_enable(struct tegra_dsi *dsi, unsigned int start,
-				    unsigned int size)
-{
-	u32 value;
-
-	tegra_dsi_writel(dsi, start, DSI_GANGED_MODE_START);
-	tegra_dsi_writel(dsi, size << 16 | size, DSI_GANGED_MODE_SIZE);
-
-	value = DSI_GANGED_MODE_CONTROL_ENABLE;
-	tegra_dsi_writel(dsi, value, DSI_GANGED_MODE_CONTROL);
-}
-
 static void tegra_dsi_enable(struct tegra_dsi *dsi)
 {
 	u32 value;
@@ -463,20 +451,6 @@ static void tegra_dsi_enable(struct tegra_dsi *dsi)
 	value = tegra_dsi_readl(dsi, DSI_POWER_CONTROL);
 	value |= DSI_POWER_CONTROL_ENABLE;
 	tegra_dsi_writel(dsi, value, DSI_POWER_CONTROL);
-
-	if (dsi->slave)
-		tegra_dsi_enable(dsi->slave);
-}
-
-static unsigned int tegra_dsi_get_lanes(struct tegra_dsi *dsi)
-{
-	if (dsi->master)
-		return dsi->master->lanes + dsi->lanes;
-
-	if (dsi->slave)
-		return dsi->lanes + dsi->slave->lanes;
-
-	return dsi->lanes;
 }
 
 static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
@@ -618,6 +592,66 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 		tegra_dsi_ganged_enable(dsi->slave, mode->hdisplay / 2,
 					mode->hdisplay / 2);
 	}
+
+	return 0;
+}
+
+static int tegra_output_dsi_enable(struct tegra_output *output)
+{
+	struct tegra_dc *dc = to_tegra_dc(output->encoder.crtc);
+	const struct drm_display_mode *mode = &dc->base.mode;
+	struct tegra_dsi *dsi = to_dsi(output);
+	u32 value;
+	int err;
+
+	if (dsi->enabled)
+		return 0;
+
+	/* set SOL delay (for non-burst mode only) */
+	tegra_dsi_writel(dsi, 8 * mul / div, DSI_SOL_DELAY);
+
+	return 0;
+}
+
+static int tegra_output_dsi_enable(struct tegra_output *output)
+{
+	struct tegra_dc *dc = to_tegra_dc(output->encoder.crtc);
+	const struct drm_display_mode *mode = &dc->base.mode;
+	struct tegra_dsi *dsi = to_dsi(output);
+	u32 value;
+	int err;
+
+	if (dsi->enabled)
+		return 0;
+
+	err = tegra_dsi_configure(dsi, dc->pipe, mode);
+	if (err < 0)
+		return err;
+
+	/* enable display controller */
+	value = tegra_dc_readl(dc, DC_DISP_DISP_WIN_OPTIONS);
+	value |= DSI_ENABLE;
+	tegra_dc_writel(dc, value, DC_DISP_DISP_WIN_OPTIONS);
+
+	value = tegra_dc_readl(dc, DC_CMD_DISPLAY_COMMAND);
+	value &= ~DISP_CTRL_MODE_MASK;
+	value |= DISP_CTRL_MODE_C_DISPLAY;
+	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_COMMAND);
+
+	value = tegra_dc_readl(dc, DC_CMD_DISPLAY_POWER_CONTROL);
+	value |= PW0_ENABLE | PW1_ENABLE | PW2_ENABLE | PW3_ENABLE |
+		 PW4_ENABLE | PM0_ENABLE | PM1_ENABLE;
+	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_POWER_CONTROL);
+
+	tegra_dc_writel(dc, GENERAL_ACT_REQ << 8, DC_CMD_STATE_CONTROL);
+	tegra_dc_writel(dc, GENERAL_ACT_REQ, DC_CMD_STATE_CONTROL);
+
+	/* enable DSI controller */
+	tegra_dsi_enable(dsi);
+
+	dsi->enabled = true;
+
+	return 0;
 }
 
 static int tegra_dsi_wait_idle(struct tegra_dsi *dsi, unsigned long timeout)
@@ -644,16 +678,6 @@ static void tegra_dsi_video_disable(struct tegra_dsi *dsi)
 	value = tegra_dsi_readl(dsi, DSI_CONTROL);
 	value &= ~DSI_CONTROL_VIDEO_ENABLE;
 	tegra_dsi_writel(dsi, value, DSI_CONTROL);
-
-	if (dsi->slave)
-		tegra_dsi_video_disable(dsi->slave);
-}
-
-static void tegra_dsi_ganged_disable(struct tegra_dsi *dsi)
-{
-	tegra_dsi_writel(dsi, 0, DSI_GANGED_MODE_START);
-	tegra_dsi_writel(dsi, 0, DSI_GANGED_MODE_SIZE);
-	tegra_dsi_writel(dsi, 0, DSI_GANGED_MODE_CONTROL);
 }
 
 static void tegra_dsi_set_timeout(struct tegra_dsi *dsi, unsigned long bclk,
@@ -683,17 +707,9 @@ static void tegra_dsi_disable(struct tegra_dsi *dsi)
 {
 	u32 value;
 
-	if (dsi->slave) {
-		tegra_dsi_ganged_disable(dsi->slave);
-		tegra_dsi_ganged_disable(dsi);
-	}
-
 	value = tegra_dsi_readl(dsi, DSI_POWER_CONTROL);
 	value &= ~DSI_POWER_CONTROL_ENABLE;
 	tegra_dsi_writel(dsi, value, DSI_POWER_CONTROL);
-
-	if (dsi->slave)
-		tegra_dsi_disable(dsi->slave);
 
 	usleep_range(5000, 10000);
 }
@@ -855,6 +871,12 @@ static void tegra_dsi_encoder_disable(struct drm_encoder *encoder)
 
 		tegra_dc_commit(dc);
 	}
+
+	err = tegra_dsi_wait_idle(dsi, 100);
+	if (err < 0)
+		dev_dbg(dsi->dev, "failed to idle DSI: %d\n", err);
+
+	tegra_dsi_disable(dsi);
 
 	dsi->enabled = false;
 
