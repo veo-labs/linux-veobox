@@ -1505,7 +1505,8 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	dsi->clk_parent = devm_clk_get(&pdev->dev, "parent");
 	if (IS_ERR(dsi->clk_parent)) {
 		dev_err(&pdev->dev, "cannot get parent clock\n");
-		return PTR_ERR(dsi->clk_parent);
+		err = PTR_ERR(dsi->clk_parent);
+		goto disable_clk_lp;
 	}
 
 	dsi->vdd = devm_regulator_get(&pdev->dev, "avdd-dsi-csi");
@@ -1544,12 +1545,6 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	if (err < 0) {
 		dev_err(dsi->dev, "MIPI calibration failed: %d\n", err);
 		goto mipi_free;
-	}
-
-	err = tegra_dsi_pad_calibrate(dsi);
-	if (err < 0) {
-		dev_err(dsi->dev, "MIPI calibration failed: %d\n", err);
-		return err;
 	}
 
 	dsi->host.ops = &tegra_dsi_host_ops;
