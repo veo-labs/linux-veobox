@@ -8163,6 +8163,30 @@ static int haswell_crtc_compute_clock(struct intel_crtc *crtc,
 	}
 }
 
+static void skylake_get_ddi_pll(struct drm_i915_private *dev_priv,
+				enum port port,
+				struct intel_crtc_config *pipe_config)
+{
+	u32 temp;
+
+	temp = I915_READ(DPLL_CTRL2) & DPLL_CTRL2_DDI_CLK_SEL_MASK(port);
+	pipe_config->ddi_pll_sel = temp >> (port * 3 + 1);
+
+	switch (pipe_config->ddi_pll_sel) {
+	case SKL_DPLL1:
+		pipe_config->shared_dpll = DPLL_ID_SKL_DPLL1;
+		break;
+	case SKL_DPLL2:
+		pipe_config->shared_dpll = DPLL_ID_SKL_DPLL2;
+		break;
+	case SKL_DPLL3:
+		pipe_config->shared_dpll = DPLL_ID_SKL_DPLL3;
+		break;
+	default:
+		WARN(1, "Unknown DPLL programmed\n");
+	}
+}
+
 static void haswell_get_ddi_pll(struct drm_i915_private *dev_priv,
 				enum port port,
 				struct intel_crtc_state *pipe_config)
