@@ -1505,8 +1505,7 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	dsi->clk_parent = devm_clk_get(&pdev->dev, "parent");
 	if (IS_ERR(dsi->clk_parent)) {
 		dev_err(&pdev->dev, "cannot get parent clock\n");
-		err = PTR_ERR(dsi->clk_parent);
-		goto disable_clk_lp;
+		return PTR_ERR(dsi->clk_parent);
 	}
 
 	dsi->vdd = devm_regulator_get(&pdev->dev, "avdd-dsi-csi");
