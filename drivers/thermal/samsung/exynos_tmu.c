@@ -272,7 +272,7 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 
 	if (TMU_SUPPORTS(pdata, READY_STATUS)) {
-		status = readb(data->base + reg->tmu_status);
+		status = readb(data->base + EXYNOS_TMU_REG_STATUS);
 		if (!status) {
 			ret = -EBUSY;
 			goto out;
