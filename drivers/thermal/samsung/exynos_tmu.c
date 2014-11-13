@@ -628,7 +628,8 @@ static int exynos_tmu_set_emulation(void *drv_data, unsigned long temp)
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 	int ret = -EINVAL;
 
-	con = get_con_reg(data, readl(data->base + EXYNOS_TMU_REG_CONTROL));
+	if (data->soc == SOC_ARCH_EXYNOS4210)
+		goto out;
 
 	if (on) {
 		con |= (1 << EXYNOS_TMU_CORE_EN_SHIFT);
