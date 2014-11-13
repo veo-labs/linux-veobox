@@ -563,6 +563,7 @@ static void adv7604_set_hpd(struct adv7604_state *state, unsigned int hpd)
 		if (IS_ERR(state->hpd_gpio[i]))
 			continue;
 
+		printk("%s: Set gpio %d to value %d\n", __func__, state->hpd_gpio[i], hpd & BIT(i));
 		gpiod_set_value_cansleep(state->hpd_gpio[i], hpd & BIT(i));
 	}
 
