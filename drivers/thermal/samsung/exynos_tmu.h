@@ -51,7 +51,6 @@ enum soc_type {
  * @min_efuse_value: minimum valid trimming data
  * @max_efuse_value: maximum valid trimming data
  * @default_temp_offset: default temperature offset in case of no trimming
- * @test_mux; information if SoC supports test MUX
  * @cal_type: calibration type for temperature
  * @freq_clip_table: Table representing frequency reduction percentage.
  * @freq_tab_count: Count of the above table as frequency reduction may
@@ -70,7 +69,6 @@ struct exynos_tmu_platform_data {
 	u8 first_point_trim;
 	u8 second_point_trim;
 	u8 default_temp_offset;
-	u8 test_mux;
 
 	enum soc_type type;
 	struct freq_clip_table freq_tab[4];
