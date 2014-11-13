@@ -60,17 +60,6 @@ enum soc_type {
 #define TMU_SUPPORTS(a, b)	(a->features & TMU_SUPPORT_ ## b)
 
 /**
- * struct exynos_tmu_register - register descriptors to access registers.
- * The register validity may vary slightly across different exynos SOC's.
- * @tmu_intstat: Register containing the interrupt status values.
- * @tmu_intclear: Register for clearing the raised interrupt status.
- */
-struct exynos_tmu_registers {
-	u32	tmu_intstat;
-	u32	tmu_intclear;
-};
-
-/**
  * struct exynos_tmu_platform_data
  * @gain: gain of amplifier in the positive-TC generator block
  *	0 < gain <= 15
@@ -86,6 +75,11 @@ struct exynos_tmu_registers {
  * @default_temp_offset: default temperature offset in case of no trimming
  * @test_mux; information if SoC supports test MUX
  * @cal_type: calibration type for temperature
+ * @freq_clip_table: Table representing frequency reduction percentage.
+ * @freq_tab_count: Count of the above table as frequency reduction may
+ *	applicable to only some of the trigger levels.
+ * @features: a bitfield value indicating the features supported in SOC like
+ *	emulation, multi instance etc
  *
  * This structure is required for configuration of exynos_tmu driver.
  */
@@ -103,8 +97,21 @@ struct exynos_tmu_platform_data {
 	u8 test_mux;
 
 	enum soc_type type;
-	u32 cal_type;
-	u32 cal_mode;
+	struct freq_clip_table freq_tab[4];
+	unsigned int freq_tab_count;
+	unsigned int features;
+};
+
+/**
+ * struct exynos_tmu_init_data
+ * @tmu_count: number of TMU instances.
+ * @tmu_data: platform data of all TMU instances.
+ * This structure is required to store data for multi-instance exynos tmu
+ * driver.
+ */
+struct exynos_tmu_init_data {
+	int tmu_count;
+	struct exynos_tmu_platform_data tmu_data[];
 };
 
 #endif /* _EXYNOS_TMU_H */
