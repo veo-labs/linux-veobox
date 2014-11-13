@@ -92,7 +92,6 @@ static const struct exynos_tmu_registers exynos3250_tmu_registers = {
 	.tmu_intstat = EXYNOS_TMU_REG_INTSTAT,
 	.tmu_intclear = EXYNOS_TMU_REG_INTCLEAR,
 	.emul_con = EXYNOS_EMUL_CON,
-	.emul_time_shift = EXYNOS_EMUL_TIME_SHIFT,
 };
 
 #define EXYNOS3250_TMU_DATA \
@@ -162,7 +161,6 @@ static const struct exynos_tmu_registers exynos4412_tmu_registers = {
 	.tmu_intstat = EXYNOS_TMU_REG_INTSTAT,
 	.tmu_intclear = EXYNOS_TMU_REG_INTCLEAR,
 	.emul_con = EXYNOS_EMUL_CON,
-	.emul_time_shift = EXYNOS_EMUL_TIME_SHIFT,
 };
 
 #define EXYNOS4412_TMU_DATA \
@@ -242,7 +240,6 @@ static const struct exynos_tmu_registers exynos5260_tmu_registers = {
 	.tmu_intstat = EXYNOS5260_TMU_REG_INTSTAT,
 	.tmu_intclear = EXYNOS5260_TMU_REG_INTCLEAR,
 	.emul_con = EXYNOS5260_EMUL_CON,
-	.emul_time_shift = EXYNOS_EMUL_TIME_SHIFT,
 };
 
 #define __EXYNOS5260_TMU_DATA	\
@@ -313,7 +310,6 @@ static const struct exynos_tmu_registers exynos5420_tmu_registers = {
 	.tmu_intstat = EXYNOS_TMU_REG_INTSTAT,
 	.tmu_intclear = EXYNOS_TMU_REG_INTCLEAR,
 	.emul_con = EXYNOS_EMUL_CON,
-	.emul_time_shift = EXYNOS_EMUL_TIME_SHIFT,
 };
 
 #define __EXYNOS5420_TMU_DATA	\
