@@ -72,6 +72,7 @@ struct exynos_tmu_init_data const exynos4210_default_tmu_data = {
 		},
 		.freq_tab_count = 2,
 		.type = SOC_ARCH_EXYNOS4210,
+		.registers = &exynos4210_tmu_registers,
 		},
 	},
 	.tmu_count = 1,
@@ -131,8 +132,7 @@ static const struct exynos_tmu_registers exynos3250_tmu_registers = {
 	.freq_tab_count = 2, \
 	.registers = &exynos3250_tmu_registers, \
 	.features = (TMU_SUPPORT_EMULATION | TMU_SUPPORT_TRIM_RELOAD | \
-			TMU_SUPPORT_FALLING_TRIP | TMU_SUPPORT_READY_STATUS | \
-			TMU_SUPPORT_EMUL_TIME)
+			TMU_SUPPORT_FALLING_TRIP | TMU_SUPPORT_EMUL_TIME)
 #endif
 
 struct exynos_tmu_init_data const exynos3250_default_tmu_data = {
@@ -200,8 +200,7 @@ static const struct exynos_tmu_registers exynos4412_tmu_registers = {
 	.freq_tab_count = 2, \
 	.registers = &exynos4412_tmu_registers, \
 	.features = (TMU_SUPPORT_EMULATION | TMU_SUPPORT_TRIM_RELOAD | \
-			TMU_SUPPORT_FALLING_TRIP | TMU_SUPPORT_READY_STATUS | \
-			TMU_SUPPORT_EMUL_TIME)
+			TMU_SUPPORT_FALLING_TRIP | TMU_SUPPORT_EMUL_TIME)
 #endif
 
 struct exynos_tmu_init_data const exynos4412_default_tmu_data = {
@@ -280,7 +279,9 @@ static const struct exynos_tmu_registers exynos5260_tmu_registers = {
 
 #define EXYNOS5260_TMU_DATA \
 	__EXYNOS5260_TMU_DATA \
-	.type = SOC_ARCH_EXYNOS5260
+	.type = SOC_ARCH_EXYNOS5260, \
+	.features = (TMU_SUPPORT_EMULATION | TMU_SUPPORT_FALLING_TRIP | \
+			TMU_SUPPORT_EMUL_TIME)
 
 struct exynos_tmu_init_data const exynos5260_default_tmu_data = {
 	.tmu_data = {
@@ -350,12 +351,16 @@ static const struct exynos_tmu_registers exynos5420_tmu_registers = {
 	.registers = &exynos5420_tmu_registers, \
 
 #define EXYNOS5420_TMU_DATA \
-	__EXYNOS5260_TMU_DATA \
-	.type = SOC_ARCH_EXYNOS5420
+	__EXYNOS5420_TMU_DATA \
+	.type = SOC_ARCH_EXYNOS5250, \
+	.features = (TMU_SUPPORT_EMULATION | TMU_SUPPORT_FALLING_TRIP | \
+			TMU_SUPPORT_EMUL_TIME)
 
 #define EXYNOS5420_TMU_DATA_SHARED \
-	__EXYNOS5260_TMU_DATA \
-	.type = SOC_ARCH_EXYNOS5420_TRIMINFO
+	__EXYNOS5420_TMU_DATA \
+	.type = SOC_ARCH_EXYNOS5420_TRIMINFO, \
+	.features = (TMU_SUPPORT_EMULATION | TMU_SUPPORT_FALLING_TRIP | \
+			TMU_SUPPORT_EMUL_TIME | TMU_SUPPORT_ADDRESS_MULTIPLE)
 
 struct exynos_tmu_init_data const exynos5420_default_tmu_data = {
 	.tmu_data = {
