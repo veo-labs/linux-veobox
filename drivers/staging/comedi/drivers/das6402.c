@@ -318,47 +318,6 @@ static int das6402_ai_check_chanlist(struct comedi_device *dev,
 	return 0;
 }
 
-static int das6402_ai_check_chanlist(struct comedi_device *dev,
-				     struct comedi_subdevice *s,
-				     struct comedi_cmd *cmd)
-{
-	unsigned int chan0 = CR_CHAN(cmd->chanlist[0]);
-	unsigned int range0 = CR_RANGE(cmd->chanlist[0]);
-	unsigned int aref0 = CR_AREF(cmd->chanlist[0]);
-	int i;
-
-	for (i = 1; i < cmd->chanlist_len; i++) {
-		unsigned int chan = CR_CHAN(cmd->chanlist[i]);
-		unsigned int range = CR_RANGE(cmd->chanlist[i]);
-		unsigned int aref = CR_AREF(cmd->chanlist[i]);
-
-		if (chan != chan0 + i) {
-			dev_dbg(dev->class_dev,
-				"chanlist must be consecutive\n");
-			return -EINVAL;
-		}
-
-		if (range != range0) {
-			dev_dbg(dev->class_dev,
-				"chanlist must have the same range\n");
-			return -EINVAL;
-		}
-
-		if (aref != aref0) {
-			dev_dbg(dev->class_dev,
-				"chanlist must have the same reference\n");
-			return -EINVAL;
-		}
-
-		if (aref0 == AREF_DIFF && chan > (s->n_chan / 2)) {
-			dev_dbg(dev->class_dev,
-				"chanlist differential channel to large\n");
-			return -EINVAL;
-		}
-	}
-	return 0;
-}
-
 static int das6402_ai_cmdtest(struct comedi_device *dev,
 			      struct comedi_subdevice *s,
 			      struct comedi_cmd *cmd)
