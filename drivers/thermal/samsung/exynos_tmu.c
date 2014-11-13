@@ -340,15 +340,14 @@ static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
 	unsigned long temp;
 	int i;
 
-	if (!trips) {
-		pr_err("%s: Cannot get trip points from of-thermal.c!\n",
-		       __func__);
-		return 0;
-	}
-
-	for (i = 0; i < of_thermal_get_ntrips(tz); i++) {
-		if (trips[i].type == THERMAL_TRIP_CRITICAL)
-			continue;
+	if (data->soc == SOC_ARCH_EXYNOS4210) {
+		/* Write temperature code for threshold */
+		threshold_code = temp_to_code(data, pdata->threshold);
+		writeb(threshold_code,
+			data->base + EXYNOS4210_TMU_REG_THRESHOLD_TEMP);
+		for (i = 0; i < pdata->non_hw_trigger_levels; i++)
+			writeb(pdata->trigger_levels[i], data->base +
+			reg->threshold_th0 + i * sizeof(reg->threshold_th0));
 
 		temp = trips[i].temperature / MCELSIUS;
 		if (falling)
