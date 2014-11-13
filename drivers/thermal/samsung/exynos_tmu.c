@@ -335,11 +335,6 @@ static u32 get_con_reg(struct exynos_tmu_data *data, u32 con)
 {
 	struct exynos_tmu_platform_data *pdata = data->pdata;
 
-	mutex_lock(&data->lock);
-	clk_enable(data->clk);
-
-	con = readl(data->base + reg->tmu_ctrl);
-
 	if (pdata->test_mux)
 		con |= (pdata->test_mux << EXYNOS4412_MUX_ADDR_SHIFT);
 
@@ -356,6 +351,35 @@ static u32 get_con_reg(struct exynos_tmu_data *data, u32 con)
 
 	return con;
 }
+
+static void exynos_tmu_control(struct platform_device *pdev, bool on)
+{
+	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
+	struct exynos_tmu_platform_data *pdata = data->pdata;
+	const struct exynos_tmu_registers *reg = pdata->registers;
+	unsigned int con, interrupt_en;
+
+	mutex_lock(&data->lock);
+	clk_enable(data->clk);
+
+	con = get_con_reg(data, readl(data->base + reg->tmu_ctrl));
+
+	if (on) {
+		con |= (1 << EXYNOS_TMU_CORE_EN_SHIFT);
+		interrupt_en =
+			pdata->trigger_enable[3] << reg->inten_rise3_shift |
+			pdata->trigger_enable[2] << reg->inten_rise2_shift |
+			pdata->trigger_enable[1] << reg->inten_rise1_shift |
+			pdata->trigger_enable[0] << reg->inten_rise0_shift;
+		if (TMU_SUPPORTS(pdata, FALLING_TRIP))
+			interrupt_en |=
+				interrupt_en << reg->inten_fall0_shift;
+	} else {
+		con &= ~(1 << EXYNOS_TMU_CORE_EN_SHIFT);
+		interrupt_en = 0; /* Disable all interrupts */
+	}
+	writel(interrupt_en, data->base + reg->tmu_inten);
+	writel(con, data->base + reg->tmu_ctrl);
 
 static void exynos_tmu_control(struct platform_device *pdev, bool on)
 {
