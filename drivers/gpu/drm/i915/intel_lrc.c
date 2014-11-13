@@ -797,7 +797,6 @@ static int intel_lr_context_pin(struct intel_engine_cs *ring,
 		struct intel_context *ctx)
 {
 	struct drm_i915_gem_object *ctx_obj = ctx->engine[ring->id].state;
-	struct intel_ringbuffer *ringbuf = ctx->engine[ring->id].ringbuf;
 	int ret = 0;
 
 	WARN_ON(!mutex_is_locked(&ring->dev->struct_mutex));
@@ -805,19 +804,8 @@ static int intel_lr_context_pin(struct intel_engine_cs *ring,
 		ret = i915_gem_obj_ggtt_pin(ctx_obj,
 				GEN8_LR_CONTEXT_ALIGN, 0);
 		if (ret)
-			goto reset_pin_count;
-
-		ret = intel_pin_and_map_ringbuffer_obj(ring->dev, ringbuf);
-		if (ret)
-			goto unpin_ctx_obj;
+			ctx->engine[ring->id].unpin_count = 0;
 	}
-
-	return ret;
-
-unpin_ctx_obj:
-	i915_gem_object_ggtt_unpin(ctx_obj);
-reset_pin_count:
-	ctx->engine[ring->id].pin_count = 0;
 
 	return ret;
 }
@@ -826,14 +814,11 @@ void intel_lr_context_unpin(struct intel_engine_cs *ring,
 		struct intel_context *ctx)
 {
 	struct drm_i915_gem_object *ctx_obj = ctx->engine[ring->id].state;
-	struct intel_ringbuffer *ringbuf = ctx->engine[ring->id].ringbuf;
 
 	if (ctx_obj) {
 		WARN_ON(!mutex_is_locked(&ring->dev->struct_mutex));
-		if (--ctx->engine[ring->id].pin_count == 0) {
-			intel_unpin_ringbuffer_obj(ringbuf);
+		if (--ctx->engine[ring->id].unpin_count == 0)
 			i915_gem_object_ggtt_unpin(ctx_obj);
-		}
 	}
 }
 
@@ -1743,13 +1728,10 @@ void intel_lr_context_free(struct intel_context *ctx)
 					ctx->engine[i].ringbuf;
 			struct intel_engine_cs *ring = ringbuf->ring;
 
-			if (ctx == ring->default_context) {
-				intel_unpin_ringbuffer_obj(ringbuf);
-				i915_gem_object_ggtt_unpin(ctx_obj);
-			}
-			WARN_ON(ctx->engine[ring->id].pin_count);
 			intel_destroy_ringbuffer_obj(ringbuf);
 			kfree(ringbuf);
+			if (ctx == ring->default_context)
+				i915_gem_object_ggtt_unpin(ctx_obj);
 			drm_gem_object_unreference(&ctx_obj->base);
 		}
 	}
@@ -1845,6 +1827,9 @@ int intel_lr_context_deferred_create(struct intel_context *ctx,
 	if (!ringbuf) {
 		DRM_DEBUG_DRIVER("Failed to allocate ringbuffer %s\n",
 				ring->name);
+		if (is_global_default_ctx)
+			i915_gem_object_ggtt_unpin(ctx_obj);
+		drm_gem_object_unreference(&ctx_obj->base);
 		ret = -ENOMEM;
 		goto error_unpin_ctx;
 	}
@@ -1914,7 +1899,6 @@ error_destroy_rbuf:
 	intel_destroy_ringbuffer_obj(ringbuf);
 error_free_rbuf:
 	kfree(ringbuf);
-error_unpin_ctx:
 	if (is_global_default_ctx)
 		i915_gem_object_ggtt_unpin(ctx_obj);
 	drm_gem_object_unreference(&ctx_obj->base);
