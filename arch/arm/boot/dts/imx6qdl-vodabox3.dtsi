@@ -74,8 +74,8 @@
 			/* Parallel bus */
 			csi0: endpoint@0 {
 				reg = <0>;
-				remote-endpoint = <&hdmi0_out>;
-				bus-width = <8>;
+				remote-endpoint = <&hdmi1_out>;
+				bus-width = <16>;
 				data-shift = <4>;
 				inputs = <1>;
 /*				input-names = <"hdmi1 input">;*/
@@ -208,6 +208,7 @@
 	hdmiin2: adv7604@20 {
 		compatible = "adi,adv7604";
 		reg = <0x20>;
+		hpd-gpios = <&gpio2 0 0>;
 
 		ports {
 			#address-cells = <1>;
@@ -398,6 +399,7 @@
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_0__CCM_CLKO1		0x000b0		/* SGTL5000 sys_mclk */
+				MX6QDL_PAD_NANDF_D0__GPIO2_IO00		0x13800		/* ADV7604 Hotplug */
 			>;
 		};
 

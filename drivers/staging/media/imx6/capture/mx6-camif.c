@@ -29,6 +29,7 @@
 #include <video/imx-ipu-v3.h>
 #include <media/imx6.h>
 #include "mx6-camif.h"
+#include <media/adv7604.h>
 
 /*
  * Min/Max supported width and heights.
@@ -434,7 +435,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 
 	} else {
 		/* TODO: This should be dynamic */
-		sd_fmt.pad = 1;
+		sd_fmt.pad = 6;
 		sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 		ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 		if (ret)
@@ -2030,6 +2031,7 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 				       void *arg)
 {
 	struct mx6cam_dev *dev;
+	bool hotplug = arg ? *((int *)arg) : false;
 
 	if (sd == NULL)
 		return;
@@ -2059,6 +2061,11 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 			schedule_work(&dev->restart_work);
 		}
 		break;
+	case ADV7604_HOTPLUG:
+		if (dev) {
+			v4l2_err(&dev->v4l2_dev, "Set hotplug for ADV7604 to %d\n", hotplug);
+			break;
+		}
 	}
 }
 
