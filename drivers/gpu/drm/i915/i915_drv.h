@@ -254,11 +254,6 @@ struct intel_shared_dpll_config {
 	struct intel_dpll_hw_state hw_state;
 };
 
-struct intel_shared_dpll_config {
-	unsigned crtc_mask; /* mask of CRTCs sharing this PLL */
-	struct intel_dpll_hw_state hw_state;
-};
-
 struct intel_shared_dpll {
 	struct intel_shared_dpll_config config;
 	struct intel_shared_dpll_config *new_config;
