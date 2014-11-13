@@ -724,12 +724,6 @@ void intel_execlists_retire_requests(struct intel_engine_cs *ring)
 	spin_unlock_irqrestore(&ring->execlist_lock, flags);
 
 	list_for_each_entry_safe(req, tmp, &retired_list, execlist_link) {
-		struct intel_context *ctx = req->ctx;
-		struct drm_i915_gem_object *ctx_obj =
-				ctx->engine[ring->id].state;
-
-		if (ctx_obj && (ctx != ring->default_context))
-			intel_lr_context_unpin(ring, ctx);
 		intel_runtime_pm_put(dev_priv);
 		i915_gem_context_unreference(ctx);
 		list_del(&req->execlist_link);
