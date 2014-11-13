@@ -38,16 +38,6 @@ enum soc_type {
 };
 
 /**
- * EXYNOS TMU supported features.
- * TMU_SUPPORT_MULTI_INST - This features denotes that the soc
- *			has many instances of TMU.
- * TMU_SUPPORT - macro to compare the above features with the supplied.
- */
-#define TMU_SUPPORT_MULTI_INST			BIT(0)
-
-#define TMU_SUPPORTS(a, b)	(a->features & TMU_SUPPORT_ ## b)
-
-/**
  * struct exynos_tmu_platform_data
  * @gain: gain of amplifier in the positive-TC generator block
  *	0 < gain <= 15
@@ -66,8 +56,6 @@ enum soc_type {
  * @freq_clip_table: Table representing frequency reduction percentage.
  * @freq_tab_count: Count of the above table as frequency reduction may
  *	applicable to only some of the trigger levels.
- * @features: a bitfield value indicating the features supported in SOC like
- *	emulation, multi instance etc
  *
  * This structure is required for configuration of exynos_tmu driver.
  */
@@ -87,7 +75,6 @@ struct exynos_tmu_platform_data {
 	enum soc_type type;
 	struct freq_clip_table freq_tab[4];
 	unsigned int freq_tab_count;
-	unsigned int features;
 };
 
 /**
