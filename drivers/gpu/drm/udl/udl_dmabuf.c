@@ -90,18 +90,15 @@ static struct sg_table *udl_map_dma_buf(struct dma_buf_attachment *attach,
 		return &udl_attach->sgt;
 
 	if (!obj->pages) {
-		ret = udl_gem_get_pages(obj);
-		if (ret) {
-			DRM_ERROR("failed to map pages.\n");
-			return ERR_PTR(ret);
-		}
+		DRM_ERROR("pages is null.\n");
+		return ERR_PTR(-ENOMEM);
 	}
 
 	page_count = obj->base.size / PAGE_SIZE;
 	obj->sg = drm_prime_pages_to_sg(obj->pages, page_count);
-	if (IS_ERR(obj->sg)) {
-		DRM_ERROR("failed to allocate sgt.\n");
-		return ERR_CAST(obj->sg);
+	if (!obj->sg) {
+		DRM_ERROR("sg is null.\n");
+		return ERR_PTR(-ENOMEM);
 	}
 
 	sgt = &udl_attach->sgt;
