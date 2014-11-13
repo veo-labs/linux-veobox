@@ -160,6 +160,7 @@
  * @reg_conf: pointer to structure to register with core thermal.
  * @tmu_initialize: SoC specific TMU initialization method
  * @tmu_control: SoC specific TMU control method
+ * @tmu_read: SoC specific TMU temperature read method
  */
 struct exynos_tmu_data {
 	int id;
@@ -177,6 +178,7 @@ struct exynos_tmu_data {
 
 	int (*tmu_initialize)(struct platform_device *pdev);
 	void (*tmu_control)(struct platform_device *pdev, bool on);
+	int (*tmu_read)(struct exynos_tmu_data *data);
 };
 
 static void exynos_report_trigger(struct exynos_tmu_data *p)
@@ -573,151 +575,16 @@ static void exynos5440_tmu_control(struct platform_device *pdev, bool on)
 
 static int exynos_tmu_read(struct exynos_tmu_data *data)
 {
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-	struct exynos_tmu_platform_data *pdata = data->pdata;
-	unsigned int status;
-	int ret = 0, threshold_code, i;
+	int ret;
 
-	status = readb(data->base + EXYNOS_TMU_REG_STATUS);
-	if (!status) {
-		ret = -EBUSY;
-		goto out;
-	}
+	mutex_lock(&data->lock);
+	clk_enable(data->clk);
+	ret = data->tmu_read(data);
+	if (ret >= 0)
+		ret = code_to_temp(data, ret);
+	clk_disable(data->clk);
+	mutex_unlock(&data->lock);
 
-	sanitize_temp_error(data, readl(data->base + EXYNOS_TMU_REG_TRIMINFO));
-
-	/* Write temperature code for threshold */
-	threshold_code = temp_to_code(data, pdata->threshold);
-	writeb(threshold_code, data->base + EXYNOS4210_TMU_REG_THRESHOLD_TEMP);
-
-	for (i = 0; i < pdata->non_hw_trigger_levels; i++)
-		writeb(pdata->trigger_levels[i], data->base +
-		       EXYNOS4210_TMU_REG_TRIG_LEVEL0 + i * 4);
-
-	data->tmu_clear_irqs(data);
-out:
-	return ret;
-}
-
-static int exynos4412_tmu_initialize(struct platform_device *pdev)
-{
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-	const struct thermal_trip * const trips =
-		of_thermal_get_trip_points(data->tzd);
-	unsigned int status, trim_info, con, ctrl, rising_threshold;
-	int ret = 0, threshold_code, i;
-	unsigned long crit_temp = 0;
-
-	status = readb(data->base + EXYNOS_TMU_REG_STATUS);
-	if (!status) {
-		ret = -EBUSY;
-		goto out;
-	}
-
-	if (data->soc == SOC_ARCH_EXYNOS3250 ||
-	    data->soc == SOC_ARCH_EXYNOS4412 ||
-	    data->soc == SOC_ARCH_EXYNOS5250) {
-		if (data->soc == SOC_ARCH_EXYNOS3250) {
-			ctrl = readl(data->base + EXYNOS_TMU_TRIMINFO_CON1);
-			ctrl |= EXYNOS_TRIMINFO_RELOAD_ENABLE;
-			writel(ctrl, data->base + EXYNOS_TMU_TRIMINFO_CON1);
-		}
-		ctrl = readl(data->base + EXYNOS_TMU_TRIMINFO_CON2);
-		ctrl |= EXYNOS_TRIMINFO_RELOAD_ENABLE;
-		writel(ctrl, data->base + EXYNOS_TMU_TRIMINFO_CON2);
-	}
-
-	/* On exynos5420 the triminfo register is in the shared space */
-	if (data->soc == SOC_ARCH_EXYNOS5420_TRIMINFO)
-		trim_info = readl(data->base_second + EXYNOS_TMU_REG_TRIMINFO);
-	else
-		trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
-
-	sanitize_temp_error(data, trim_info);
-
-	/* Write temperature code for rising and falling threshold */
-	rising_threshold = readl(data->base + EXYNOS_THD_TEMP_RISE);
-	rising_threshold = get_th_reg(data, rising_threshold, false);
-	writel(rising_threshold, data->base + EXYNOS_THD_TEMP_RISE);
-	writel(get_th_reg(data, 0, true), data->base + EXYNOS_THD_TEMP_FALL);
-
-	data->tmu_clear_irqs(data);
-
-	/* if last threshold limit is also present */
-	for (i = 0; i < of_thermal_get_ntrips(data->tzd); i++) {
-		if (trips[i].type == THERMAL_TRIP_CRITICAL) {
-			crit_temp = trips[i].temperature;
-			break;
-		}
-	}
-
-	if (i == of_thermal_get_ntrips(data->tzd)) {
-		pr_err("%s: No CRITICAL trip point defined at of-thermal.c!\n",
-		       __func__);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	threshold_code = temp_to_code(data, crit_temp / MCELSIUS);
-	/* 1-4 level to be assigned in th0 reg */
-	rising_threshold &= ~(0xff << 8 * i);
-	rising_threshold |= threshold_code << 8 * i;
-	writel(rising_threshold, data->base + EXYNOS_THD_TEMP_RISE);
-	con = readl(data->base + EXYNOS_TMU_REG_CONTROL);
-	con |= (1 << EXYNOS_TMU_THERM_TRIP_EN_SHIFT);
-	writel(con, data->base + EXYNOS_TMU_REG_CONTROL);
-
-out:
-	return ret;
-}
-
-static int exynos5440_tmu_initialize(struct platform_device *pdev)
-{
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-	unsigned int trim_info = 0, con, rising_threshold;
-	int ret = 0, threshold_code;
-	unsigned long crit_temp = 0;
-
-	/*
-	 * For exynos5440 soc triminfo value is swapped between TMU0 and
-	 * TMU2, so the below logic is needed.
-	 */
-	switch (data->id) {
-	case 0:
-		trim_info = readl(data->base + EXYNOS5440_EFUSE_SWAP_OFFSET +
-				 EXYNOS5440_TMU_S0_7_TRIM);
-		break;
-	case 1:
-		trim_info = readl(data->base + EXYNOS5440_TMU_S0_7_TRIM);
-		break;
-	case 2:
-		trim_info = readl(data->base - EXYNOS5440_EFUSE_SWAP_OFFSET +
-				  EXYNOS5440_TMU_S0_7_TRIM);
-	}
-	sanitize_temp_error(data, trim_info);
-
-	/* Write temperature code for rising and falling threshold */
-	rising_threshold = readl(data->base + EXYNOS5440_TMU_S0_7_TH0);
-	rising_threshold = get_th_reg(data, rising_threshold, false);
-	writel(rising_threshold, data->base + EXYNOS5440_TMU_S0_7_TH0);
-	writel(0, data->base + EXYNOS5440_TMU_S0_7_TH1);
-
-	data->tmu_clear_irqs(data);
-
-	/* if last threshold limit is also present */
-	if (!data->tzd->ops->get_crit_temp(data->tzd, &crit_temp)) {
-		threshold_code = temp_to_code(data, crit_temp / MCELSIUS);
-		/* 5th level to be assigned in th2 reg */
-		rising_threshold =
-			threshold_code << EXYNOS5440_TMU_TH_RISE4_SHIFT;
-		writel(rising_threshold, data->base + EXYNOS5440_TMU_S0_7_TH2);
-		con = readl(data->base + EXYNOS5440_TMU_S0_7_CTRL);
-		con |= (1 << EXYNOS_TMU_THERM_TRIP_EN_SHIFT);
-		writel(con, data->base + EXYNOS5440_TMU_S0_7_CTRL);
-	}
-	/* Clear the PMIN in the common TMU register */
-	if (!data->id)
-		writel(0, data->base_second + EXYNOS5440_TMU_PMIN);
 	return ret;
 }
 
@@ -1382,6 +1249,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	case SOC_ARCH_EXYNOS4210:
 		data->tmu_initialize = exynos4210_tmu_initialize;
 		data->tmu_control = exynos4210_tmu_control;
+		data->tmu_read = exynos4210_tmu_read;
 		break;
 	case SOC_ARCH_EXYNOS3250:
 	case SOC_ARCH_EXYNOS4412:
@@ -1391,10 +1259,12 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	case SOC_ARCH_EXYNOS5420_TRIMINFO:
 		data->tmu_initialize = exynos4412_tmu_initialize;
 		data->tmu_control = exynos4210_tmu_control;
+		data->tmu_read = exynos4412_tmu_read;
 		break;
 	case SOC_ARCH_EXYNOS5440:
 		data->tmu_initialize = exynos5440_tmu_initialize;
 		data->tmu_control = exynos5440_tmu_control;
+		data->tmu_read = exynos5440_tmu_read;
 		break;
 	default:
 		ret = -EINVAL;
