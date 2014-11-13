@@ -385,20 +385,10 @@ static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
 			writel(con, data->base + reg->tmu_ctrl);
 		}
 	}
-
-	return threshold;
-}
-
-static int exynos_tmu_initialize(struct platform_device *pdev)
-{
-	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
-	int ret;
-
-	mutex_lock(&data->lock);
-	clk_enable(data->clk);
-	if (!IS_ERR(data->clk_sec))
-		clk_enable(data->clk_sec);
-	ret = data->tmu_initialize(pdev);
+	/*Clear the PMIN in the common TMU register*/
+	if (data->soc == SOC_ARCH_EXYNOS5440 && !data->id)
+		writel(0, data->base_second + EXYNOS5440_TMU_PMIN);
+out:
 	clk_disable(data->clk);
 	mutex_unlock(&data->lock);
 	if (!IS_ERR(data->clk_sec))
