@@ -856,14 +856,7 @@ static void tegra_dsi_encoder_disable(struct drm_encoder *encoder)
 		tegra_dc_commit(dc);
 	}
 
-	err = tegra_dsi_wait_idle(dsi, 100);
-	if (err < 0)
-		dev_dbg(dsi->dev, "failed to idle DSI: %d\n", err);
-
-	tegra_dsi_soft_reset(dsi);
-
-	if (output->panel)
-		drm_panel_unprepare(output->panel);
+	dsi->enabled = false;
 
 	tegra_dsi_disable(dsi);
 
@@ -1546,6 +1539,18 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	if (IS_ERR(dsi->mipi)) {
 		err = PTR_ERR(dsi->mipi);
 		goto disable_vdd;
+	}
+
+	err = tegra_dsi_pad_calibrate(dsi);
+	if (err < 0) {
+		dev_err(dsi->dev, "MIPI calibration failed: %d\n", err);
+		goto mipi_free;
+	}
+
+	err = tegra_dsi_pad_calibrate(dsi);
+	if (err < 0) {
+		dev_err(dsi->dev, "MIPI calibration failed: %d\n", err);
+		return err;
 	}
 
 	dsi->host.ops = &tegra_dsi_host_ops;
