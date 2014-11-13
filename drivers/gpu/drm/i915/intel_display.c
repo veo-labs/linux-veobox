@@ -8295,8 +8295,12 @@ static bool haswell_get_pipe_config(struct intel_crtc *crtc,
 	intel_get_pipe_timings(crtc, pipe_config);
 
 	pfit_domain = POWER_DOMAIN_PIPE_PANEL_FITTER(crtc->pipe);
-	if (intel_display_power_is_enabled(dev_priv, pfit_domain))
-		ironlake_get_pfit_config(crtc, pipe_config);
+	if (intel_display_power_is_enabled(dev_priv, pfit_domain)) {
+		if (IS_SKYLAKE(dev))
+			skylake_get_pfit_config(crtc, pipe_config);
+		else
+			ironlake_get_pfit_config(crtc, pipe_config);
+	}
 
 	if (IS_HASWELL(dev))
 		pipe_config->ips_enabled = hsw_crtc_supports_ips(crtc) &&
