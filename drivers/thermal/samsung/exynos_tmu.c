@@ -279,7 +279,9 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 		}
 	}
 
-	if (TMU_SUPPORTS(pdata, TRIM_RELOAD)) {
+	if (data->soc == SOC_ARCH_EXYNOS3250 ||
+	    data->soc == SOC_ARCH_EXYNOS4412 ||
+	    data->soc == SOC_ARCH_EXYNOS5250) {
 		if (data->soc == SOC_ARCH_EXYNOS3250) {
 			ctrl = readl(data->base + EXYNOS_TMU_TRIMINFO_CON1);
 			ctrl |= EXYNOS_TRIMINFO_RELOAD_ENABLE;
@@ -1266,18 +1268,50 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 		goto err_clk_sec;
 	}
 
-	if (data->soc == SOC_ARCH_EXYNOS7) {
-		data->sclk = devm_clk_get(&pdev->dev, "tmu_sclk");
-		if (IS_ERR(data->sclk)) {
-			dev_err(&pdev->dev, "Failed to get sclk\n");
-			goto err_clk;
-		} else {
-			ret = clk_prepare_enable(data->sclk);
-			if (ret) {
-				dev_err(&pdev->dev, "Failed to enable sclk\n");
-				goto err_clk;
-			}
-		}
+	if (pdata->type == SOC_ARCH_EXYNOS3250 ||
+	    pdata->type == SOC_ARCH_EXYNOS4210 ||
+	    pdata->type == SOC_ARCH_EXYNOS4412 ||
+	    pdata->type == SOC_ARCH_EXYNOS5250 ||
+	    pdata->type == SOC_ARCH_EXYNOS5260 ||
+	    pdata->type == SOC_ARCH_EXYNOS5420 ||
+	    pdata->type == SOC_ARCH_EXYNOS5420_TRIMINFO ||
+	    pdata->type == SOC_ARCH_EXYNOS5440)
+		data->soc = pdata->type;
+	else {
+		ret = -EINVAL;
+		dev_err(&pdev->dev, "Platform not supported\n");
+		goto err_clk;
+	}
+
+	ret = exynos_tmu_initialize(pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to initialize TMU\n");
+		goto err_clk;
+	}
+
+	exynos_tmu_control(pdev, true);
+
+	/* Allocate a structure to register with the exynos core thermal */
+	sensor_conf = devm_kzalloc(&pdev->dev,
+				sizeof(struct thermal_sensor_conf), GFP_KERNEL);
+	if (!sensor_conf) {
+		ret = -ENOMEM;
+		goto err_clk;
+	}
+	sprintf(sensor_conf->name, "therm_zone%d", data->id);
+	sensor_conf->read_temperature = (int (*)(void *))exynos_tmu_read;
+	sensor_conf->write_emul_temp =
+		(int (*)(void *, unsigned long))exynos_tmu_set_emulation;
+	sensor_conf->driver_data = data;
+	sensor_conf->trip_data.trip_count = pdata->trigger_enable[0] +
+			pdata->trigger_enable[1] + pdata->trigger_enable[2]+
+			pdata->trigger_enable[3];
+
+	for (i = 0; i < sensor_conf->trip_data.trip_count; i++) {
+		sensor_conf->trip_data.trip_val[i] =
+			pdata->threshold + pdata->trigger_levels[i];
+		sensor_conf->trip_data.trip_type[i] =
+					pdata->trigger_type[i];
 	}
 
 	ret = exynos_tmu_initialize(pdev);
