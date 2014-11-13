@@ -303,6 +303,25 @@ static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 			EXYNOS_TMU_TEMP_MASK;
 }
 
+static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
+{
+	struct exynos_tmu_platform_data *pdata = data->pdata;
+	int i;
+
+	for (i = 0; i < pdata->non_hw_trigger_levels; i++) {
+		u8 temp = pdata->trigger_levels[i];
+
+		if (falling)
+			temp -= pdata->threshold_falling;
+		else
+			threshold &= ~(0xff << 8 * i);
+
+		threshold |= temp_to_code(data, temp) << 8 * i;
+	}
+
+	return threshold;
+}
+
 static int exynos_tmu_initialize(struct platform_device *pdev)
 {
 	struct exynos_tmu_platform_data *pdata = data->pdata;
@@ -356,14 +375,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	}
 	sanitize_temp_error(data, trim_info);
 
-static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
-{
-	struct thermal_zone_device *tz = data->tzd;
-	const struct thermal_trip * const trips =
-		of_thermal_get_trip_points(tz);
-	unsigned long temp;
-	int i;
-
 	if (data->soc == SOC_ARCH_EXYNOS4210) {
 		/* Write temperature code for threshold */
 		threshold_code = temp_to_code(data, pdata->threshold);
@@ -376,18 +387,10 @@ static u32 get_th_reg(struct exynos_tmu_data *data, u32 threshold, bool falling)
 		exynos_tmu_clear_irqs(data);
 	} else {
 		/* Write temperature code for rising and falling threshold */
-		for (i = 0; i < pdata->non_hw_trigger_levels; i++) {
-			threshold_code = temp_to_code(data,
-						pdata->trigger_levels[i]);
-			rising_threshold &= ~(0xff << 8 * i);
-			rising_threshold |= threshold_code << 8 * i;
-			if (data->soc != SOC_ARCH_EXYNOS5440) {
-				threshold_code = temp_to_code(data,
-						pdata->trigger_levels[i] -
-						pdata->threshold_falling);
-				falling_threshold |= threshold_code << 8 * i;
-			}
-		}
+		rising_threshold = readl(data->base + reg->threshold_th0);
+		rising_threshold = get_th_reg(data, rising_threshold, false);
+		if (data->soc != SOC_ARCH_EXYNOS5440)
+			falling_threshold = get_th_reg(data, 0, true);
 
 		writel(rising_threshold,
 				data->base + reg->threshold_th0);
