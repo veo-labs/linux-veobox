@@ -74,8 +74,8 @@
 			/* Parallel bus */
 			csi0: endpoint@0 {
 				reg = <0>;
-				//remote-endpoint = <&csi0_fpga_out>;
-				remote-endpoint = <&hdmi0_out>;
+				remote-endpoint = <&csi0_fpga_out>;
+				//remote-endpoint = <&hdmi0_out>;
 				bus-width = <16>;
 				data-shift = <4>;
 				inputs = <1>;
@@ -200,8 +200,8 @@
 			port@1 {
 				reg = <1>;
 				hdmi0_out: endpoint@1 {
-					//remote-endpoint = <&hdmi0_fpga_in>;
-					remote-endpoint = <&csi0>;
+					remote-endpoint = <&hdmi0_fpga_in>;
+					//remote-endpoint = <&csi0>;
 				};
 			};
 		};
