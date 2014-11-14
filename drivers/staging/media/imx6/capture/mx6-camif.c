@@ -20,6 +20,7 @@
 #include <linux/platform_data/camera-mx6.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_platform.h>
+#include <media/media-device.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
@@ -1878,16 +1879,19 @@ static int mx6cam_open(struct file *file)
 {
 	struct mx6cam_dev *dev = video_drvdata(file);
 	struct mx6cam_ctx *ctx;
+	struct mx6cam_graph_entity *entity;
 	int ret;
 
 	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
 
-	if (!dev->ep || !dev->ep->sd) {
-		v4l2_err(&dev->v4l2_dev, "no subdevice registered\n");
+	entity = list_first_entry(&dev->entities, struct mx6cam_graph_entity, list);
+	if (!entity) {
+		v4l2_err(&dev->v4l2_dev, "no entity registered\n");
 		ret = -ENODEV;
 		goto unlock;
 	}
+	dev_dbg(dev->dev, "%d subdevs registered\n", dev->num_subdevs);
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
@@ -1896,11 +1900,11 @@ static int mx6cam_open(struct file *file)
 	}
 
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
-	file->private_data = &ctx->fh;
 	ctx->dev = dev;
 	v4l2_fh_add(&ctx->fh);
 	ctx->io_allowed = false;
 
+	file->private_data = &ctx->fh;
 	ret = sensor_set_power(dev, 1);
 	if (ret) {
 		v4l2_err(&dev->v4l2_dev, "sensor power on failed\n");
@@ -1957,11 +1961,6 @@ static int mx6cam_release(struct file *file)
 		}
 
 		dev->io_ctx = NULL;
-	}
-
-	if (dev->ep == NULL || dev->ep->sd == NULL) {
-		v4l2_warn(&dev->v4l2_dev, "lost the slave?\n");
-		goto unlock;
 	}
 
 	ret = sensor_set_power(dev, 0);
@@ -2347,6 +2346,341 @@ static struct ipu_soc *mx6cam_find_ipu(struct mx6cam_dev *dev,
 	return dev_get_drvdata(ipu_dev);
 }
 
+static struct mx6cam_graph_entity *
+mx6cam_graph_find_entity(struct mx6cam_dev *camdev,
+			const struct device_node *node)
+{
+	struct mx6cam_graph_entity *entity;
+
+	list_for_each_entry(entity, &camdev->entities, list) {
+		if (entity->node == node) {
+			return entity;
+		}
+	}
+
+	return NULL;
+}
+
+static int mx6cam_graph_build_one(struct mx6cam_dev *camdev,
+				struct mx6cam_graph_entity *entity)
+{
+	u32 link_flags = MEDIA_LNK_FL_ENABLED;
+	struct media_entity *local = entity->entity;
+	struct media_entity *remote;
+	struct media_pad *local_pad;
+	struct media_pad *remote_pad;
+	struct mx6cam_graph_entity *ent;
+	struct v4l2_of_link link;
+	struct device_node *ep = NULL;
+	struct device_node *next;
+	int ret = 0;
+
+	dev_dbg(camdev->dev, "creating links for entity %s\n", local->name);
+
+	while (1) {
+		/* Get the next endpoint and parse its link. */
+		next = of_graph_get_next_endpoint(entity->node, ep);
+		if (next == NULL)
+			break;
+
+		of_node_put(ep);
+		ep = next;
+
+		//dev_dbg(camdev->dev, "processing endpoint %s\n", ep->full_name);
+
+		ret = v4l2_of_parse_link(ep, &link);
+		if (ret < 0) {
+			dev_err(camdev->dev, "failed to parse link for %s\n",
+				ep->full_name);
+			continue;
+		}
+
+		/* Skip sink ports, they will be processed from the other end of
+		 * the link.
+		 */
+		if (link.local_port >= local->num_pads) {
+			dev_err(camdev->dev, "invalid port number %u on %s\n",
+				link.local_port, link.local_node->full_name);
+			v4l2_of_put_link(&link);
+			ret = -EINVAL;
+			break;
+		}
+
+		local_pad = &local->pads[link.local_port];
+
+		if (local_pad->flags & MEDIA_PAD_FL_SINK) {
+			dev_dbg(camdev->dev, "skipping sink port %s:%u\n",
+				link.local_node->full_name, link.local_port);
+			v4l2_of_put_link(&link);
+			continue;
+		}
+
+		/* Find the remote entity. */
+		ent = mx6cam_graph_find_entity(camdev, link.remote_node);
+		if (ent == NULL) {
+			dev_err(camdev->dev, "no entity found for %s\n",
+				link.remote_node->full_name);
+			v4l2_of_put_link(&link);
+			ret = -ENODEV;
+			break;
+		}
+
+		remote = ent->entity;
+
+		if (link.remote_port >= remote->num_pads) {
+			dev_err(camdev->dev, "invalid port number %u on %s\n",
+				link.remote_port, link.remote_node->full_name);
+			v4l2_of_put_link(&link);
+			ret = -EINVAL;
+			break;
+		}
+
+		remote_pad = &remote->pads[link.remote_port];
+
+		v4l2_of_put_link(&link);
+
+		/* Create the media link. */
+		dev_dbg(camdev->dev, "creating %s:%u -> %s:%u link\n",
+			local->name, local_pad->index,
+			remote->name, remote_pad->index);
+
+		ret = media_entity_create_link(local, local_pad->index,
+						remote, remote_pad->index,
+						link_flags);
+		if (ret < 0) {
+			dev_err(camdev->dev, "failed to create %s:%u -> %s:%u link\n",
+				local->name, local_pad->index,
+				remote->name, remote_pad->index);
+			break;
+		}
+	}
+
+	of_node_put(ep);
+	return ret;
+}
+
+static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
+{
+	struct mx6cam_dev *camdev =
+		container_of(notifier, struct mx6cam_dev, notifier);
+	struct mx6cam_graph_entity *entity;
+	int ret;
+
+	dev_dbg(camdev->dev, "notify complete, all subdevs registered\n");
+
+	/* Create links for every entity. */
+	list_for_each_entry(entity, &camdev->entities, list) {
+		ret = mx6cam_graph_build_one(camdev, entity);
+		if (ret < 0) {
+			dev_dbg(camdev->dev, "graph build interrupted, error=%d\n", ret);
+			return ret;
+		}
+	}
+
+	ret = v4l2_device_register_subdev_nodes(&camdev->v4l2_dev);
+	if (ret < 0)
+		dev_err(camdev->dev, "failed to register subdev nodes\n");
+
+	return ret;
+}
+
+static int mx6cam_graph_notify_bound(struct v4l2_async_notifier *notifier,
+				struct v4l2_subdev *subdev,
+				struct v4l2_async_subdev *asd)
+{
+	struct mx6cam_dev *camdev =
+		container_of(notifier, struct mx6cam_dev, notifier);
+	struct mx6cam_graph_entity *entity;
+
+	/* Locate the entity corresponding to the bound subdev and store the
+	 * subdev pointer
+	 */
+
+	list_for_each_entry(entity, &camdev->entities, list) {
+		if (entity->node != subdev->dev->of_node)
+			continue;
+
+		if (entity->subdev) {
+			dev_err(camdev->dev, "duplicate subdev for node %s\n",
+				entity->node->full_name);
+			return -EINVAL;
+		}
+
+		dev_dbg(camdev->dev, "subdev %s bound\n", subdev->name);
+		entity->entity = &subdev->entity;
+		entity->subdev = subdev;
+		return 0;
+	}
+
+	dev_err(camdev->dev, "no entity for subdev %s\n", subdev->name);
+	return -EINVAL;
+}
+
+static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
+				struct device_node *node)
+{
+	struct mx6cam_graph_entity *entity;
+	struct device_node *remote;
+	struct device_node *ep = NULL;
+	struct v4l2_of_endpoint v4l2_ep;
+	struct device_node *next;
+	int ret = 0;
+
+	dev_dbg(camdev->dev, "parsing node %s\n", node->full_name);
+
+	while (1) {
+		next = of_graph_get_next_endpoint(node, ep);
+		if (next == NULL)
+			break;
+
+		of_node_put(ep);
+		ep = next;
+
+		dev_dbg(camdev->dev, "handling endpoint %s\n", ep->full_name);
+
+		v4l2_of_parse_endpoint(ep, &v4l2_ep);
+
+		remote = of_graph_get_remote_port_parent(ep);
+		if (remote == NULL) {
+			ret = -EINVAL;
+			dev_dbg(camdev->dev, "remote invalid\n");
+			break;
+		}
+
+		entity = devm_kzalloc(camdev->dev, sizeof(*entity), GFP_KERNEL);
+		if (entity == NULL) {
+			of_node_put(remote);
+			ret = -ENOMEM;
+			break;
+		}
+
+		/* Add root node to entities but not as an async dev */
+		if (remote == camdev->dev->of_node) {
+			entity->node = remote;
+			entity->subdev = NULL;
+			entity->entity = &camdev->vfd->entity;
+			list_add_tail(&entity->list, &camdev->entities);
+			dev_dbg(camdev->dev, "add root node in entities : %s\n",
+				remote->full_name);
+			camdev->eplist[camdev->num_eps].ep = v4l2_ep;
+			camdev->num_eps++;
+			continue;
+		}
+
+		/* Skip entities that we have already processed. */
+		if (mx6cam_graph_find_entity(camdev, remote)) {
+			of_node_put(remote);
+			dev_dbg(camdev->dev, "entity already processed %s\n",
+				remote->full_name);
+			continue;
+		}
+
+		entity->node = remote;
+		entity->asd.match_type = V4L2_ASYNC_MATCH_OF;
+		entity->asd.match.of.node = remote;
+		list_add_tail(&entity->list, &camdev->entities);
+		dev_dbg(camdev->dev, "entity %s added\n",
+			remote->full_name);
+		camdev->eplist[camdev->num_subdevs].ep = v4l2_ep;
+		camdev->num_subdevs++;
+		camdev->num_eps++;
+	}
+
+	of_node_put(ep);
+	camdev->ep = &camdev->eplist[0];
+	return ret;
+}
+
+static int mx6cam_graph_parse(struct mx6cam_dev *camdev)
+{
+	struct mx6cam_graph_entity *entity;
+	int ret;
+
+	/*
+	* Walk the links to parse the full graph. Start by parsing the
+	* composite node and then parse entities in turn. The list_for_each
+	* loop will handle entities added at the end of the list while walking
+	* the links.
+	*/
+	ret = mx6cam_graph_parse_one(camdev, camdev->dev->of_node);
+	if (ret < 0)
+		return 0;
+
+	list_for_each_entry(entity, &camdev->entities, list) {
+		ret = mx6cam_graph_parse_one(camdev, entity->node);
+		if (ret < 0)
+			break;
+	}
+
+	return ret;
+}
+
+static void mx6cam_graph_cleanup(struct mx6cam_dev *camdev)
+{
+	struct mx6cam_graph_entity *entityp;
+	struct mx6cam_graph_entity *entity;
+
+	v4l2_async_notifier_unregister(&camdev->notifier);
+
+	list_for_each_entry_safe(entity, entityp, &camdev->entities, list) {
+		of_node_put(entity->node);
+		list_del(&entity->list);
+	}
+}
+
+static int mx6cam_graph_init(struct mx6cam_dev *camdev)
+{
+	struct mx6cam_graph_entity *entity;
+	struct v4l2_async_subdev **subdevs = NULL;
+	unsigned int num_subdevs;
+	unsigned int i;
+	int ret;
+
+	/* Parse the graph to extract a list of subdevice DT nodes. */
+	ret = mx6cam_graph_parse(camdev);
+	if (ret < 0) {
+		dev_err(camdev->dev, "graph parsing failed\n");
+		goto done;
+	}
+
+	if (!camdev->num_subdevs) {
+		dev_err(camdev->dev, "no subdev found in graph\n");
+		goto done;
+	}
+
+	/* Register the subdevices notifier */
+	num_subdevs = camdev->num_subdevs;
+	subdevs = devm_kzalloc(camdev->dev, sizeof(*subdevs) * num_subdevs,
+				GFP_KERNEL);
+	if (subdevs == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	i = 0;
+	list_for_each_entry(entity, &camdev->entities, list)
+		subdevs[i++] = &entity->asd;
+
+	camdev->notifier.subdevs = subdevs;
+	camdev->notifier.num_subdevs = num_subdevs;
+	camdev->notifier.bound = mx6cam_graph_notify_bound;
+	camdev->notifier.complete = mx6cam_graph_notify_complete;
+
+	ret = v4l2_async_notifier_register(&camdev->v4l2_dev,
+					&camdev->notifier);
+	if (ret < 0) {
+		dev_err(camdev->dev, "notifier registration failed\n");
+		goto done;
+	}
+
+ret = 0;
+
+done:
+	if (ret < 0)
+		mx6cam_graph_cleanup(camdev);
+	return ret;
+}
+
 static int mx6cam_probe(struct platform_device *pdev)
 {
 	struct mx6_camera_pdata *pdata = pdev->dev.platform_data;
@@ -2364,9 +2698,26 @@ static int mx6cam_probe(struct platform_device *pdev)
 	mutex_init(&dev->mutex);
 	spin_lock_init(&dev->irqlock);
 
-	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
-	if (ret)
+	dev->media_dev.dev = dev->dev;
+	strlcpy(dev->media_dev.model, "i.MX6 Video Capture Device",
+		sizeof(dev->media_dev.model));
+	dev->media_dev.hw_revision = 0;
+
+	ret = media_device_register(&dev->media_dev);
+	if (ret < 0) {
+		dev_err(dev->dev, "media device registration failed (%d)\n",
+			ret);
 		return ret;
+	}
+	dev->v4l2_dev.mdev = &dev->media_dev;
+
+	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
+	if (ret < 0) {
+		dev_err(dev->dev, "V4L2 device registration failed (%d)\n",
+			ret);
+		media_device_unregister(&dev->media_dev);
+		return ret;
+	}
 
 	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
 
@@ -2397,17 +2748,24 @@ static int mx6cam_probe(struct platform_device *pdev)
 	vfd->v4l2_dev = &dev->v4l2_dev;
 	dev->v4l2_dev.notify = mx6cam_subdev_notification;
 
+	dev->pad.flags = MEDIA_PAD_FL_SINK;
+	ret = media_entity_init(&vfd->entity, 1, &dev->pad, 0);
+	if (ret < 0) {
+		v4l2_err(&dev->v4l2_dev, "media entity failed with error %d\n", ret);
+		goto unreg_dev;
+	}
+
+	snprintf(vfd->name, sizeof(vfd->name), "%s", dev->dev->of_node->name);
+
 	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
 	if (ret) {
 		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
 		goto unreg_vdev;
 	}
 
+	v4l2_info(&dev->v4l2_dev, "Media entity: %s\n", vfd->entity.name);
 	video_set_drvdata(vfd, dev);
-	snprintf(vfd->name, sizeof(vfd->name), "%s", mx6cam_videodev.name);
 	dev->vfd = vfd;
-
-	platform_set_drvdata(pdev, dev);
 
 	/* Get any pins needed */
 	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
@@ -2453,6 +2811,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	dev->restart_timer.data = (unsigned long)dev;
 	dev->restart_timer.function = mx6cam_restart_timeout;
 
+	INIT_LIST_HEAD(&dev->entities);
 	/* init our controls */
 	ret = mx6cam_init_controls(dev);
 	if (ret) {
@@ -2460,6 +2819,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 		goto unreg_vdev;
 	}
 
+#if 0
 	/* find and register mipi csi2 receiver subdev */
 	ret = mx6cam_add_csi2_receiver(dev);
 	if (ret)
@@ -2514,10 +2874,12 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->vdic_sd->name);
-
-	ret = v4l2_device_register_subdev_nodes(&dev->v4l2_dev);
+#endif
+	ret = mx6cam_graph_init(dev);
 	if (ret)
 		goto unreg_subdevs;
+
+	platform_set_drvdata(pdev, dev);
 
 	v4l2_info(&dev->v4l2_dev,
 		  "Device registered as /dev/video%d, on ipu%d\n",
@@ -2550,6 +2912,7 @@ static int mx6cam_remove(struct platform_device *pdev)
 	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
 		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 	mx6cam_unregister_subdevs(dev);
+	mx6cam_graph_cleanup(dev);
 	v4l2_device_unregister(&dev->v4l2_dev);
 
 	return 0;
