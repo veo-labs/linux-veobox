@@ -435,7 +435,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 
 	} else {
 		/* TODO: This should be dynamic */
-		sd_fmt.pad = 6;
+		sd_fmt.pad = 1;
 		sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 		ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 		if (ret)
@@ -444,6 +444,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 	}
 
 	dev->sensor_pixfmt = mx6cam_get_format(0, dev->sensor_fmt.code);
+	v4l2_warn(&dev->v4l2_dev, "Format is %s\n", dev->sensor_pixfmt->name);
 
 	/* update sensor crop bounds */
 	dev->crop_bounds.top = dev->crop_bounds.left = 0;
@@ -1363,6 +1364,7 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
  */
 	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing,
 			       epinput->value[sensor_input], 0, 0);
+	v4l2_warn(&dev->v4l2_dev, "Calling s_routing returned with ret=%d\n", ret);
 
 	dev->current_input = index;
 
@@ -2076,6 +2078,11 @@ static int mx6cam_add_sensor(struct mx6cam_dev *dev,
 	struct platform_device *sensor_pdev = NULL;
 	struct i2c_client *i2c_client;
 	struct device *sensor_dev;
+	struct v4l2_subdev_format sd_fmt = {
+		.pad = 1,
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
+	};
 	int ret = 0;
 
 	i2c_client = of_find_i2c_device_by_node(remote);
@@ -2106,6 +2113,9 @@ static int mx6cam_add_sensor(struct mx6cam_dev *dev,
 			 ep->sd->name);
 		goto mod_put;
 	}
+
+	ret = v4l2_subdev_call(ep->sd, pad, set_fmt, NULL, &sd_fmt);
+	v4l2_warn(&dev->v4l2_dev, "Calling s_fmt returned with ret=%d\n", ret);
 
 	v4l2_info(&dev->v4l2_dev, "Registered sensor subdev %s on CSI%d\n",
 		  ep->sd->name, ep->ep.base.port);
@@ -2194,6 +2204,7 @@ static int mx6cam_parse_inputs(struct mx6cam_dev *dev,
 		val = 0;
 		ret = of_property_read_u32_index(node, "input-caps", i, &val);
 		epinput->caps[i] = val;
+
 	}
 
 	epinput->num = i;
