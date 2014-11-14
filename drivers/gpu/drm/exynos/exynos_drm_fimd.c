@@ -130,15 +130,6 @@ static struct fimd_driver_data exynos4415_fimd_driver_data = {
 	.has_vtsel = 1,
 };
 
-static struct fimd_driver_data exynos4415_fimd_driver_data = {
-	.timing_base = 0x20000,
-	.lcdblk_offset = 0x210,
-	.lcdblk_vt_shift = 10,
-	.lcdblk_bypass_shift = 1,
-	.has_shadowcon = 1,
-	.has_vidoutcon = 1,
-};
-
 static struct fimd_driver_data exynos5_fimd_driver_data = {
 	.timing_base = 0x20000,
 	.lcdblk_offset = 0x214,
