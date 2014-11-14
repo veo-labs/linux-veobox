@@ -74,7 +74,8 @@
 			/* Parallel bus */
 			csi0: endpoint@0 {
 				reg = <0>;
-				remote-endpoint = <&hdmi1_out>;
+				//remote-endpoint = <&csi0_fpga_out>;
+				remote-endpoint = <&hdmi0_out>;
 				bus-width = <16>;
 				data-shift = <4>;
 				inputs = <1>;
@@ -199,6 +200,7 @@
 			port@1 {
 				reg = <1>;
 				hdmi0_out: endpoint@1 {
+					//remote-endpoint = <&hdmi0_fpga_in>;
 					remote-endpoint = <&csi0>;
 				};
 			};
@@ -234,7 +236,7 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					remote-endpoint = <&csi0>;
+					remote-endpoint = <&hdmi1_fpga_in>;
 				};
 			};
 		};
@@ -267,7 +269,7 @@
 			port@3 {
 				reg = <3>;
 				hdmi1_fpga_in: endpoint {
-					//remote-endpoint = <&hdmi1_out>;
+					remote-endpoint = <&hdmi1_out>;
 				};
 			};
 			port@4 {
@@ -399,7 +401,7 @@
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_0__CCM_CLKO1		0x000b0		/* SGTL5000 sys_mclk */
-				MX6QDL_PAD_NANDF_D0__GPIO2_IO00		0x13800		/* ADV7604 Hotplug */
+				/*MX6QDL_PAD_NANDF_D1__GPIO2_IO01		0x1b800	*/	/* ADV7604 Hotplug */
 			>;
 		};
 
