@@ -1001,12 +1001,6 @@ void intel_edp_panel_vdd_on(struct intel_dp *intel_dp);
 void intel_edp_panel_on(struct intel_dp *intel_dp);
 void intel_edp_panel_off(struct intel_dp *intel_dp);
 void intel_dp_set_drrs_state(struct drm_device *dev, int refresh_rate);
-void intel_edp_psr_invalidate(struct drm_device *dev,
-			      unsigned frontbuffer_bits);
-void intel_edp_psr_flush(struct drm_device *dev,
-			 unsigned frontbuffer_bits);
-void intel_edp_psr_init(struct drm_device *dev);
-
 void intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connector);
 void intel_dp_mst_suspend(struct drm_device *dev);
 void intel_dp_mst_resume(struct drm_device *dev);
@@ -1138,6 +1132,16 @@ extern struct drm_display_mode *intel_find_panel_downclock(
 void intel_backlight_register(struct drm_device *dev);
 void intel_backlight_unregister(struct drm_device *dev);
 
+
+/* intel_psr.c */
+bool intel_psr_is_enabled(struct drm_device *dev);
+void intel_psr_enable(struct intel_dp *intel_dp);
+void intel_psr_disable(struct intel_dp *intel_dp);
+void intel_psr_invalidate(struct drm_device *dev,
+			      unsigned frontbuffer_bits);
+void intel_psr_flush(struct drm_device *dev,
+			 unsigned frontbuffer_bits);
+void intel_psr_init(struct drm_device *dev);
 
 /* intel_runtime_pm.c */
 int intel_power_domains_init(struct drm_i915_private *);
