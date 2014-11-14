@@ -103,7 +103,12 @@ static int sanitize_enable_ppgtt(struct drm_device *dev, int enable_ppgtt)
 	has_aliasing_ppgtt = INTEL_INFO(dev)->gen >= 6;
 	has_full_ppgtt = INTEL_INFO(dev)->gen >= 7;
 
-	if (enable_ppgtt == 0 || !has_aliasing_ppgtt)
+	/*
+	 * We don't allow disabling PPGTT for gen9+ as it's a requirement for
+	 * execlists, the sole mechanism available to submit work.
+	 */
+	if (INTEL_INFO(dev)->gen < 9 &&
+	    (enable_ppgtt == 0 || !has_aliasing_ppgtt))
 		return 0;
 
 	if (enable_ppgtt == 1)
