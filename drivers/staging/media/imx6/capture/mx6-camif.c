@@ -185,6 +185,13 @@ out:
 /* Support functions */
 
 /* find the endpoint that is handling this input index */
+#if 1
+static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
+						      int input_idx)
+{
+	return (input_idx < dev->num_eps) ? &dev->eplist[input_idx] : NULL;
+}
+#else
 static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 						      int input_idx)
 {
@@ -203,6 +210,7 @@ static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 
 	return (i < dev->num_eps) ? ep : NULL;
 }
+#endif
 
 /*
  * Query sensor and update signal lock status. Returns true if lock
@@ -420,6 +428,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 	if (!ep)
 		return -EINVAL;
 
+#if 0
 	epinput = &ep->sensor_input;
 	sensor_input = dev->current_input - epinput->first;
 
@@ -443,6 +452,15 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 			return ret;
 		dev->sensor_fmt = sd_fmt.format;
 	}
+#else
+	/* TODO: This should be dynamic */
+	sd_fmt.pad = 1;
+	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
+	if (ret)
+		return ret;
+	dev->sensor_fmt = sd_fmt.format;
+#endif
 
 	dev->sensor_pixfmt = mx6cam_get_format(0, dev->sensor_fmt.code);
 	v4l2_warn(&dev->v4l2_dev, "Format is %s\n", dev->sensor_pixfmt->name);
@@ -459,6 +477,12 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 /*
  * Turn current sensor power on/off according to power_count.
  */
+#if 1
+static int sensor_set_power(struct mx6cam_dev *dev, int on)
+{
+	return 0;
+}
+#else
 static int sensor_set_power(struct mx6cam_dev *dev, int on)
 {
 	struct mx6cam_endpoint *ep = dev->ep;
@@ -473,6 +497,7 @@ static int sensor_set_power(struct mx6cam_dev *dev, int on)
 	ret = v4l2_subdev_call(sd, core, s_power, on);
 	return ret != -ENOIOCTLCMD ? ret : 0;
 }
+#endif
 
 /*
  * Turn current sensor streaming on/off according to stream_count.
@@ -1263,23 +1288,18 @@ static int vidioc_enum_input(struct file *file, void *priv,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int sensor_input;
 
 	/* find the endpoint that is handling this input */
 	ep = find_ep_by_input_index(dev, input->index);
 	if (!ep)
 		return -EINVAL;
 
-	epinput = &ep->sensor_input;
-	sensor_input = input->index - epinput->first;
+	strncpy(input->name, ep->sd->name, sizeof(ep->sd->name));
 
 	input->type = V4L2_INPUT_TYPE_CAMERA;
 	/* TODO: Modify it to make it dynamic */
 	input->capabilities = V4L2_IN_CAP_DV_TIMINGS;
-	epinput->caps[sensor_input] = input->capabilities;
-	strncpy(input->name, epinput->name[sensor_input], sizeof(input->name));
 
 	if (input->index == dev->current_input) {
 		v4l2_subdev_call(ep->sd, video, g_input_status, &input->status);
@@ -1354,17 +1374,13 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 		}
 	}
 
-	/* finally select the sensor's input */
-	epinput = &ep->sensor_input;
-	sensor_input = index - epinput->first;
 	dev->vfd->tvnorms = 0;
 /*
  * TODO: Make it dynamic
  *	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS)
  *		dev->vfd->tvnorms = V4L2_STD_ALL;
  */
-	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing,
-			       epinput->value[sensor_input], 0, 0);
+	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing, 0, 0, 0);
 	v4l2_warn(&dev->v4l2_dev, "Calling s_routing returned with ret=%d\n", ret);
 
 	dev->current_input = index;
@@ -1601,19 +1617,11 @@ static int vidioc_g_dv_timings(struct file *file, void *priv_fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int sensor_input;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
-
-	epinput = &ep->sensor_input;
-	sensor_input = dev->current_input - epinput->first;
-	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS) {
-		return -ENODATA;
-	}
 
 	return v4l2_subdev_call(dev->ep->sd,
 			video, g_dv_timings, timings);
@@ -1624,19 +1632,11 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int sensor_input;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
-
-	epinput = &ep->sensor_input;
-	sensor_input = dev->current_input - epinput->first;
-	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS) {
-		return -ENODATA;
-	}
 
 	return v4l2_subdev_call(dev->ep->sd,
 			video, s_dv_timings, timings);
@@ -1647,19 +1647,11 @@ static int vidioc_query_dv_timings(struct file *file, void *priv_fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int sensor_input;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
-
-	epinput = &ep->sensor_input;
-	sensor_input = dev->current_input - epinput->first;
-	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS) {
-		return -ENODATA;
-	}
 
 	return v4l2_subdev_call(dev->ep->sd,
 			video, query_dv_timings, timings);
@@ -1669,22 +1661,14 @@ static int vidioc_enum_dv_timings(struct file *file, void *priv_fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int sensor_input;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
 
-	epinput = &ep->sensor_input;
-	sensor_input = dev->current_input - epinput->first;
-	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS) {
-		return -ENODATA;
-	}
-
 	timings->pad = 0;
-	v4l2_err(&dev->v4l2_dev, "Enum DV Timings on input %s\n", epinput->name[sensor_input]);
+	v4l2_err(&dev->v4l2_dev, "Enum DV Timings on input %s\n", ep->sd->name);
 	return v4l2_subdev_call(dev->ep->sd,
 			pad, enum_dv_timings, timings);
 }
@@ -2064,7 +2048,7 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 		break;
 	case ADV7604_HOTPLUG:
 		if (dev) {
-			v4l2_err(&dev->v4l2_dev, "Set hotplug for ADV7604 to %d\n", hotplug);
+			//v4l2_err(&dev->v4l2_dev, "Set hotplug for ADV7604 to %d\n", hotplug);
 			break;
 		}
 	}
@@ -2251,10 +2235,12 @@ static int mx6cam_parse_endpoints(struct mx6cam_dev *dev,
 		}
 
 		dev->eplist[dev->num_eps].ep = ep;
+#if 0
 		ret = mx6cam_add_sensor(dev, remote,
 					&dev->eplist[dev->num_eps]);
 		if (ret)
 			goto out;
+#endif
 
 		next_input = mx6cam_parse_inputs(dev, epnode, next_input,
 						 &dev->eplist[dev->num_eps]);
@@ -2464,7 +2450,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	struct mx6cam_dev *camdev =
 		container_of(notifier, struct mx6cam_dev, notifier);
 	struct mx6cam_graph_entity *entity;
-	int ret;
+	int ret, i;
 
 	dev_dbg(camdev->dev, "notify complete, all subdevs registered\n");
 
@@ -2481,6 +2467,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	if (ret < 0)
 		dev_err(camdev->dev, "failed to register subdev nodes\n");
 
+	camdev->ep = &camdev->eplist[0];
 	return ret;
 }
 
@@ -2509,6 +2496,8 @@ static int mx6cam_graph_notify_bound(struct v4l2_async_notifier *notifier,
 		dev_dbg(camdev->dev, "subdev %s bound\n", subdev->name);
 		entity->entity = &subdev->entity;
 		entity->subdev = subdev;
+		camdev->eplist[camdev->num_eps].sd = subdev;
+		camdev->num_eps++;
 		return 0;
 	}
 
@@ -2562,8 +2551,6 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 			list_add_tail(&entity->list, &camdev->entities);
 			dev_dbg(camdev->dev, "add root node in entities : %s\n",
 				remote->full_name);
-			camdev->eplist[camdev->num_eps].ep = v4l2_ep;
-			camdev->num_eps++;
 			continue;
 		}
 
@@ -2581,13 +2568,10 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 		list_add_tail(&entity->list, &camdev->entities);
 		dev_dbg(camdev->dev, "entity %s added\n",
 			remote->full_name);
-		camdev->eplist[camdev->num_subdevs].ep = v4l2_ep;
 		camdev->num_subdevs++;
-		camdev->num_eps++;
 	}
 
 	of_node_put(ep);
-	camdev->ep = &camdev->eplist[0];
 	return ret;
 }
 
@@ -2819,14 +2803,17 @@ static int mx6cam_probe(struct platform_device *pdev)
 		goto unreg_vdev;
 	}
 
-#if 0
 	/* find and register mipi csi2 receiver subdev */
 	ret = mx6cam_add_csi2_receiver(dev);
 	if (ret)
 		goto free_ctrls;
-
+#if 0
 	/* parse and register all sensor endpoints */
 	ret = mx6cam_parse_endpoints(dev, node);
+	if (ret)
+		goto unreg_subdevs;
+#endif
+	ret = mx6cam_graph_init(dev);
 	if (ret)
 		goto unreg_subdevs;
 
@@ -2874,10 +2861,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->vdic_sd->name);
-#endif
-	ret = mx6cam_graph_init(dev);
-	if (ret)
-		goto unreg_subdevs;
 
 	platform_set_drvdata(pdev, dev);
 
