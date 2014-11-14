@@ -20,7 +20,7 @@
  * endpoints): 1 parallel endpoints, and 4 MIPI-CSI2 endpoints for each
  * virtual channel.
  */
-#define MX6CAM_MAX_ENDPOINTS 5
+#define MX6CAM_MAX_ENDPOINTS 64
 
 /*
  * How long before no EOF interrupts cause a stream/preview
@@ -101,13 +101,36 @@ struct mx6cam_endpoint {
 	int stream_count;                /* stream use counter */
 };
 
+/**
+ * struct mx6cam_graph_entity - Entity in the video graph
+ * @list: list entry in a graph entities list
+ * @node: the entity's DT node
+ * @entity: media entity, from the corresponding V4L2 subdev
+ * @asd: subdev asynchronous registration information
+ * @subdev: V4L2 subdev
+ */
+struct mx6cam_graph_entity {
+	struct list_head list;
+	struct device_node *node;
+	struct media_entity *entity;
+
+	struct v4l2_async_subdev asd;
+	struct v4l2_subdev *subdev;
+};
+
 struct mx6cam_ctx;
 
 struct mx6cam_dev {
 	struct v4l2_device	v4l2_dev;
 	struct video_device	*vfd;
 	struct device           *dev;
+	struct media_device media_dev;
+	struct media_pad pad;
 	struct mx6_camera_pdata *pdata;
+
+	struct v4l2_async_notifier notifier;
+	struct list_head entities;
+	unsigned int num_subdevs;
 
 	struct mutex		mutex;
 	spinlock_t		irqlock;
