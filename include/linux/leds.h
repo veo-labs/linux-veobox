@@ -44,6 +44,8 @@ struct led_classdev {
 #define LED_BLINK_ONESHOT_STOP	(1 << 18)
 #define LED_BLINK_INVERT	(1 << 19)
 #define LED_SYSFS_DISABLE	(1 << 20)
+#define SET_BRIGHTNESS_ASYNC	(1 << 21)
+#define SET_BRIGHTNESS_SYNC	(1 << 22)
 
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
