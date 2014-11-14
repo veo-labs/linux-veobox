@@ -634,6 +634,8 @@ struct drm_crtc *mdp4_crtc_init(struct drm_device *dev,
 
 	spin_lock_init(&mdp4_crtc->cursor.lock);
 
+	drm_flip_work_init(&mdp4_crtc->unref_fb_work,
+			"unref fb", unref_fb_worker);
 	drm_flip_work_init(&mdp4_crtc->unref_cursor_work,
 			"unref cursor", unref_cursor_worker);
 
