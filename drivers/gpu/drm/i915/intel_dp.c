@@ -228,8 +228,7 @@ intel_dp_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
-static uint32_t
-pack_aux(const uint8_t *src, int src_bytes)
+uint32_t intel_dp_pack_aux(const uint8_t *src, int src_bytes)
 {
 	int	i;
 	uint32_t v = 0;
@@ -2191,7 +2190,7 @@ static void intel_edp_psr_enable_sink(struct intel_dp *intel_dp)
 	/* Setup AUX registers */
 	for (i = 0; i < sizeof(aux_msg); i += 4)
 		I915_WRITE(EDP_PSR_AUX_DATA1(dev) + i,
-			   pack_aux(&aux_msg[i], sizeof(aux_msg) - i));
+			   intel_dp_pack_aux(&aux_msg[i], sizeof(aux_msg) - i));
 
 	I915_WRITE(EDP_PSR_AUX_CTL(dev),
 		   DP_AUX_CH_CTL_TIME_OUT_400us |
