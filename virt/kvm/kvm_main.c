@@ -667,8 +667,8 @@ static int kvm_create_dirty_bitmap(struct kvm_memory_slot *memslot)
  * takes advantage of having initially sorted array and
  * known changed memslot position.
  */
-static void insert_memslot(struct kvm_memslots *slots,
-			   struct kvm_memory_slot *new)
+static void update_memslots(struct kvm_memslots *slots,
+			    struct kvm_memory_slot *new)
 {
 	int id = new->id;
 	int i = slots->id_to_index[id];
@@ -692,36 +692,6 @@ static void insert_memslot(struct kvm_memslots *slots,
 			}
 		}
 	}
-
-	mslots[i] = *new;
-	slots->id_to_index[mslots[i].id] = i;
-}
-
-static void update_memslots(struct kvm_memslots *slots,
-			    struct kvm_memory_slot *new)
-{
-	if (new) {
-		insert_memslot(slots, new);
-	}
-
-	/*
-	 * The ">=" is needed when creating a slot with base_gfn == 0,
-	 * so that it moves before all those with base_gfn == npages == 0.
-	 *
-	 * On the other hand, if new->npages is zero, the above loop has
-	 * already left i pointing to the beginning of the empty part of
-	 * mslots, and the ">=" would move the hole backwards in this
-	 * case---which is wrong.  So skip the loop when deleting a slot.
-	 */
-	if (new->npages) {
-		while (i > 0 &&
-		       new->base_gfn >= mslots[i - 1].base_gfn) {
-			mslots[i] = mslots[i - 1];
-			slots->id_to_index[mslots[i].id] = i;
-			i--;
-		}
-	} else
-		WARN_ON_ONCE(i != slots->used_slots);
 
 	mslots[i] = *new;
 	slots->id_to_index[mslots[i].id] = i;
