@@ -189,6 +189,8 @@ out:
 static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 						      int input_idx)
 {
+	if (!dev->ep)
+		return NULL;
 	return (input_idx < dev->num_eps) ? &dev->eplist[input_idx] : NULL;
 }
 #else
@@ -471,6 +473,11 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 	dev->crop_bounds.height = dev->sensor_fmt.height;
 	dev->crop_defrect = dev->crop_bounds;
 
+	/* For the moment, fill mbus_cfg in order to force type
+	 * This should be done in a clean way
+	 */
+	dev->mbus_cfg.type = V4L2_MBUS_BT656;
+
 	return 0;
 }
 
@@ -664,14 +671,7 @@ static int set_stream(struct mx6cam_dev *dev, bool on)
 		if (dev->preview_on)
 			stop_preview(dev);
 
-		/*
-		 * If there are two or more frames in the queue, we can start
-		 * the encoder now. Otherwise the encoding will start once
-		 * two frames have been queued.
-		 */
-		if (!list_empty(&dev->buf_list) &&
-		    !list_is_singular(&dev->buf_list))
-			ret = start_encoder(dev);
+		ret = start_encoder(dev);
 
 		if (dev->preview_on)
 			start_preview(dev);
@@ -697,7 +697,7 @@ static void restart_work_handler(struct work_struct *w)
 
 	mutex_lock(&dev->mutex);
 
-	if (!vb2_is_streaming(&dev->buffer_queue)) {
+	if (!vb2_start_streaming_called(&dev->buffer_queue)) {
 		/* just restart preview if on */
 		if (dev->preview_on) {
 			v4l2_warn(&dev->v4l2_dev, "restarting preview\n");
@@ -713,30 +713,6 @@ static void restart_work_handler(struct work_struct *w)
 	set_stream(dev, true);
 
 out_unlock:
-	mutex_unlock(&dev->mutex);
-}
-
-/*
- * Stop work handler. Not currently needed but keep around.
- */
-static void stop_work_handler(struct work_struct *w)
-{
-	struct mx6cam_dev *dev = container_of(w, struct mx6cam_dev,
-					      stop_work);
-
-	mutex_lock(&dev->mutex);
-
-	if (dev->preview_on) {
-		v4l2_err(&dev->v4l2_dev, "stopping preview\n");
-		stop_preview(dev);
-		dev->preview_on = false;
-	}
-
-	if (vb2_is_streaming(&dev->buffer_queue)) {
-		v4l2_err(&dev->v4l2_dev, "stopping\n");
-		vb2_streamoff(&dev->buffer_queue, V4L2_BUF_TYPE_VIDEO_CAPTURE);
-	}
-
 	mutex_unlock(&dev->mutex);
 }
 
@@ -1813,13 +1789,25 @@ static void mx6cam_buf_queue(struct vb2_buffer *vb)
 static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct mx6cam_dev *dev = vb2_get_drv_priv(vq);
-
-	if (vb2_is_streaming(vq))
-		return 0;
+	struct mx6cam_buffer *frame;
+	unsigned long flags;
+	int ret;
 
 	dev->sequence = 0;
 
-	return set_stream(dev, true);
+	ret = set_stream(dev, true);
+	if (!ret) {
+		spin_lock_irqsave(&dev->irqlock, flags);
+		/* release all active buffers */
+		while (!list_empty(&dev->buf_list)) {
+			frame = list_entry(dev->buf_list.next,
+					   struct mx6cam_buffer, list);
+			list_del(&frame->list);
+			vb2_buffer_done(&frame->vb, VB2_BUF_STATE_QUEUED);
+		}
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+	}
+	return ret;
 }
 
 static void mx6cam_stop_streaming(struct vb2_queue *vq)
@@ -1827,9 +1815,6 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 	struct mx6cam_dev *dev = vb2_get_drv_priv(vq);
 	struct mx6cam_buffer *frame;
 	unsigned long flags;
-
-	if (!vb2_is_streaming(vq))
-		return;
 
 	set_stream(dev, false);
 
@@ -1840,7 +1825,7 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 		frame = list_entry(dev->buf_list.next,
 				   struct mx6cam_buffer, list);
 		list_del(&frame->list);
-		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_QUEUED);
 	}
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -1869,6 +1854,10 @@ static int mx6cam_open(struct file *file)
 	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
 
+	if (!dev->ep) {
+		ret = -EPROBE_DEFER;
+		goto unlock;
+	}
 	entity = list_first_entry(&dev->entities, struct mx6cam_graph_entity, list);
 	if (!entity) {
 		v4l2_err(&dev->v4l2_dev, "no entity registered\n");
@@ -2780,6 +2769,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
 	dev->buffer_queue.ops = &mx6cam_qops;
 	dev->buffer_queue.mem_ops = &vb2_dma_contig_memops;
+	dev->buffer_queue.min_buffers_needed = 2;
 	dev->buffer_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
 			| V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
 	ret = vb2_queue_init(&dev->buffer_queue);
@@ -2790,7 +2780,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&dev->buf_list);
 	INIT_WORK(&dev->restart_work, restart_work_handler);
-	INIT_WORK(&dev->stop_work, stop_work_handler);
 	init_timer(&dev->restart_timer);
 	dev->restart_timer.data = (unsigned long)dev;
 	dev->restart_timer.function = mx6cam_restart_timeout;

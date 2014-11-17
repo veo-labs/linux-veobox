@@ -132,6 +132,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 	}
 
 	if (dev->using_ic) {
+		v4l2_err(&priv->sd, "Using IC\n");
 		priv->ic_enc = ipu_ic_get(dev->ipu, IC_TASK_ENCODER);
 		if (IS_ERR(priv->ic_enc)) {
 			v4l2_err(&priv->sd, "failed to get IC ENC\n");
@@ -166,6 +167,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 			goto out;
 		}
 	} else {
+		v4l2_err(&priv->sd, "Direct CSI -> SMFC -> MEM\n");
 		/*
 		 * Choose the direct CSI-->SMFC-->MEM channel corresponding
 		 * to the IPU and CSI IDs.
@@ -213,13 +215,13 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 	/* timestamp and return the completed frame */
 	frame = priv->active_frame[priv->buf_num];
 	if (frame) {
-		do_gettimeofday(&cur_time);
+		v4l2_get_timestamp(&cur_time);
 		frame->vb.v4l2_buf.timestamp = cur_time;
 		frame->vb.v4l2_buf.field = V4L2_FIELD_NONE;
 		frame->vb.v4l2_buf.sequence = dev->sequence++;
 		state = dev->signal_locked ?
 			VB2_BUF_STATE_DONE : VB2_BUF_STATE_ERROR;
-		v4l2_err(&priv->sd, "frame seq: %d, state %s\n", dev->signal_locked ? "DONE" : "ERROR");
+		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", dev->signal_locked ? "DONE" : "ERROR");
 		vb2_buffer_done(&frame->vb, state);
 	}
 
@@ -593,8 +595,10 @@ static int encoder_start(struct encoder_priv *priv)
 	}
 
 	/* if preview is enabled it has already setup the CSI */
-	if (!dev->preview_on)
+	if (!dev->preview_on) {
+		v4l2_err(&priv->sd, "Preview is off\n");
 		encoder_setup_csi(priv);
+	}
 
 	priv->inf = dev->sensor_fmt;
 	priv->inf.width = dev->crop.width;
@@ -641,11 +645,13 @@ static int encoder_start(struct encoder_priv *priv)
 		goto out_free_nfb4eof_irq;
 	}
 
+	v4l2_err(&priv->sd, "Enable CSI\n");
 	err = ipu_csi_enable(priv->csi);
 	if (err) {
 		v4l2_err(&priv->sd, "CSI enable error: %d\n", err);
 		goto out_free_eof_irq;
 	}
+	ipu_csi_dump(priv->csi);
 
 	/* start the EOF timeout timer */
 	mod_timer(&priv->eof_timeout_timer,
@@ -669,7 +675,7 @@ static int encoder_stop(struct encoder_priv *priv)
 	struct timeval cur_time;
 	int i, ret;
 
-	v4l2_err(&priv->sd, "Encoder stop\n");
+	v4l2_err(&priv->sd, "Entering encoder stop\n");
 	/* stop the EOF timeout timer */
 	del_timer_sync(&priv->eof_timeout_timer);
 
@@ -723,6 +729,7 @@ static int encoder_stop(struct encoder_priv *priv)
 			frame->vb.v4l2_buf.sequence = dev->sequence++;
 			v4l2_err(&priv->sd, "frame seq: %d\n");
 			vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
+			priv->active_frame[i] = NULL;
 		}
 	}
 
