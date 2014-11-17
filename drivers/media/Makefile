@@ -8,7 +8,7 @@ media-objs	:= media-device.o media-devnode.o media-entity.o
 # I2C drivers should come before other drivers, otherwise they'll fail
 # when compiled as builtin drivers
 #
-obj-y += i2c/ tuners/
+obj-y += i2c/ tuners/ spi/
 obj-$(CONFIG_DVB_CORE)  += dvb-frontends/
 
 #
