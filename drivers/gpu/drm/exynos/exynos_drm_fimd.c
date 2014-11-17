@@ -779,6 +779,12 @@ static void fimd_win_commit(struct exynos_drm_crtc *crtc, int zpos)
 	if (ctx->driver_data->has_shadowcon)
 		fimd_enable_shadow_channel_path(ctx, win, true);
 
+	if (ctx->driver_data->has_shadowcon) {
+		val = readl(ctx->regs + SHADOWCON);
+		val |= SHADOWCON_CHx_ENABLE(win);
+		writel(val, ctx->regs + SHADOWCON);
+	}
+
 	/* Enable DMA channel and unprotect windows */
 	fimd_shadow_protect_win(ctx, win, false);
 
