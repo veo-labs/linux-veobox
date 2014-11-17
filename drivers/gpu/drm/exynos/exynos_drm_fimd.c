@@ -240,6 +240,19 @@ static void fimd_enable_video_output(struct fimd_context *ctx, int win,
 	writel(val, ctx->regs + WINCON(win));
 }
 
+static void fimd_enable_shadow_channel_path(struct fimd_context *ctx, int win,
+						bool enable)
+{
+	u32 val = readl(ctx->regs + SHADOWCON);
+
+	if (enable)
+		val |= SHADOWCON_CHx_ENABLE(win);
+	else
+		val &= ~SHADOWCON_CHx_ENABLE(win);
+
+	writel(val, ctx->regs + SHADOWCON);
+}
+
 static void fimd_clear_channel(struct exynos_drm_manager *mgr)
 {
 	int win, ch_enabled = 0;
@@ -253,12 +266,10 @@ static void fimd_clear_channel(struct exynos_drm_manager *mgr)
 		if (val & WINCONx_ENWIN) {
 			fimd_enable_video_output(ctx, win, false);
 
-			/* unprotect windows */
-			if (ctx->driver_data->has_shadowcon) {
-				val = readl(ctx->regs + SHADOWCON);
-				val &= ~SHADOWCON_CHx_ENABLE(win);
-				writel(val, ctx->regs + SHADOWCON);
-			}
+			if (ctx->driver_data->has_shadowcon)
+				fimd_enable_shadow_channel_path(ctx, win,
+								false);
+
 			ch_enabled = 1;
 		}
 	}
@@ -765,11 +776,8 @@ static void fimd_win_commit(struct exynos_drm_crtc *crtc, int zpos)
 
 	fimd_enable_video_output(ctx, win, true);
 
-	if (ctx->driver_data->has_shadowcon) {
-		val = readl(ctx->regs + SHADOWCON);
-		val |= SHADOWCON_CHx_ENABLE(win);
-		writel(val, ctx->regs + SHADOWCON);
-	}
+	if (ctx->driver_data->has_shadowcon)
+		fimd_enable_shadow_channel_path(ctx, win, true);
 
 	/* Enable DMA channel and unprotect windows */
 	fimd_shadow_protect_win(ctx, win, false);
