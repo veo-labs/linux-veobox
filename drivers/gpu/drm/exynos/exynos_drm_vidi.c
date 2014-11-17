@@ -66,9 +66,9 @@ struct vidi_context {
 	int				pipe;
 };
 
-static inline struct vidi_context *display_to_vidi(struct exynos_drm_display *d)
+static inline struct vidi_context *manager_to_vidi(struct exynos_drm_manager *m)
 {
-	return container_of(d, struct vidi_context, display);
+	return container_of(m, struct vidi_context, manager);
 }
 
 static const char fake_edid_info[] = {
@@ -589,7 +589,6 @@ static int vidi_probe(struct platform_device *pdev)
 
 	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
 
-	ctx->manager.ctx = ctx;
 	vidi_display.ctx = ctx;
 
 	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR,
