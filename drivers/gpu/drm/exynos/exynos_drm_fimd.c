@@ -958,13 +958,11 @@ static void fimd_trigger(struct device *dev)
 	u32 reg;
 
 	 /*
-	 * Skips to trigger if in triggering state, because multiple triggering
-	 * requests can cause panel reset.
-	 */
+	  * Skips triggering if in triggering state, because multiple triggering
+	  * requests can cause panel reset.
+	  */
 	if (atomic_read(&ctx->triggering))
 		return;
-
-	atomic_set(&ctx->triggering, 1);
 
 	/* Enters triggering mode */
 	atomic_set(&ctx->triggering, 1);
@@ -1034,15 +1032,13 @@ static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 	if (ctx->pipe < 0 || !ctx->drm_dev)
 		goto out;
 
-	if (ctx->i80_if) {
-		exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
+	drm_handle_vblank(ctx->drm_dev, ctx->pipe);
+	exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
 
+	if (ctx->i80_if) {
 		/* Exits triggering mode */
 		atomic_set(&ctx->triggering, 0);
 	} else {
-		drm_handle_vblank(ctx->drm_dev, ctx->pipe);
-		exynos_drm_crtc_finish_pageflip(ctx->drm_dev, ctx->pipe);
-
 		/* set wait vsync event to zero and wake up queue. */
 		if (atomic_read(&ctx->wait_vsync_event)) {
 			atomic_set(&ctx->wait_vsync_event, 0);
