@@ -25,6 +25,142 @@ static const char *iommu_ports[] = {
 		"mdp_0",
 };
 
+static struct mdp5_platform_config *mdp5_get_config(struct platform_device *dev);
+
+const struct mdp5_config *mdp5_cfg;
+
+static const struct mdp5_config msm8x74_config = {
+	.name = "msm8x74",
+	.ctl = {
+		.count = 5,
+		.base = { 0x00600, 0x00700, 0x00800, 0x00900, 0x00a00 },
+	},
+	.pipe_vig = {
+		.count = 3,
+		.base = { 0x01200, 0x01600, 0x01a00 },
+	},
+	.pipe_rgb = {
+		.count = 3,
+		.base = { 0x01e00, 0x02200, 0x02600 },
+	},
+	.pipe_dma = {
+		.count = 2,
+		.base = { 0x02a00, 0x02e00 },
+	},
+	.lm = {
+		.count = 5,
+		.base = { 0x03200, 0x03600, 0x03a00, 0x03e00, 0x04200 },
+	},
+	.dspp = {
+		.count = 3,
+		.base = { 0x04600, 0x04a00, 0x04e00 },
+	},
+	.ad = {
+		.count = 2,
+		.base = { 0x13100, 0x13300 }, /* NOTE: no ad in v1.0 */
+	},
+	.intf = {
+		.count = 4,
+		.base = { 0x12500, 0x12700, 0x12900, 0x12b00 },
+	},
+	.max_clk = 200000000,
+};
+
+static const struct mdp5_config apq8084_config = {
+	.name = "apq8084",
+	.ctl = {
+		.count = 5,
+		.base = { 0x00600, 0x00700, 0x00800, 0x00900, 0x00a00 },
+	},
+	.pipe_vig = {
+		.count = 4,
+		.base = { 0x01200, 0x01600, 0x01a00, 0x01e00 },
+	},
+	.pipe_rgb = {
+		.count = 4,
+		.base = { 0x02200, 0x02600, 0x02a00, 0x02e00 },
+	},
+	.pipe_dma = {
+		.count = 2,
+		.base = { 0x03200, 0x03600 },
+	},
+	.lm = {
+		.count = 6,
+		.base = { 0x03a00, 0x03e00, 0x04200, 0x04600, 0x04a00, 0x04e00 },
+	},
+	.dspp = {
+		.count = 4,
+		.base = { 0x05200, 0x05600, 0x05a00, 0x05e00 },
+
+	},
+	.ad = {
+		.count = 3,
+		.base = { 0x13500, 0x13700, 0x13900 },
+	},
+	.intf = {
+		.count = 5,
+		.base = { 0x12500, 0x12700, 0x12900, 0x12b00, 0x12d00 },
+	},
+	.max_clk = 320000000,
+};
+
+struct mdp5_config_entry {
+	int revision;
+	const struct mdp5_config *config;
+};
+
+static const struct mdp5_config_entry mdp5_configs[] = {
+	{ .revision = 0, .config = &msm8x74_config },
+	{ .revision = 2, .config = &msm8x74_config },
+	{ .revision = 3, .config = &apq8084_config },
+};
+
+static int mdp5_select_hw_cfg(struct msm_kms *kms)
+{
+	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(kms));
+	struct drm_device *dev = mdp5_kms->dev;
+	uint32_t version, major, minor;
+	int i, ret = 0;
+
+	mdp5_enable(mdp5_kms);
+	version = mdp5_read(mdp5_kms, REG_MDP5_MDP_VERSION);
+	mdp5_disable(mdp5_kms);
+
+	major = FIELD(version, MDP5_MDP_VERSION_MAJOR);
+	minor = FIELD(version, MDP5_MDP_VERSION_MINOR);
+
+	DBG("found MDP5 version v%d.%d", major, minor);
+
+	if (major != 1) {
+		dev_err(dev->dev, "unexpected MDP major version: v%d.%d\n",
+				major, minor);
+		ret = -ENXIO;
+		goto out;
+	}
+
+	mdp5_kms->rev = minor;
+
+	/* only after mdp5_cfg global pointer's init can we access the hw */
+	for (i = 0; i < ARRAY_SIZE(mdp5_configs); i++) {
+		if (mdp5_configs[i].revision != minor)
+			continue;
+		mdp5_kms->hw_cfg = mdp5_cfg = mdp5_configs[i].config;
+		break;
+	}
+	if (unlikely(!mdp5_kms->hw_cfg)) {
+		dev_err(dev->dev, "unexpected MDP minor revision: v%d.%d\n",
+				major, minor);
+		ret = -ENXIO;
+		goto out;
+	}
+
+	DBG("MDP5: %s config selected", mdp5_kms->hw_cfg->name);
+
+	return 0;
+out:
+	return ret;
+}
+
 static int mdp5_hw_init(struct msm_kms *kms)
 {
 	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(kms));
@@ -355,18 +491,8 @@ struct msm_kms *mdp5_kms_init(struct drm_device *dev)
 	if (ret)
 		goto fail;
 
-	/* we need to set a default rate before enabling.  Set a safe
-	 * rate first, then figure out hw revision, and then set a
-	 * more optimal rate:
-	 */
-	clk_set_rate(mdp5_kms->src_clk, 200000000);
-
-	read_hw_revision(mdp5_kms, &major, &minor);
-
-	mdp5_kms->cfg = mdp5_cfg_init(mdp5_kms, major, minor);
-	if (IS_ERR(mdp5_kms->cfg)) {
-		ret = PTR_ERR(mdp5_kms->cfg);
-		mdp5_kms->cfg = NULL;
+	ret = mdp5_select_hw_cfg(kms);
+	if (ret)
 		goto fail;
 	}
 
@@ -388,6 +514,9 @@ struct msm_kms *mdp5_kms_init(struct drm_device *dev)
 		mdp5_kms->ctlm = NULL;
 		goto fail;
 	}
+
+	/* TODO: compute core clock rate at runtime */
+	clk_set_rate(mdp5_kms->src_clk, mdp5_kms->hw_cfg->max_clk);
 
 	/* make sure things are off before attaching iommu (bootloader could
 	 * have left things on, in which case we'll start getting faults if
@@ -440,4 +569,17 @@ fail:
 	if (kms)
 		mdp5_destroy(kms);
 	return ERR_PTR(ret);
+}
+
+static struct mdp5_platform_config *mdp5_get_config(struct platform_device *dev)
+{
+	static struct mdp5_platform_config config = {};
+#ifdef CONFIG_OF
+	/* TODO */
+#endif
+	config.iommu = iommu_domain_alloc(&platform_bus_type);
+	/* TODO get from DT: */
+	config.smp_blk_cnt = 22;
+
+	return &config;
 }

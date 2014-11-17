@@ -21,7 +21,26 @@
 #include "msm_drv.h"
 #include "msm_kms.h"
 #include "mdp/mdp_kms.h"
-#include "mdp5_cfg.h"	/* must be included before mdp5.xml.h */
+/* dynamic offsets used by mdp5.xml.h (initialized in mdp5_kms.c) */
+#define MDP5_MAX_BASES		8
+struct mdp5_sub_block {
+	int	count;
+	uint32_t base[MDP5_MAX_BASES];
+};
+struct mdp5_config {
+	char  *name;
+	struct mdp5_sub_block ctl;
+	struct mdp5_sub_block pipe_vig;
+	struct mdp5_sub_block pipe_rgb;
+	struct mdp5_sub_block pipe_dma;
+	struct mdp5_sub_block lm;
+	struct mdp5_sub_block dspp;
+	struct mdp5_sub_block ad;
+	struct mdp5_sub_block intf;
+
+	uint32_t max_clk;
+};
+extern const struct mdp5_config *mdp5_cfg;
 #include "mdp5.xml.h"
 #include "mdp5_ctl.h"
 #include "mdp5_smp.h"
@@ -61,29 +80,10 @@ struct mdp5_kms {
 };
 #define to_mdp5_kms(x) container_of(x, struct mdp5_kms, base)
 
-struct mdp5_plane_state {
-	struct drm_plane_state base;
-
-	/* "virtual" zpos.. we calculate actual mixer-stage at runtime
-	 * by sorting the attached planes by zpos and then assigning
-	 * mixer stage lowest to highest.  Private planes get default
-	 * zpos of zero, and public planes a unique value that is
-	 * greater than zero.  This way, things work out if a naive
-	 * userspace assigns planes to a crtc without setting zpos.
-	 */
-	int zpos;
-
-	/* the actual mixer stage, calculated in crtc->atomic_check()
-	 * NOTE: this should move to mdp5_crtc_state, when that exists
-	 */
-	enum mdp_mixer_stage_id stage;
-
-	/* some additional transactional status to help us know in the
-	 * apply path whether we need to update SMP allocation, and
-	 * whether current update is still pending:
-	 */
-	bool mode_changed : 1;
-	bool pending : 1;
+/* platform config data (ie. from DT, or pdata) */
+struct mdp5_platform_config {
+	struct iommu_domain *iommu;
+	int smp_blk_cnt;
 };
 #define to_mdp5_plane_state(x) \
 		container_of(x, struct mdp5_plane_state, base)
