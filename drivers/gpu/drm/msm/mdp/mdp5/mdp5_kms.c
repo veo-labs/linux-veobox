@@ -108,13 +108,6 @@ static void mdp5_destroy(struct msm_kms *kms)
 		mmu->funcs->destroy(mmu);
 	}
 
-	if (mdp5_kms->ctlm)
-		mdp5_ctlm_destroy(mdp5_kms->ctlm);
-	if (mdp5_kms->smp)
-		mdp5_smp_destroy(mdp5_kms->smp);
-	if (mdp5_kms->cfg)
-		mdp5_cfg_destroy(mdp5_kms->cfg);
-
 	kfree(mdp5_kms);
 }
 
@@ -175,8 +168,6 @@ static int modeset_init(struct mdp5_kms *mdp5_kms)
 	const struct mdp5_cfg_hw *hw_cfg;
 	int i, ret;
 
-	hw_cfg = mdp5_cfg_get_hw_config(mdp5_kms->cfg);
-
 	/* register our interrupt-controller for hdmi/eDP/dsi/etc
 	 * to use for irqs routed through mdp:
 	 */
@@ -184,8 +175,8 @@ static int modeset_init(struct mdp5_kms *mdp5_kms)
 	if (ret)
 		goto fail;
 
-	/* construct CRTCs and their private planes: */
-	for (i = 0; i < hw_cfg->pipe_rgb.count; i++) {
+	/* construct CRTCs: */
+	for (i = 0; i < mdp5_kms->hw_cfg->pipe_rgb.count; i++) {
 		struct drm_plane *plane;
 		struct drm_crtc *crtc;
 

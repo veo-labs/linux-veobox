@@ -221,7 +221,6 @@ int hdmi_modeset_init(struct hdmi *hdmi,
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct platform_device *pdev = hdmi->pdev;
-	struct hdmi_platform_config *config = pdev->dev.platform_data;
 	int ret;
 
 	hdmi->dev = dev;
