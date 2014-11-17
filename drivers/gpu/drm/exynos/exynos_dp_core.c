@@ -1338,17 +1338,7 @@ static int exynos_dp_probe(struct platform_device *pdev)
 			return -EPROBE_DEFER;
 	}
 
-	endpoint = of_graph_get_next_endpoint(dev->of_node, NULL);
-	if (endpoint) {
-		bridge_node = of_graph_get_remote_port_parent(endpoint);
-		if (bridge_node) {
-			dp->bridge = of_drm_find_bridge(bridge_node);
-			of_node_put(bridge_node);
-			if (!dp->bridge)
-				return -EPROBE_DEFER;
-		} else
-			return -EPROBE_DEFER;
-	}
+	dp->display.ctx = dp;
 
 	ret = component_add(&pdev->dev, &exynos_dp_ops);
 	if (ret)
