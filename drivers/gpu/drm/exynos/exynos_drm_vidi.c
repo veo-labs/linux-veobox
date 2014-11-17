@@ -47,8 +47,7 @@ struct vidi_win_data {
 };
 
 struct vidi_context {
-	struct exynos_drm_display	display;
-	struct platform_device		*pdev;
+	struct exynos_drm_manager	manager;
 	struct drm_device		*drm_dev;
 	struct exynos_drm_crtc		*crtc;
 	struct drm_encoder		*encoder;
@@ -542,7 +541,7 @@ static struct exynos_drm_display_ops vidi_display_ops = {
 static int vidi_bind(struct device *dev, struct device *master, void *data)
 {
 	struct vidi_context *ctx = dev_get_drvdata(dev);
-	struct drm_device *drm_dev = data;
+	struct drm_crtc *crtc = ctx->crtc;
 	int ret;
 
 	vidi_ctx_initialize(ctx, drm_dev);
@@ -583,22 +582,22 @@ static int vidi_probe(struct platform_device *pdev)
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->display.type = EXYNOS_DISPLAY_TYPE_VIDI;
-	ctx->display.ops = &vidi_display_ops;
+	ctx->manager.type = EXYNOS_DISPLAY_TYPE_VIDI;
+	ctx->manager.ops = &vidi_manager_ops;
 	ctx->default_win = 0;
 	ctx->pdev = pdev;
 
-	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CRTC,
-					EXYNOS_DISPLAY_TYPE_VIDI);
-	if (ret)
-		return ret;
+	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
+
+	ctx->manager.ctx = ctx;
+	vidi_display.ctx = ctx;
 
 	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR,
 					ctx->display.type);
 	if (ret)
 		goto err_del_crtc_component;
 
-	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
+	platform_set_drvdata(pdev, ctx);
 
 	mutex_init(&ctx->lock);
 
