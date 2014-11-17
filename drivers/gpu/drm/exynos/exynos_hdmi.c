@@ -2475,7 +2475,6 @@ out_get_phy_port:
 	}
 
 	pm_runtime_enable(dev);
-	hdata->display.ctx = hdata;
 
 	ret = component_add(&pdev->dev, &hdmi_component_ops);
 	if (ret)
