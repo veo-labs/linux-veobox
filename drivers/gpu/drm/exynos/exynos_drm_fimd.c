@@ -1203,6 +1203,7 @@ static int fimd_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);
+	ctx->manager.ctx = ctx;
 
 	platform_set_drvdata(pdev, ctx);
 
