@@ -77,10 +77,11 @@
 				remote-endpoint = <&csi0_fpga_out>;
 				//remote-endpoint = <&hdmi0_out>;
 				bus-width = <16>;
-				data-shift = <4>;
-				inputs = <1>;
-/*				input-names = <"hdmi1 input">;*/
-				input-caps = <2>;
+				data-shift = <4>; /* Lines 20:4 used */
+				hsync-active = <0>;	/* Active low */
+				vsync-active = <0>;	/* Active low */
+				data-active = <1>;	/* Active high */
+				pclk-sample = <1>;	/* Rising */
 			};
 		};
 	};
