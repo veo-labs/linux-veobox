@@ -307,6 +307,7 @@ struct exynos_drm_display *exynos_dpi_probe(struct device *dev)
 	ctx->display.type = EXYNOS_DISPLAY_TYPE_LCD;
 	ctx->display.ops = &exynos_dpi_display_ops;
 	ctx->dev = dev;
+	ctx->display.ctx = ctx;
 	ctx->dpms_mode = DRM_MODE_DPMS_OFF;
 
 	ret = exynos_drm_component_add(dev,
