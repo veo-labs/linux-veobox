@@ -72,6 +72,11 @@ static inline struct vidi_context *manager_to_vidi(struct exynos_drm_manager *m)
 	return container_of(m, struct vidi_context, manager);
 }
 
+static inline struct vidi_context *display_to_vidi(struct exynos_drm_display *d)
+{
+	return container_of(d, struct vidi_context, display);
+}
+
 static const char fake_edid_info[] = {
 	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x4c, 0x2d, 0x05, 0x05,
 	0x00, 0x00, 0x00, 0x00, 0x30, 0x12, 0x01, 0x03, 0x80, 0x10, 0x09, 0x78,
@@ -592,12 +597,7 @@ static int vidi_probe(struct platform_device *pdev)
 
 	INIT_WORK(&ctx->work, vidi_fake_vblank_handler);
 
-	ctx->display.ctx = ctx;
-
-	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CONNECTOR,
-					ctx->display.type);
-	if (ret)
-		goto err_del_crtc_component;
+	mutex_init(&ctx->lock);
 
 	platform_set_drvdata(pdev, ctx);
 
