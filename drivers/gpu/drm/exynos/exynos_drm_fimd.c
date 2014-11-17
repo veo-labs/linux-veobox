@@ -958,11 +958,13 @@ static void fimd_trigger(struct device *dev)
 	u32 reg;
 
 	 /*
-	  * Skips triggering if in triggering state, because multiple triggering
-	  * requests can cause panel reset.
-	  */
+	 * Skips to trigger if in triggering state, because multiple triggering
+	 * requests can cause panel reset.
+	 */
 	if (atomic_read(&ctx->triggering))
 		return;
+
+	atomic_set(&ctx->triggering, 1);
 
 	/* Enters triggering mode */
 	atomic_set(&ctx->triggering, 1);
