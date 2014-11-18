@@ -154,10 +154,10 @@ static void setup_csi(struct vdic_priv *priv)
 	bool is_csi2 = dev->ep->ep.bus_type == V4L2_MBUS_CSI2;
 
 	ipu_csi_set_window(priv->csi, &dev->crop);
-	ipu_csi_init_interface(priv->csi, &dev->mbus_cfg, &dev->sensor_fmt);
+	ipu_csi_init_interface(priv->csi, &dev->mbus_cfg, &dev->subdev_fmt);
 	if (is_csi2)
 		ipu_csi_set_mipi_datatype(priv->csi, dev->ep->ep.base.id,
-					  &dev->sensor_fmt);
+					  &dev->subdev_fmt);
 
 	/* setup the video iomux */
 	dev->pdata->set_video_mux(ipu_id, csi_id, is_csi2, dev->ep->ep.base.id);
@@ -809,13 +809,13 @@ static int vdic_start(struct vdic_priv *priv)
 	if (err)
 		return err;
 
-	priv->inf = dev->sensor_fmt;
-	priv->in_pixfmt = dev->sensor_pixfmt->fourcc;
+	priv->inf = dev->subdev_fmt;
+	priv->in_pixfmt = dev->subdev_pixfmt->fourcc;
 	priv->inf.width = dev->crop.width;
 	priv->inf.height = dev->crop.height;
-	priv->in_stride = dev->sensor_pixfmt->y_depth ?
-		(priv->inf.width * dev->sensor_pixfmt->y_depth) >> 3 :
-		(priv->inf.width * dev->sensor_pixfmt->depth) >> 3;
+	priv->in_stride = dev->subdev_pixfmt->y_depth ?
+		(priv->inf.width * dev->subdev_pixfmt->y_depth) >> 3 :
+		(priv->inf.width * dev->subdev_pixfmt->depth) >> 3;
 	priv->in_cs = ipu_mbus_code_to_colorspace(priv->inf.code);
 
 	priv->outf = dev->format;

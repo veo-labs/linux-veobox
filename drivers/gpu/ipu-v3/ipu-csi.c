@@ -327,6 +327,8 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 
 	mbus_code_to_bus_cfg(csicfg, mbus_fmt->code);
 
+	csicfg->force_eof = 1;
+
 	switch (mbus_cfg->type) {
 	case V4L2_MBUS_PARALLEL:
 		csicfg->ext_vsync = 1;
@@ -725,6 +727,7 @@ void ipu_csi_exit(struct ipu_soc *ipu, int id)
 
 void ipu_csi_dump(struct ipu_csi *csi)
 {
+	ipu_dump(csi->ipu);
 	dev_dbg(csi->ipu->dev, "CSI_SENS_CONF:     %08x\n",
 		ipu_csi_read(csi, CSI_SENS_CONF));
 	dev_dbg(csi->ipu->dev, "CSI_SENS_FRM_SIZE: %08x\n",

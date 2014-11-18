@@ -78,8 +78,6 @@
 				remote-endpoint = <&csi0_fpga_out>;
 				bus-width = <16>;
 				data-shift = <4>; /* Lines 20:4 used */
-				hsync-active = <1>;
-				vsync-active = <0>;
 			};
 		};
 	};
@@ -202,7 +200,6 @@
 					remote-endpoint = <&hdmi0_fpga_in>;
 					//remote-endpoint = <&csi0>;
 					bus-width = <16>;
-					data-shift = <4>; /* Lines 20:4 used */
 				};
 			};
 		};
@@ -236,9 +233,9 @@
 			};
 			port@6 {
 				reg = <6>;
-				hdmi1_out: endpoint@6 {
+/*				hdmi1_out: endpoint@6 {
 					remote-endpoint = <&hdmi1_fpga_in>;
-				};
+				};*/
 			};
 		};
 	};
@@ -269,13 +266,14 @@
 			};
 			port@3 {
 				reg = <3>;
-				hdmi1_fpga_in: endpoint {
+/*				hdmi1_fpga_in: endpoint {
 					remote-endpoint = <&hdmi1_out>;
-				};
+				};*/
 			};
 			port@4 {
 				reg = <4>;
 				csi0_fpga_out: endpoint {
+					bus-width = <16>;
 					remote-endpoint = <&csi0>;
 				};
 			};
@@ -491,10 +489,10 @@
 
 		pinctrl_ipu1_csi0: ipu1_csi0grp {
 			fsl,pins = <
-				MX6QDL_PAD_EIM_D27__IPU1_CSI0_DATA00 0x80000000
+				/*MX6QDL_PAD_EIM_D27__IPU1_CSI0_DATA00 0x80000000
 				MX6QDL_PAD_EIM_D26__IPU1_CSI0_DATA01 0x80000000
 				MX6QDL_PAD_EIM_D30__IPU1_CSI0_DATA03 0x80000000
-				MX6QDL_PAD_EIM_D31__IPU1_CSI0_DATA02 0x80000000
+				MX6QDL_PAD_EIM_D31__IPU1_CSI0_DATA02 0x80000000*/
 				MX6QDL_PAD_CSI0_DAT4__IPU1_CSI0_DATA04 0x80000000
 				MX6QDL_PAD_CSI0_DAT5__IPU1_CSI0_DATA05 0x80000000
 				MX6QDL_PAD_CSI0_DAT6__IPU1_CSI0_DATA06 0x80000000
