@@ -3788,7 +3788,7 @@ static int ci_upload_dpm_level_enable_mask(struct radeon_device *rdev)
 				return -EINVAL;
 		}
 	}
-#endif
+
 	return 0;
 }
 
