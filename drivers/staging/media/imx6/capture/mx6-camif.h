@@ -153,9 +153,11 @@ struct mx6cam_dev {
 	/* the format from sensor and from userland */
 	struct v4l2_pix_format	format;
 	struct mx6cam_pixfmt      *user_pixfmt;
-	struct v4l2_mbus_framefmt sensor_fmt;
-	struct mx6cam_pixfmt      *sensor_pixfmt;
+	struct v4l2_mbus_framefmt subdev_fmt;
+	struct mx6cam_pixfmt      *subdev_pixfmt;
 	struct v4l2_mbus_config   mbus_cfg;
+
+	struct v4l2_dv_timings		dv_timings_cap;
 
 	/*
 	 * win (from s_fmt_vid_cap_overlay) holds global alpha, chromakey,
