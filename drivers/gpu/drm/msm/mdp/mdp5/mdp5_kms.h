@@ -23,12 +23,22 @@
 #include "mdp/mdp_kms.h"
 /* dynamic offsets used by mdp5.xml.h (initialized in mdp5_kms.c) */
 #define MDP5_MAX_BASES		8
+#define MAX_SMP_BLOCKS		44
+#define MAX_CLIENTS		32
+typedef DECLARE_BITMAP(mdp5_smp_state_t, MAX_SMP_BLOCKS);
 struct mdp5_sub_block {
 	int	count;
 	uint32_t base[MDP5_MAX_BASES];
 };
+struct mdp5_smp_block {
+	int mmb_count;			/* number of SMP MMBs */
+	int mmb_size;			/* MMB: size in bytes */
+	mdp5_smp_state_t reserved_state;/* SMP MMBs statically allocated */
+	int reserved[MAX_CLIENTS];	/* # of MMBs reserved per client */
+};
 struct mdp5_config {
 	char  *name;
+	struct mdp5_smp_block smp;
 	struct mdp5_sub_block ctl;
 	struct mdp5_sub_block pipe_vig;
 	struct mdp5_sub_block pipe_rgb;
@@ -56,8 +66,7 @@ struct mdp5_kms {
 	int id;
 	struct msm_mmu *mmu;
 
-	struct mdp5_smp *smp;
-	struct mdp5_ctl_manager *ctlm;
+	void *smp_priv;
 
 	/* io/register spaces: */
 	void __iomem *mmio, *vbif;
@@ -83,7 +92,6 @@ struct mdp5_kms {
 /* platform config data (ie. from DT, or pdata) */
 struct mdp5_platform_config {
 	struct iommu_domain *iommu;
-	int smp_blk_cnt;
 };
 #define to_mdp5_plane_state(x) \
 		container_of(x, struct mdp5_plane_state, base)
@@ -121,6 +129,16 @@ static inline int pipe2nclients(enum mdp5_pipe pipe)
 		return 1;
 	default:
 		return 3;
+	}
+}
+
+static inline uint32_t mixer2flush(int lm)
+{
+	switch (lm) {
+	case 0:  return MDP5_CTL_FLUSH_LM0;
+	case 1:  return MDP5_CTL_FLUSH_LM1;
+	case 2:  return MDP5_CTL_FLUSH_LM2;
+	default: return 0;
 	}
 }
 

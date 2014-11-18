@@ -66,8 +66,16 @@ static int mdp5_plane_disable(struct drm_plane *plane)
 
 	if (mdp5_kms) {
 		/* Release the memory we requested earlier from the SMP: */
-		mdp5_smp_release(mdp5_kms->smp, pipe);
+		mdp5_smp_release(mdp5_kms->smp_priv, pipe);
 	}
+
+	/* TODO detaching now will cause us not to get the last
+	 * vblank and mdp5_smp_commit().. so other planes will
+	 * still see smp blocks previously allocated to us as
+	 * in-use..
+	 */
+	if (plane->crtc)
+		mdp5_crtc_detach(plane->crtc, plane);
 
 	return 0;
 }
@@ -165,267 +173,7 @@ static int mdp5_plane_prepare_fb(struct drm_plane *plane,
 	return msm_framebuffer_prepare(fb, mdp5_kms->id);
 }
 
-static void mdp5_plane_cleanup_fb(struct drm_plane *plane,
-		struct drm_framebuffer *fb)
-{
-	struct mdp5_plane *mdp5_plane = to_mdp5_plane(plane);
-	struct mdp5_kms *mdp5_kms = get_kms(plane);
-
-	DBG("%s: cleanup: FB[%u]", mdp5_plane->name, fb->base.id);
-	msm_framebuffer_cleanup(fb, mdp5_kms->id);
-}
-
-static int mdp5_plane_atomic_check(struct drm_plane *plane,
-		struct drm_plane_state *state)
-{
-	struct mdp5_plane *mdp5_plane = to_mdp5_plane(plane);
-	struct drm_plane_state *old_state = plane->state;
-
-	DBG("%s: check (%d -> %d)", mdp5_plane->name,
-			plane_enabled(old_state), plane_enabled(state));
-
-	if (plane_enabled(state) && plane_enabled(old_state)) {
-		/* we cannot change SMP block configuration during scanout: */
-		bool full_modeset = false;
-		if (state->fb->pixel_format != old_state->fb->pixel_format) {
-			DBG("%s: pixel_format change!", mdp5_plane->name);
-			full_modeset = true;
-		}
-		if (state->src_w != old_state->src_w) {
-			DBG("%s: src_w change!", mdp5_plane->name);
-			full_modeset = true;
-		}
-		if (to_mdp5_plane_state(old_state)->pending) {
-			DBG("%s: still pending!", mdp5_plane->name);
-			full_modeset = true;
-		}
-		if (full_modeset) {
-			struct drm_crtc_state *crtc_state =
-					drm_atomic_get_crtc_state(state->state, state->crtc);
-			crtc_state->mode_changed = true;
-			to_mdp5_plane_state(state)->mode_changed = true;
-		}
-	} else {
-		to_mdp5_plane_state(state)->mode_changed = true;
-	}
-
-	return 0;
-}
-
-static void mdp5_plane_atomic_update(struct drm_plane *plane,
-				     struct drm_plane_state *old_state)
-{
-	struct mdp5_plane *mdp5_plane = to_mdp5_plane(plane);
-	struct drm_plane_state *state = plane->state;
-
-	DBG("%s: update", mdp5_plane->name);
-
-	if (!plane_enabled(state)) {
-		to_mdp5_plane_state(state)->pending = true;
-		mdp5_plane_disable(plane);
-	} else if (to_mdp5_plane_state(state)->mode_changed) {
-		int ret;
-		to_mdp5_plane_state(state)->pending = true;
-		ret = mdp5_plane_mode_set(plane,
-				state->crtc, state->fb,
-				state->crtc_x, state->crtc_y,
-				state->crtc_w, state->crtc_h,
-				state->src_x,  state->src_y,
-				state->src_w, state->src_h);
-		/* atomic_check should have ensured that this doesn't fail */
-		WARN_ON(ret < 0);
-	} else {
-		unsigned long flags;
-		spin_lock_irqsave(&mdp5_plane->pipe_lock, flags);
-		set_scanout_locked(plane, state->fb);
-		spin_unlock_irqrestore(&mdp5_plane->pipe_lock, flags);
-	}
-}
-
-static const struct drm_plane_helper_funcs mdp5_plane_helper_funcs = {
-		.prepare_fb = mdp5_plane_prepare_fb,
-		.cleanup_fb = mdp5_plane_cleanup_fb,
-		.atomic_check = mdp5_plane_atomic_check,
-		.atomic_update = mdp5_plane_atomic_update,
-};
-
-static void set_scanout_locked(struct drm_plane *plane,
-		struct drm_framebuffer *fb)
-{
-	struct mdp5_plane *mdp5_plane = to_mdp5_plane(plane);
-	struct mdp5_kms *mdp5_kms = get_kms(plane);
-	enum mdp5_pipe pipe = mdp5_plane->pipe;
-
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC_STRIDE_A(pipe),
-			MDP5_PIPE_SRC_STRIDE_A_P0(fb->pitches[0]) |
-			MDP5_PIPE_SRC_STRIDE_A_P1(fb->pitches[1]));
-
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC_STRIDE_B(pipe),
-			MDP5_PIPE_SRC_STRIDE_B_P2(fb->pitches[2]) |
-			MDP5_PIPE_SRC_STRIDE_B_P3(fb->pitches[3]));
-
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC0_ADDR(pipe),
-			msm_framebuffer_iova(fb, mdp5_kms->id, 0));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC1_ADDR(pipe),
-			msm_framebuffer_iova(fb, mdp5_kms->id, 1));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC2_ADDR(pipe),
-			msm_framebuffer_iova(fb, mdp5_kms->id, 2));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_SRC3_ADDR(pipe),
-			msm_framebuffer_iova(fb, mdp5_kms->id, 4));
-
-	plane->fb = fb;
-}
-
-/* Note: mdp5_plane->pipe_lock must be locked */
-static void csc_disable(struct mdp5_kms *mdp5_kms, enum mdp5_pipe pipe)
-{
-	uint32_t value = mdp5_read(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe)) &
-			 ~MDP5_PIPE_OP_MODE_CSC_1_EN;
-
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe), value);
-}
-
-/* Note: mdp5_plane->pipe_lock must be locked */
-static void csc_enable(struct mdp5_kms *mdp5_kms, enum mdp5_pipe pipe,
-		struct csc_cfg *csc)
-{
-	uint32_t  i, mode = 0; /* RGB, no CSC */
-	uint32_t *matrix;
-
-	if (unlikely(!csc))
-		return;
-
-	if ((csc->type == CSC_YUV2RGB) || (CSC_YUV2YUV == csc->type))
-		mode |= MDP5_PIPE_OP_MODE_CSC_SRC_DATA_FORMAT(DATA_FORMAT_YUV);
-	if ((csc->type == CSC_RGB2YUV) || (CSC_YUV2YUV == csc->type))
-		mode |= MDP5_PIPE_OP_MODE_CSC_DST_DATA_FORMAT(DATA_FORMAT_YUV);
-	mode |= MDP5_PIPE_OP_MODE_CSC_1_EN;
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe), mode);
-
-	matrix = csc->matrix;
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_0(pipe),
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_0_COEFF_11(matrix[0]) |
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_0_COEFF_12(matrix[1]));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_1(pipe),
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_1_COEFF_13(matrix[2]) |
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_1_COEFF_21(matrix[3]));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_2(pipe),
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_2_COEFF_22(matrix[4]) |
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_2_COEFF_23(matrix[5]));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_3(pipe),
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_3_COEFF_31(matrix[6]) |
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_3_COEFF_32(matrix[7]));
-	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_4(pipe),
-			MDP5_PIPE_CSC_1_MATRIX_COEFF_4_COEFF_33(matrix[8]));
-
-	for (i = 0; i < ARRAY_SIZE(csc->pre_bias); i++) {
-		uint32_t *pre_clamp = csc->pre_clamp;
-		uint32_t *post_clamp = csc->post_clamp;
-
-		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_PRE_CLAMP(pipe, i),
-			MDP5_PIPE_CSC_1_PRE_CLAMP_REG_HIGH(pre_clamp[2*i+1]) |
-			MDP5_PIPE_CSC_1_PRE_CLAMP_REG_LOW(pre_clamp[2*i]));
-
-		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_POST_CLAMP(pipe, i),
-			MDP5_PIPE_CSC_1_POST_CLAMP_REG_HIGH(post_clamp[2*i+1]) |
-			MDP5_PIPE_CSC_1_POST_CLAMP_REG_LOW(post_clamp[2*i]));
-
-		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_PRE_BIAS(pipe, i),
-			MDP5_PIPE_CSC_1_PRE_BIAS_REG_VALUE(csc->pre_bias[i]));
-
-		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_POST_BIAS(pipe, i),
-			MDP5_PIPE_CSC_1_POST_BIAS_REG_VALUE(csc->post_bias[i]));
-	}
-}
-
-#define PHASE_STEP_SHIFT	21
-#define DOWN_SCALE_RATIO_MAX	32	/* 2^(26-21) */
-
-static int calc_phase_step(uint32_t src, uint32_t dst, uint32_t *out_phase)
-{
-	uint32_t unit;
-
-	if (src == 0 || dst == 0)
-		return -EINVAL;
-
-	/*
-	 * PHASE_STEP_X/Y is coded on 26 bits (25:0),
-	 * where 2^21 represents the unity "1" in fixed-point hardware design.
-	 * This leaves 5 bits for the integer part (downscale case):
-	 *	-> maximum downscale ratio = 0b1_1111 = 31
-	 */
-	if (src > (dst * DOWN_SCALE_RATIO_MAX))
-		return -EOVERFLOW;
-
-	unit = 1 << PHASE_STEP_SHIFT;
-	*out_phase = mult_frac(unit, src, dst);
-
-	return 0;
-}
-
-static int calc_scalex_steps(uint32_t pixel_format, uint32_t src, uint32_t dest,
-		uint32_t phasex_steps[2])
-{
-	uint32_t phasex_step;
-	unsigned int hsub;
-	int ret;
-
-	ret = calc_phase_step(src, dest, &phasex_step);
-	if (ret)
-		return ret;
-
-	hsub = drm_format_horz_chroma_subsampling(pixel_format);
-
-	phasex_steps[0] = phasex_step;
-	phasex_steps[1] = phasex_step / hsub;
-
-	return 0;
-}
-
-static int calc_scaley_steps(uint32_t pixel_format, uint32_t src, uint32_t dest,
-		uint32_t phasey_steps[2])
-{
-	uint32_t phasey_step;
-	unsigned int vsub;
-	int ret;
-
-	ret = calc_phase_step(src, dest, &phasey_step);
-	if (ret)
-		return ret;
-
-	vsub = drm_format_vert_chroma_subsampling(pixel_format);
-
-	phasey_steps[0] = phasey_step;
-	phasey_steps[1] = phasey_step / vsub;
-
-	return 0;
-}
-
-static uint32_t get_scalex_config(uint32_t src, uint32_t dest)
-{
-	uint32_t filter;
-
-	filter = (src <= dest) ? SCALE_FILTER_BIL : SCALE_FILTER_PCMN;
-
-	return  MDP5_PIPE_SCALE_CONFIG_SCALEX_EN |
-		MDP5_PIPE_SCALE_CONFIG_SCALEX_MIN_FILTER(filter) |
-		MDP5_PIPE_SCALE_CONFIG_SCALEX_CR_FILTER(filter)  |
-		MDP5_PIPE_SCALE_CONFIG_SCALEX_MAX_FILTER(filter);
-}
-
-static uint32_t get_scaley_config(uint32_t src, uint32_t dest)
-{
-	uint32_t filter;
-
-	filter = (src <= dest) ? SCALE_FILTER_BIL : SCALE_FILTER_PCMN;
-
-	return  MDP5_PIPE_SCALE_CONFIG_SCALEY_EN |
-		MDP5_PIPE_SCALE_CONFIG_SCALEY_MIN_FILTER(filter) |
-		MDP5_PIPE_SCALE_CONFIG_SCALEY_CR_FILTER(filter)  |
-		MDP5_PIPE_SCALE_CONFIG_SCALEY_MAX_FILTER(filter);
-}
-
-static int mdp5_plane_mode_set(struct drm_plane *plane,
+int mdp5_plane_mode_set(struct drm_plane *plane,
 		struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		int crtc_x, int crtc_y,
 		unsigned int crtc_w, unsigned int crtc_h,
@@ -441,8 +189,6 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 	/* below array -> index 0: comp 0/3 ; index 1: comp 1/2 */
 	uint32_t phasex_step[2] = {0,}, phasey_step[2] = {0,};
 	uint32_t hdecm = 0, vdecm = 0;
-	uint32_t pix_format;
-	unsigned long flags;
 	int ret;
 
 	nplanes = drm_format_num_planes(fb->pixel_format);
@@ -465,7 +211,7 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 			crtc->base.id, crtc_x, crtc_y, crtc_w, crtc_h);
 
 	/* Request some memory from the SMP: */
-	ret = mdp5_smp_request(mdp5_kms->smp,
+	ret = mdp5_smp_request(mdp5_kms->smp_priv,
 			mdp5_plane->pipe, fb->pixel_format, src_w);
 	if (ret)
 		return ret;
@@ -476,7 +222,7 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 	 * would move into atomic->check_plane_state(), while updating the
 	 * hw would remain here:
 	 */
-	mdp5_smp_configure(mdp5_kms->smp, pipe);
+	mdp5_smp_configure(mdp5_kms->smp_priv, pipe);
 
 	/* SCALE is used to both scale and up-sample chroma components */
 
@@ -567,9 +313,8 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 	else
 		csc_disable(mdp5_kms, pipe);
 
-	set_scanout_locked(plane, fb);
-
-	spin_unlock_irqrestore(&mdp5_plane->pipe_lock, flags);
+	/* TODO detach from old crtc (if we had more than one) */
+	mdp5_crtc_attach(crtc, plane);
 
 	return ret;
 }
@@ -577,14 +322,9 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 void mdp5_plane_complete_flip(struct drm_plane *plane)
 {
 	struct mdp5_kms *mdp5_kms = get_kms(plane);
-	struct mdp5_plane *mdp5_plane = to_mdp5_plane(plane);
-	enum mdp5_pipe pipe = mdp5_plane->pipe;
+	enum mdp5_pipe pipe = to_mdp5_plane(plane)->pipe;
 
-	DBG("%s: complete flip", mdp5_plane->name);
-
-	mdp5_smp_commit(mdp5_kms->smp, pipe);
-
-	to_mdp5_plane_state(plane->state)->pending = false;
+	mdp5_smp_commit(mdp5_kms->smp_priv, pipe);
 }
 
 enum mdp5_pipe mdp5_plane_pipe(struct drm_plane *plane)

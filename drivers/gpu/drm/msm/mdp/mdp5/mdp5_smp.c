@@ -108,14 +108,10 @@ static int smp_request_block(struct mdp5_smp *smp,
 		enum mdp5_client_id cid, int nblks)
 {
 	struct mdp5_kms *mdp5_kms = get_kms(smp);
-	const struct mdp5_cfg_hw *hw_cfg;
 	struct mdp5_client_smp_state *ps = &smp->client_state[cid];
 	int i, ret, avail, cur_nblks, cnt = smp->blk_cnt;
-	int reserved;
+	int reserved = mdp5_kms->hw_cfg->smp.reserved[cid];
 	unsigned long flags;
-
-	hw_cfg = mdp5_cfg_get_hw_config(mdp5_kms->cfg);
-	reserved = hw_cfg->smp.reserved[cid];
 
 	spin_lock_irqsave(&smp->state_lock, flags);
 
@@ -175,11 +171,11 @@ static void set_fifo_thresholds(struct mdp5_smp *smp,
  * decimated width.  Ie. SMP buffering sits downstream of decimation (which
  * presumably happens during the dma from scanout buffer).
  */
-int mdp5_smp_request(struct mdp5_smp *smp, enum mdp5_pipe pipe, u32 fmt, u32 width)
+int mdp5_smp_request(void *handler, enum mdp5_pipe pipe, u32 fmt, u32 width)
 {
+	struct mdp5_smp *smp = handler;
 	struct mdp5_kms *mdp5_kms = get_kms(smp);
 	struct drm_device *dev = mdp5_kms->dev;
-	int rev = mdp5_cfg_get_hw_rev(mdp5_kms->cfg);
 	int i, hsub, nplanes, nlines, nblks, ret;
 
 	nplanes = drm_format_num_planes(fmt);
@@ -197,7 +193,7 @@ int mdp5_smp_request(struct mdp5_smp *smp, enum mdp5_pipe pipe, u32 fmt, u32 wid
 		n = DIV_ROUND_UP(fetch_stride * nlines, smp->blk_size);
 
 		/* for hw rev v1.00 */
-		if (rev == 0)
+		if (mdp5_kms->rev == 0)
 			n = roundup_pow_of_two(n);
 
 		DBG("%s[%d]: request %d SMP blocks", pipe2name(pipe), i, n);
@@ -217,8 +213,9 @@ int mdp5_smp_request(struct mdp5_smp *smp, enum mdp5_pipe pipe, u32 fmt, u32 wid
 }
 
 /* Release SMP blocks for all clients of the pipe */
-void mdp5_smp_release(struct mdp5_smp *smp, enum mdp5_pipe pipe)
+void mdp5_smp_release(void *handler, enum mdp5_pipe pipe)
 {
+	struct mdp5_smp *smp = handler;
 	int i, nblks;
 
 	for (i = 0, nblks = 0; i < pipe2nclients(pipe); i++)
@@ -260,8 +257,9 @@ static void update_smp_state(struct mdp5_smp *smp,
 }
 
 /* step #2: configure hw for union(pending, inuse): */
-void mdp5_smp_configure(struct mdp5_smp *smp, enum mdp5_pipe pipe)
+void mdp5_smp_configure(void *handler, enum mdp5_pipe pipe)
 {
+	struct mdp5_smp *smp = handler;
 	int cnt = smp->blk_cnt;
 	mdp5_smp_state_t assigned;
 	int i;
@@ -276,8 +274,9 @@ void mdp5_smp_configure(struct mdp5_smp *smp, enum mdp5_pipe pipe)
 }
 
 /* step #3: after vblank, copy pending -> inuse: */
-void mdp5_smp_commit(struct mdp5_smp *smp, enum mdp5_pipe pipe)
+void mdp5_smp_commit(void *handler, enum mdp5_pipe pipe)
 {
+	struct mdp5_smp *smp = handler;
 	int cnt = smp->blk_cnt;
 	mdp5_smp_state_t released;
 	int i;
@@ -306,12 +305,14 @@ void mdp5_smp_commit(struct mdp5_smp *smp, enum mdp5_pipe pipe)
 	}
 }
 
-void mdp5_smp_destroy(struct mdp5_smp *smp)
+void mdp5_smp_destroy(void *handler)
 {
+	struct mdp5_smp *smp = handler;
+
 	kfree(smp);
 }
 
-struct mdp5_smp *mdp5_smp_init(struct drm_device *dev, const struct mdp5_smp_block *cfg)
+void *mdp5_smp_init(struct drm_device *dev, const struct mdp5_smp_block *cfg)
 {
 	struct mdp5_smp *smp = NULL;
 	int ret;
