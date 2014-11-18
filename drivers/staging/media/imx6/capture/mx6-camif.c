@@ -214,6 +214,36 @@ static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 }
 #endif
 
+static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_timings *timings)
+{
+
+	dev->format.pixelformat = V4L2_PIX_FMT_YUYV;
+	dev->format.width = timings->bt.width;
+	dev->format.height = timings->bt.height;
+	if (timings->bt.interlaced) {
+		dev->format.field = V4L2_FIELD_ALTERNATE;
+		dev->format.height /= 2;
+	} else {
+		dev->format.field = V4L2_FIELD_NONE;
+	}
+	dev->format.colorspace = V4L2_COLORSPACE_REC709;
+	/*
+	 * The YUYV format is four bytes for every two pixels, so bytesperline
+	 * is width * 2.
+	 */
+	dev->format.bytesperline = dev->format.width * 2;
+	dev->format.sizeimage = dev->format.bytesperline * dev->format.height;
+	dev->format.priv = 0;
+	dev->user_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
+
+	/* Update subdev_fmt as well */
+	dev->subdev_fmt.width = dev->format.width;
+	dev->subdev_fmt.height = dev->format.height;
+	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
+	dev->subdev_fmt.code = V4L2_MBUS_FMT_YUYV8_1X16;
+	dev->subdev_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
+}
+
 /*
  * Query sensor and update signal lock status. Returns true if lock
  * status has changed.
@@ -285,6 +315,20 @@ static bool need_ic(struct mx6cam_dev *dev,
 	       dev->preview_on ||
 	       dev->rot_mode != IPU_ROTATE_NONE);
 
+	if (!ret)
+		v4l2_err(&dev->v4l2_dev, "No need for IC\n");
+	else {
+		v4l2_err(&dev->v4l2_dev, "IC needed :\n");
+		v4l2_err(&dev->v4l2_dev, "Crop [%dx%d] -> User [%dx%d]\n",
+					crop->width, crop->height, uf->width, uf->height);
+		if (user_cs != sensor_cs)
+			v4l2_err(&dev->v4l2_dev, "CS: %d != %d\n", user_cs, sensor_cs);
+		if (dev->rot_mode != IPU_ROTATE_NONE)
+			v4l2_err(&dev->v4l2_dev, "Rotation mode is %d\n", dev->rot_mode);
+		if (dev->preview_on)
+			v4l2_err(&dev->v4l2_dev, "Preview is active\n");
+	}
+
 	return ret;
 }
 
@@ -301,12 +345,32 @@ static bool can_use_ic(struct mx6cam_dev *dev,
 		       struct v4l2_pix_format *uf)
 {
 	struct mx6cam_endpoint *ep = dev->ep;
+	int ret;
 
-	return (ep->ep.bus_type == V4L2_MBUS_CSI2 ||
+	ret = (ep->ep.bus_type == V4L2_MBUS_CSI2 ||
 		ep->ep.bus.parallel.bus_width < 16) &&
 		ep->ep.base.id == 0 &&
 		uf->width <= MAX_W_IC &&
 		uf->height <= MAX_H_IC;
+
+	if (!ret) {
+		v4l2_err(&dev->v4l2_dev, "IC can't be used :\n");
+		if (ep->ep.bus_type != V4L2_MBUS_CSI2)
+			v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", ep->ep.bus_type, V4L2_MBUS_CSI2);
+		if (ep->ep.bus.parallel.bus_width >= 16)
+			v4l2_err(&dev->v4l2_dev, "bus width : %d > 16\n", ep->ep.bus.parallel.bus_width);
+		if (ep->ep.base.id != 0)
+			v4l2_err(&dev->v4l2_dev, "base id : %d != 0", ep->ep.base.id);
+		if (uf->width > MAX_W_IC)
+			v4l2_err(&dev->v4l2_dev, "width %d > %d", uf->width, MAX_W_IC);
+		if (uf->height > MAX_H_IC)
+			v4l2_err(&dev->v4l2_dev, "height %d > %d", uf->height, MAX_H_IC);
+	} else {
+		v4l2_err(&dev->v4l2_dev, "IC is usuable\n");
+	}
+
+
+	return ret;
 }
 
 /*
@@ -385,8 +449,12 @@ static void calc_default_crop(struct mx6cam_dev *dev,
 	if (ret) {
 		/* sensor doesn't support .g_crop(), assume sensor frame */
 		rect->top = rect->left = 0;
-		rect->width = sf->width;
-		rect->height = sf->height;
+		if (((sf->width >= MIN_W) && (sf->width <= MAX_W))
+			&& ((sf->height >= MIN_H) && (sf->height <= MAX_H))) {
+			rect->width = sf->width;
+			rect->height = sf->height;
+			v4l2_err(&dev->v4l2_dev, "Sensor does not support cropping, applying [%dx%d]\n", rect->width, rect->height);
+		}
 	} else
 		*rect = crop.c;
 
@@ -418,12 +486,10 @@ static int update_sensor_std(struct mx6cam_dev *dev)
 				&dev->current_std);
 }
 
-static int update_sensor_fmt(struct mx6cam_dev *dev)
+static int update_subdev_fmt(struct mx6cam_dev *dev)
 {
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
 	struct v4l2_subdev_format sd_fmt;
-	int sensor_input;
 	int ret;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
@@ -436,7 +502,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 
 	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS) {
 		ret = v4l2_subdev_call(dev->ep->sd, video, g_mbus_fmt,
-				       &dev->sensor_fmt);
+				       &dev->subdev_fmt);
 		if (ret)
 			return ret;
 
@@ -452,7 +518,7 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 		ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 		if (ret)
 			return ret;
-		dev->sensor_fmt = sd_fmt.format;
+		dev->subdev_fmt = sd_fmt.format;
 	}
 #else
 	/* TODO: This should be dynamic */
@@ -461,18 +527,19 @@ static int update_sensor_fmt(struct mx6cam_dev *dev)
 	ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 	if (ret)
 		return ret;
-	dev->sensor_fmt = sd_fmt.format;
+	dev->subdev_fmt = sd_fmt.format;
 #endif
-
-	dev->sensor_pixfmt = mx6cam_get_format(0, dev->sensor_fmt.code);
-	v4l2_warn(&dev->v4l2_dev, "Format is %s\n", dev->sensor_pixfmt->name);
+	dev->subdev_pixfmt = mx6cam_get_format(0, dev->subdev_fmt.code);
 
 	/* update sensor crop bounds */
 	dev->crop_bounds.top = dev->crop_bounds.left = 0;
-	dev->crop_bounds.width = dev->sensor_fmt.width;
-	dev->crop_bounds.height = dev->sensor_fmt.height;
+	dev->crop_bounds.width = dev->subdev_fmt.width;
+	dev->crop_bounds.height = dev->subdev_fmt.height;
 	dev->crop_defrect = dev->crop_bounds;
 
+	dev->crop.top = 0;
+	dev->crop.width = dev->subdev_fmt.width;
+	dev->crop.height = dev->subdev_fmt.height;
 	/* For the moment, fill mbus_cfg in order to force type
 	 * This should be done in a clean way
 	 */
@@ -593,9 +660,9 @@ static int start_preview(struct mx6cam_dev *dev)
 	if (atomic_read(&dev->status_change)) {
 		update_signal_lock_status(dev);
 		update_sensor_std(dev);
-		update_sensor_fmt(dev);
+		update_subdev_fmt(dev);
 		/* reset active crop window */
-		calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
+		calc_default_crop(dev, &dev->crop, &dev->subdev_fmt);
 		atomic_set(&dev->status_change, 0);
 		v4l2_info(&dev->v4l2_dev, "at preview on: %s, %s\n",
 			  v4l2_norm_to_name(dev->current_std),
@@ -650,9 +717,9 @@ static int set_stream(struct mx6cam_dev *dev, bool on)
 		if (atomic_read(&dev->status_change)) {
 			update_signal_lock_status(dev);
 			update_sensor_std(dev);
-			update_sensor_fmt(dev);
+			update_subdev_fmt(dev);
 			/* reset active crop window */
-			calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
+			calc_default_crop(dev, &dev->crop, &dev->subdev_fmt);
 			atomic_set(&dev->status_change, 0);
 			v4l2_info(&dev->v4l2_dev, "at stream on: %s, %s\n",
 				  v4l2_norm_to_name(dev->current_std),
@@ -661,12 +728,12 @@ static int set_stream(struct mx6cam_dev *dev, bool on)
 		}
 
 		dev->using_ic =
-			(need_ic(dev, &dev->sensor_fmt, &dev->format,
+			(need_ic(dev, &dev->subdev_fmt, &dev->format,
 				 &dev->crop) &&
-			 can_use_ic(dev, &dev->sensor_fmt, &dev->format));
+			 can_use_ic(dev, &dev->subdev_fmt, &dev->format));
 
-		dev->using_vdic = need_vdic(dev, &dev->sensor_fmt) &&
-			can_use_vdic(dev, &dev->sensor_fmt);
+		dev->using_vdic = need_vdic(dev, &dev->subdev_fmt) &&
+			can_use_vdic(dev, &dev->subdev_fmt);
 
 		if (dev->preview_on)
 			stop_preview(dev);
@@ -748,7 +815,7 @@ static int mx6cam_set_rotation(struct mx6cam_dev *dev,
 		}
 
 		if (rot_mode != IPU_ROTATE_NONE &&
-		    !can_use_ic(dev, &dev->sensor_fmt, &dev->format)) {
+		    !can_use_ic(dev, &dev->subdev_fmt, &dev->format)) {
 			v4l2_err(&dev->v4l2_dev,
 				"%s: current format does not allow rotation\n",
 				 __func__);
@@ -783,7 +850,7 @@ static int mx6cam_set_motion(struct mx6cam_dev *dev,
 		}
 
 		if (motion != MOTION_NONE &&
-		    !can_use_vdic(dev, &dev->sensor_fmt)) {
+		    !can_use_vdic(dev, &dev->subdev_fmt)) {
 			v4l2_err(&dev->v4l2_dev,
 				 "sensor format does not allow deinterlace\n");
 			return -EINVAL;
@@ -1083,12 +1150,12 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 		v4l2_err(&dev->v4l2_dev, "%s s_mbus_fmt failed\n", __func__);
 		return ret;
 	}
-	ret = update_sensor_fmt(dev);
+	ret = update_subdev_fmt(dev);
 	if (ret)
 		return ret;
 
 	/* reset active crop window */
-	calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
+	calc_default_crop(dev, &dev->crop, &dev->subdev_fmt);
 
 	return 0;
 }
@@ -1123,7 +1190,7 @@ static int vidioc_enum_framesizes(struct file *file, void *priv,
 	uf = dev->format;
 	uf.pixelformat = fmt->fourcc;
 
-	if (need_ic(dev, &dev->sensor_fmt, &uf, &dev->crop)) {
+	if (need_ic(dev, &dev->subdev_fmt, &uf, &dev->crop)) {
 		fsize->stepwise.max_width = MAX_W_IC;
 		fsize->stepwise.max_height = MAX_H_IC;
 	} else {
@@ -1347,6 +1414,11 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 			if (ret)
 				v4l2_err(&dev->v4l2_dev,
 					 "csi2 power on failed\n");
+			else
+				v4l2_err(&dev->v4l2_dev, "CSI2 is powered\n");
+		} else {
+			if (ep->ep.bus_type != V4L2_MBUS_CSI2)
+				v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", ep->ep.bus_type, V4L2_MBUS_CSI2);
 		}
 	}
 
@@ -1473,7 +1545,7 @@ static int vidioc_s_crop(struct file *file, void *priv,
 	 * width/height to meet new IC resizer restrictions or to
 	 * match the new crop window if the IC can't be used.
 	 */
-	adjust_user_fmt(dev, &dev->sensor_fmt, &dev->format,
+	adjust_user_fmt(dev, &dev->subdev_fmt, &dev->format,
 			&dev->crop);
 
 	return 0;
@@ -1545,7 +1617,7 @@ static int vidioc_overlay(struct file *file, void *priv,
 			return -EBUSY;
 		}
 
-		if (!can_use_ic(dev, &dev->sensor_fmt, &dev->format)) {
+		if (!can_use_ic(dev, &dev->subdev_fmt, &dev->format)) {
 			v4l2_err(&dev->v4l2_dev,
 				 "%s: current format does not allow preview\n",
 				 __func__);
@@ -1609,13 +1681,19 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
 	struct mx6cam_endpoint *ep;
+	int ret;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
 
-	return v4l2_subdev_call(dev->ep->sd,
+	ret = v4l2_subdev_call(dev->ep->sd,
 			video, s_dv_timings, timings);
+
+	dev->dv_timings_cap = *timings;
+	update_format_from_timings(dev, timings);
+	return ret;
+
 }
 
 static int vidioc_query_dv_timings(struct file *file, void *priv_fh,
@@ -1889,14 +1967,18 @@ static int mx6cam_open(struct file *file)
 		if (ret) {
 			v4l2_err(&dev->v4l2_dev, "csi2 power on failed\n");
 			goto sensor_off;
-		}
+		} else
+			v4l2_err(&dev->v4l2_dev, "CSI2 is powered\n");
+	} else {
+		if (dev->ep->ep.bus_type != V4L2_MBUS_CSI2)
+			v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", dev->ep->ep.bus_type, V4L2_MBUS_CSI2);
 	}
 
 	/* update the sensor's current format */
-	update_sensor_fmt(dev);
+	update_subdev_fmt(dev);
 	/* and init crop window if needed */
 	if (!dev->crop.width || !dev->crop.height)
-		calc_default_crop(dev, &dev->crop, &dev->sensor_fmt);
+		calc_default_crop(dev, &dev->crop, &dev->subdev_fmt);
 
 	mutex_unlock(&dev->mutex);
 	return 0;
@@ -2439,6 +2521,12 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	struct mx6cam_dev *camdev =
 		container_of(notifier, struct mx6cam_dev, notifier);
 	struct mx6cam_graph_entity *entity;
+	struct v4l2_dv_timings timings;
+	struct v4l2_subdev_format sd_fmt = {
+		.pad = 1,
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
+	};
 	int ret, i;
 
 	dev_dbg(camdev->dev, "notify complete, all subdevs registered\n");
@@ -2455,8 +2543,20 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	ret = v4l2_device_register_subdev_nodes(&camdev->v4l2_dev);
 	if (ret < 0)
 		dev_err(camdev->dev, "failed to register subdev nodes\n");
+	else {
+		camdev->ep = &camdev->eplist[0];
+/*		ret = v4l2_subdev_call(camdev->ep->sd,
+			video, s_dv_timings, &timings);
+		if (ret < 0)
+			dev_dbg(camdev->dev, "Could not set dv_timings on %s\n", camdev->ep->sd->name);
+		ret = v4l2_subdev_call(camdev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
+		if (ret < 0)
+			dev_dbg(camdev->dev, "Could not set format on %s\n", camdev->ep->sd->name);
 
-	camdev->ep = &camdev->eplist[0];
+		camdev->format.pixelformat = V4L2_PIX_FMT_YUYV;
+		camdev->dv_timings_cap = timings;
+		update_format_from_timings(camdev, &timings);*/
+	}
 	return ret;
 }
 
@@ -2745,14 +2845,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 
 	/* setup some defaults */
 	dev->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	dev->format.pixelformat = MX6CAM_DEF_FORMAT;
-	dev->format.colorspace = V4L2_COLORSPACE_SRGB;
-	dev->format.field = V4L2_FIELD_NONE;
-	dev->format.width = MX6CAM_DEF_WIDTH;
-	dev->format.height = MX6CAM_DEF_HEIGHT;
-	dev->format.bytesperline = (dev->format.width * 12) >> 3;
-	dev->format.sizeimage = dev->format.bytesperline * dev->format.height;
-	dev->user_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
 
 	/* Initialize the buffer queues */
 	vfd->queue = &dev->buffer_queue;
