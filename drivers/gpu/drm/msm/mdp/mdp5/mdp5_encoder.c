@@ -111,6 +111,34 @@ static const struct drm_encoder_funcs mdp5_encoder_funcs = {
 	.destroy = mdp5_encoder_destroy,
 };
 
+static void mdp5_encoder_dpms(struct drm_encoder *encoder, int mode)
+{
+	struct mdp5_encoder *mdp5_encoder = to_mdp5_encoder(encoder);
+	struct mdp5_kms *mdp5_kms = get_kms(encoder);
+	int intf = mdp5_encoder->intf;
+	bool enabled = (mode == DRM_MODE_DPMS_ON);
+	unsigned long flags;
+
+	DBG("mode=%d", mode);
+
+	if (enabled == mdp5_encoder->enabled)
+		return;
+
+	if (enabled) {
+		bs_set(mdp5_encoder, 1);
+		spin_lock_irqsave(&mdp5_encoder->intf_lock, flags);
+		mdp5_write(mdp5_kms, REG_MDP5_INTF_TIMING_ENGINE_EN(intf), 1);
+		spin_unlock_irqrestore(&mdp5_encoder->intf_lock, flags);
+	} else {
+		spin_lock_irqsave(&mdp5_encoder->intf_lock, flags);
+		mdp5_write(mdp5_kms, REG_MDP5_INTF_TIMING_ENGINE_EN(intf), 0);
+		spin_unlock_irqrestore(&mdp5_encoder->intf_lock, flags);
+		bs_set(mdp5_encoder, 0);
+	}
+
+	mdp5_encoder->enabled = enabled;
+}
+
 static bool mdp5_encoder_mode_fixup(struct drm_encoder *encoder,
 		const struct drm_display_mode *mode,
 		struct drm_display_mode *adjusted_mode)

@@ -28,7 +28,6 @@ static const char *iommu_ports[] = {
 static int mdp5_hw_init(struct msm_kms *kms)
 {
 	struct mdp5_kms *mdp5_kms = to_mdp5_kms(to_mdp_kms(kms));
-	const struct mdp5_cfg_hw *hw_cfg;
 	struct drm_device *dev = mdp5_kms->dev;
 	unsigned long flags;
 
@@ -62,10 +61,7 @@ static int mdp5_hw_init(struct msm_kms *kms)
 	mdp5_write(mdp5_kms, REG_MDP5_DISP_INTF_SEL, 0);
 	spin_unlock_irqrestore(&mdp5_kms->resource_lock, flags);
 
-	hw_cfg = mdp5_cfg_get_hw_config(mdp5_kms->cfg_priv);
-
-	for (i = 0; i < hw_cfg->ctl.count; i++)
-		mdp5_write(mdp5_kms, REG_MDP5_CTL_OP(i), 0);
+	mdp5_ctlm_hw_reset(mdp5_kms->ctl_priv);
 
 	pm_runtime_put_sync(dev->dev);
 
@@ -106,6 +102,7 @@ static void mdp5_destroy(struct msm_kms *kms)
 	struct msm_mmu *mmu = mdp5_kms->mmu;
 	void *smp = mdp5_kms->smp_priv;
 	void *cfg = mdp5_kms->cfg_priv;
+	void *ctl = mdp5_kms->ctl_priv;
 
 	mdp5_irq_domain_fini(mdp5_kms);
 
@@ -113,7 +110,8 @@ static void mdp5_destroy(struct msm_kms *kms)
 		mmu->funcs->detach(mmu, iommu_ports, ARRAY_SIZE(iommu_ports));
 		mmu->funcs->destroy(mmu);
 	}
-
+	if (ctl)
+		mdp5_ctlm_destroy(ctl);
 	if (smp)
 		mdp5_smp_destroy(smp);
 	if (cfg)
@@ -188,7 +186,7 @@ static int modeset_init(struct mdp5_kms *mdp5_kms)
 	if (ret)
 		goto fail;
 
-	/* construct CRTCs: */
+	/* construct CRTCs and their private planes: */
 	for (i = 0; i < hw_cfg->pipe_rgb.count; i++) {
 		struct drm_plane *plane;
 		struct drm_crtc *crtc;
@@ -393,6 +391,13 @@ struct msm_kms *mdp5_kms_init(struct drm_device *dev)
 		goto fail;
 	}
 	mdp5_kms->smp_priv = priv;
+
+	priv = mdp5_ctlm_init(dev, mdp5_kms->mmio, config->hw);
+	if (IS_ERR(priv)) {
+		ret = PTR_ERR(priv);
+		goto fail;
+	}
+	mdp5_kms->ctl_priv = priv;
 
 	/* make sure things are off before attaching iommu (bootloader could
 	 * have left things on, in which case we'll start getting faults if
