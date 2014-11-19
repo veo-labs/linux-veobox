@@ -255,6 +255,7 @@ struct svc_rqst {
 	u32			rq_prot;	/* IP protocol */
 #define	RQ_SECURE	(0)			/* secure port */
 #define	RQ_LOCAL	(1)			/* local request */
+#define	RQ_USEDEFERRAL	(2)			/* use deferral */
 	unsigned long		rq_flags;	/* flags field */
 
 	void *			rq_argp;	/* decoded arguments */
