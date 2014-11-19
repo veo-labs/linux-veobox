@@ -591,14 +591,10 @@ static int i915_drm_suspend(struct drm_device *dev)
 
 		intel_dp_mst_suspend(dev);
 
-		flush_delayed_work(&dev_priv->rps.delayed_resume_work);
-
 		intel_runtime_pm_disable_interrupts(dev_priv);
 		intel_hpd_cancel_work(dev_priv);
 
 		intel_suspend_encoders(dev_priv);
-
-		intel_suspend_gt_powersave(dev);
 
 		intel_suspend_hw(dev);
 	}
@@ -1390,9 +1386,8 @@ static int intel_runtime_suspend(struct device *device)
 	i915_gem_release_all_mmaps(dev_priv);
 	mutex_unlock(&dev->struct_mutex);
 
-	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
-	intel_runtime_pm_disable_interrupts(dev_priv);
 	intel_suspend_gt_powersave(dev);
+	intel_runtime_pm_disable_interrupts(dev_priv);
 
 	ret = intel_suspend_complete(dev_priv);
 	if (ret) {
