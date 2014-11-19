@@ -4813,9 +4813,8 @@ void intel_update_watermarks(struct drm_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = crtc->dev->dev_private;
 
-	if (dev_priv->display.update_wm)
-		dev_priv->display.update_wm(crtc);
-}
+	dev_priv->rps.power = HIGH_POWER; /* force a reset */
+	gen6_set_rps(dev_priv->dev, dev_priv->rps.min_freq_softlimit);
 
 	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
 }
