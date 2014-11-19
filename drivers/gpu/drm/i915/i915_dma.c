@@ -50,59 +50,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/oom.h>
 
-static int i915_dma_init(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_flush_ioctl(struct drm_device *dev, void *data,
-			    struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_batchbuffer(struct drm_device *dev, void *data,
-			    struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_cmdbuffer(struct drm_device *dev, void *data,
-			  struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_irq_emit(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_irq_wait(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_vblank_pipe_get(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_vblank_swap(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
-
-static int i915_flip_bufs(struct drm_device *dev, void *data,
-			  struct drm_file *file_priv)
-{
-	return -ENODEV;
-}
 
 static int i915_getparam(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
@@ -242,12 +189,6 @@ static int i915_setparam(struct drm_device *dev, void *data,
 	}
 
 	return 0;
-}
-
-static int i915_set_status_page(struct drm_device *dev, void *data,
-				struct drm_file *file_priv)
-{
-	return -ENODEV;
 }
 
 static int i915_get_bridge_dev(struct drm_device *dev)
@@ -1133,7 +1074,7 @@ const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_GET_VBLANK_PIPE,  drm_noop, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_VBLANK_SWAP, drm_noop, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(I915_HWS_ADDR, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
-	DRM_IOCTL_DEF_DRV(I915_GEM_INIT, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(I915_GEM_INIT, i915_gem_init_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_GEM_EXECBUFFER, i915_gem_execbuffer, DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(I915_GEM_EXECBUFFER2, i915_gem_execbuffer2, DRM_AUTH|DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_GEM_PIN, i915_gem_reject_pin_ioctl, DRM_AUTH|DRM_ROOT_ONLY|DRM_UNLOCKED),
