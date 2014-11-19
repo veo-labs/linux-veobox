@@ -606,6 +606,7 @@ void radeon_semaphore_free(struct radeon_device *rdev,
 struct radeon_sync {
 	struct radeon_semaphore *semaphores[RADEON_NUM_SYNCS];
 	struct radeon_fence	*sync_to[RADEON_NUM_RINGS];
+	struct radeon_fence	*last_vm_update;
 };
 
 void radeon_sync_create(struct radeon_sync *sync);
@@ -947,8 +948,13 @@ struct radeon_vm {
 
 	struct radeon_bo_va	*ib_bo_va;
 
-	/* for id and flush management per ring */
-	struct radeon_vm_id	ids[RADEON_NUM_RINGS];
+	struct mutex			mutex;
+	/* last fence for cs using this vm */
+	struct radeon_fence		*fence;
+	/* last flushed PD/PT update */
+	struct radeon_fence		*flushed_updates;
+	/* last use of vmid */
+	struct radeon_fence		*last_id_use;
 };
 
 struct radeon_vm_manager {
