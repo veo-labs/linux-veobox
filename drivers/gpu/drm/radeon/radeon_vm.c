@@ -424,7 +424,6 @@ static int radeon_vm_clear_bo(struct radeon_device *rdev,
 	if (r)
 		goto error_free;
 
-	ib.fence->is_vm_update = true;
 	radeon_bo_fence(bo, ib.fence, false);
 
 error_free:
@@ -704,8 +703,10 @@ int radeon_vm_update_page_directory(struct radeon_device *rdev,
 			radeon_ib_free(rdev, &ib);
 			return r;
 		}
-		ib.fence->is_vm_update = true;
 		radeon_bo_fence(pd, ib.fence, false);
+		radeon_fence_unref(&vm->fence);
+		vm->fence = radeon_fence_ref(ib.fence);
+		radeon_fence_unref(&vm->last_flush);
 	}
 	radeon_ib_free(rdev, &ib);
 
@@ -889,6 +890,31 @@ static void radeon_vm_fence_pts(struct radeon_vm *vm,
 }
 
 /**
+ * radeon_vm_fence_pts - fence page tables after an update
+ *
+ * @vm: requested vm
+ * @start: start of GPU address range
+ * @end: end of GPU address range
+ * @fence: fence to use
+ *
+ * Fence the page tables in the range @start - @end (cayman+).
+ *
+ * Global and local mutex must be locked!
+ */
+static void radeon_vm_fence_pts(struct radeon_vm *vm,
+				uint64_t start, uint64_t end,
+				struct radeon_fence *fence)
+{
+	unsigned i;
+
+	start >>= radeon_vm_block_size;
+	end >>= radeon_vm_block_size;
+
+	for (i = start; i <= end; ++i)
+		radeon_bo_fence(vm->page_tables[i].bo, fence, false);
+}
+
+/**
  * radeon_vm_bo_update - map a bo into the vm page table
  *
  * @rdev: radeon_device pointer
@@ -1012,10 +1038,9 @@ int radeon_vm_bo_update(struct radeon_device *rdev,
 		radeon_ib_free(rdev, &ib);
 		return r;
 	}
-	ib.fence->is_vm_update = true;
 	radeon_vm_fence_pts(vm, bo_va->it.start, bo_va->it.last + 1, ib.fence);
-	radeon_fence_unref(&bo_va->last_pt_update);
-	bo_va->last_pt_update = radeon_fence_ref(ib.fence);
+	radeon_fence_unref(&vm->fence);
+	vm->fence = radeon_fence_ref(ib.fence);
 	radeon_ib_free(rdev, &ib);
 
 	return 0;
