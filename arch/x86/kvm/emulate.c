@@ -691,10 +691,9 @@ static __always_inline int __linearize(struct x86_emulate_ctxt *ctxt,
 		*max_size = min_t(u64, ~0u, (u64)lim + 1 - addr.ea);
 		if (size > *max_size)
 			goto bad;
+		la &= (u32)-1;
 		break;
 	}
-	if (ctxt->mode != X86EMUL_MODE_PROT64)
-		la &= (u32)-1;
 	if (insn_aligned(ctxt, size) && ((la & (size - 1)) != 0))
 		return emulate_gp(ctxt, 0);
 	*linear = la;
