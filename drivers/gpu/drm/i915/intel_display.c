@@ -5051,6 +5051,8 @@ static void valleyview_modeset_global_resources(struct drm_device *dev)
 			cherryview_set_cdclk(dev, req_cdclk);
 		else
 			valleyview_set_cdclk(dev, req_cdclk);
+
+		intel_display_power_put(dev_priv, POWER_DOMAIN_PIPE_A);
 	}
 }
 
