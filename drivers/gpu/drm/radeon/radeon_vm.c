@@ -697,7 +697,7 @@ int radeon_vm_update_page_directory(struct radeon_device *rdev,
 	if (ib.length_dw != 0) {
 		radeon_asic_vm_pad_ib(rdev, &ib);
 
-		radeon_semaphore_sync_resv(rdev, ib.semaphore, pd->tbo.resv, false);
+		radeon_sync_resv(rdev, &ib.sync, pd->tbo.resv, false);
 		WARN_ON(ib.length_dw > ndw);
 		r = radeon_ib_schedule(rdev, &ib, NULL, false);
 		if (r) {
@@ -825,10 +825,7 @@ static int radeon_vm_update_ptes(struct radeon_device *rdev,
 		uint64_t pte;
 		int r;
 
-		radeon_sync_resv(rdev, &ib->sync, pt->tbo.resv, true);
-		r = reservation_object_reserve_shared(pt->tbo.resv);
-		if (r)
-			return r;
+		radeon_sync_resv(rdev, &ib->sync, pt->tbo.resv, false);
 
 		if ((addr & ~mask) == (end & ~mask))
 			nptes = end - addr;

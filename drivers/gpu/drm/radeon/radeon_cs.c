@@ -240,7 +240,8 @@ static int radeon_cs_sync_rings(struct radeon_cs_parser *p)
 
 		resv = reloc->robj->tbo.resv;
 		r = radeon_sync_resv(p->rdev, &p->ib.sync, resv,
-				     reloc->tv.shared);
+				     p->relocs[i].tv.shared);
+
 		if (r)
 			return r;
 	}
@@ -264,10 +265,10 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	p->idx = 0;
 	p->ib.sa_bo = NULL;
 	p->const_ib.sa_bo = NULL;
-	p->chunk_ib = NULL;
-	p->chunk_relocs = NULL;
-	p->chunk_flags = NULL;
-	p->chunk_const_ib = NULL;
+	p->chunk_ib_idx = -1;
+	p->chunk_relocs_idx = -1;
+	p->chunk_flags_idx = -1;
+	p->chunk_const_ib_idx = -1;
 	p->chunks_array = kcalloc(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
 	if (p->chunks_array == NULL) {
 		return -ENOMEM;
@@ -557,6 +558,7 @@ static int radeon_cs_ib_vm_chunk(struct radeon_device *rdev,
 			DRM_ERROR("Failed to sync rings: %i\n", r);
 		goto out;
 	}
+	radeon_sync_fence(&parser->ib.sync, vm->fence);
 
 	if ((rdev->family >= CHIP_TAHITI) &&
 	    (parser->chunk_const_ib != NULL)) {

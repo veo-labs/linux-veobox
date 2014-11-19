@@ -606,7 +606,6 @@ void radeon_semaphore_free(struct radeon_device *rdev,
 struct radeon_sync {
 	struct radeon_semaphore *semaphores[RADEON_NUM_SYNCS];
 	struct radeon_fence	*sync_to[RADEON_NUM_RINGS];
-	struct radeon_fence	*last_vm_update;
 };
 
 void radeon_sync_create(struct radeon_sync *sync);
