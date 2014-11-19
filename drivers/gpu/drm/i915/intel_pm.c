@@ -4448,11 +4448,8 @@ static void gen6_disable_rps(struct drm_device *dev)
 {
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 
-	skl_compute_wm_pipe_parameters(crtc, params);
-	skl_allocate_pipe_ddb(crtc, config, params, ddb);
-	skl_compute_pipe_wm(crtc, ddb, params, pipe_wm);
-
-	gen6_disable_rps_interrupts(dev);
+	I915_WRITE(GEN6_RC_CONTROL, 0);
+	I915_WRITE(GEN6_RPNSWREQ, 1 << 31);
 }
 
 static void skl_update_other_pipe_wm(struct drm_device *dev,
@@ -4508,23 +4505,7 @@ static void skl_update_wm(struct drm_crtc *crtc)
 	struct skl_pipe_wm pipe_wm = {};
 	struct intel_wm_config config = {};
 
-	memset(results, 0, sizeof(*results));
-
-	skl_compute_wm_global_parameters(dev, &config);
-
-	if (!skl_update_pipe_wm(crtc, &params, &config,
-				&results->ddb, &pipe_wm))
-		return;
-
-	skl_compute_wm_results(dev, &params, &pipe_wm, results, intel_crtc);
-	results->dirty[intel_crtc->pipe] = true;
-
-	skl_update_other_pipe_wm(dev, crtc, &config, results);
-	skl_write_wm_values(dev_priv, results);
-	skl_flush_wm_values(dev_priv, results);
-
-	/* store the new configuration */
-	dev_priv->wm.skl_hw = *results;
+	I915_WRITE(GEN6_RC_CONTROL, 0);
 }
 
 static void
@@ -4560,33 +4541,7 @@ static void ilk_update_wm(struct drm_crtc *crtc)
 
 	intel_compute_pipe_wm(crtc, &params, &pipe_wm);
 
-	if (!memcmp(&intel_crtc->wm.active, &pipe_wm, sizeof(pipe_wm)))
-		return;
-
-	intel_crtc->wm.active = pipe_wm;
-
-	ilk_compute_wm_config(dev, &config);
-
-	ilk_compute_wm_maximums(dev, 1, &config, INTEL_DDB_PART_1_2, &max);
-	ilk_wm_merge(dev, &config, &max, &lp_wm_1_2);
-
-	/* 5/6 split only in single pipe config on IVB+ */
-	if (INTEL_INFO(dev)->gen >= 7 &&
-	    config.num_pipes_active == 1 && config.sprites_enabled) {
-		ilk_compute_wm_maximums(dev, 1, &config, INTEL_DDB_PART_5_6, &max);
-		ilk_wm_merge(dev, &config, &max, &lp_wm_5_6);
-
-		best_lp_wm = ilk_find_best_result(dev, &lp_wm_1_2, &lp_wm_5_6);
-	} else {
-		best_lp_wm = &lp_wm_1_2;
-	}
-
-	partitioning = (best_lp_wm == &lp_wm_1_2) ?
-		       INTEL_DDB_PART_1_2 : INTEL_DDB_PART_5_6;
-
-	ilk_compute_wm_results(dev, best_lp_wm, partitioning, &results);
-
-	ilk_write_wm_values(dev_priv, &results);
+	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
 }
 
 static void
@@ -6319,10 +6274,34 @@ void ironlake_teardown_rc6(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
-	if (dev_priv->ips.renderctx) {
-		i915_gem_object_ggtt_unpin(dev_priv->ips.renderctx);
-		drm_gem_object_unreference(&dev_priv->ips.renderctx->base);
-		dev_priv->ips.renderctx = NULL;
+	/* Interrupts should be disabled already to avoid re-arming. */
+	WARN_ON(intel_irqs_enabled(dev_priv));
+
+	if (IS_IRONLAKE_M(dev)) {
+		ironlake_disable_drps(dev);
+		ironlake_disable_rc6(dev);
+	} else if (INTEL_INFO(dev)->gen >= 6) {
+		intel_suspend_gt_powersave(dev);
+
+		mutex_lock(&dev_priv->rps.hw_lock);
+		if (INTEL_INFO(dev)->gen >= 9)
+			gen9_disable_rps(dev);
+		else if (IS_CHERRYVIEW(dev))
+			cherryview_disable_rps(dev);
+		else if (IS_VALLEYVIEW(dev))
+			valleyview_disable_rps(dev);
+		else
+			gen6_disable_rps(dev);
+
+		/*
+		 * TODO: disable RPS interrupts on GEN9+ too once RPS support
+		 * is added for it.
+		 */
+		if (INTEL_INFO(dev)->gen < 9)
+			gen6_disable_rps_interrupts(dev);
+
+		dev_priv->rps.enabled = false;
+		mutex_unlock(&dev_priv->rps.hw_lock);
 	}
 
 	if (dev_priv->ips.pwrctx) {
