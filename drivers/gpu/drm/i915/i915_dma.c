@@ -60,10 +60,9 @@ static int i915_getparam(struct drm_device *dev, void *data,
 
 	switch (param->param) {
 	case I915_PARAM_IRQ_ACTIVE:
-		return -ENODEV;
 	case I915_PARAM_ALLOW_BATCHBUFFER:
-		return -ENODEV;
 	case I915_PARAM_LAST_DISPATCH:
+		/* Reject all old ums/dri params. */
 		return -ENODEV;
 	case I915_PARAM_CHIPSET_ID:
 		value = dev->pdev->device;
@@ -173,6 +172,7 @@ static int i915_setparam(struct drm_device *dev, void *data,
 	case I915_SETPARAM_USE_MI_BATCHBUFFER_START:
 	case I915_SETPARAM_TEX_LRU_LOG_GRANULARITY:
 	case I915_SETPARAM_ALLOW_BATCHBUFFER:
+		/* Reject all old ums/dri params. */
 		return -ENODEV;
 
 	case I915_SETPARAM_NUM_USED_FENCES:
