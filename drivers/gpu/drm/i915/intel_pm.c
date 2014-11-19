@@ -4771,12 +4771,7 @@ void intel_update_watermarks(struct drm_crtc *crtc)
 		dev_priv->display.update_wm(crtc);
 }
 
-	gen6_enable_rps_interrupts(dev);
-
-	if (dev_priv->display.update_sprite_wm)
-		dev_priv->display.update_sprite_wm(plane, crtc,
-						   sprite_width, sprite_height,
-						   pixel_size, enabled, scaled);
+	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
 }
 
 static struct drm_i915_gem_object *
@@ -4863,11 +4858,19 @@ static void ironlake_enable_drps(struct drm_device *dev)
 	I915_WRITE(RCUPEI, 100000);
 	I915_WRITE(RCDNEI, 100000);
 
-	/* Set max/min thresholds to 90ms and 80ms respectively */
-	I915_WRITE(RCBMAXAVG, 90000);
-	I915_WRITE(RCBMINAVG, 80000);
-
-	I915_WRITE(MEMIHYST, 1);
+	rc6vids = 0;
+	ret = sandybridge_pcode_read(dev_priv, GEN6_PCODE_READ_RC6VIDS, &rc6vids);
+	if (IS_GEN6(dev) && ret) {
+		DRM_DEBUG_DRIVER("Couldn't check for BIOS workaround\n");
+	} else if (IS_GEN6(dev) && (GEN6_DECODE_RC6_VID(rc6vids & 0xff) < 450)) {
+		DRM_DEBUG_DRIVER("You should update your BIOS. Correcting minimum rc6 voltage (%dmV->%dmV)\n",
+			  GEN6_DECODE_RC6_VID(rc6vids & 0xff), 450);
+		rc6vids &= 0xffff00;
+		rc6vids |= GEN6_ENCODE_RC6_VID(450);
+		ret = sandybridge_pcode_write(dev_priv, GEN6_PCODE_WRITE_RC6VIDS, rc6vids);
+		if (ret)
+			DRM_ERROR("Couldn't fix incorrect rc6 voltage\n");
+	}
 
 	/* Set up min, max, and cur for interrupt handling */
 	fmax = (rgvmodectl & MEMMODE_FMAX_MASK) >> MEMMODE_FMAX_SHIFT;
@@ -5457,12 +5460,7 @@ static void gen9_enable_rc6(struct drm_device *dev)
 	I915_WRITE(GEN6_RC_SLEEP, 0);
 	I915_WRITE(GEN6_RC6_THRESHOLD, 37500); /* 37.5/125ms per EI */
 
-	gen6_enable_rps_interrupts(dev);
-
-	/* 3b: Enable Coarse Power Gating only when RC6 is enabled */
-	I915_WRITE(GEN9_PG_ENABLE, (rc6_mask & GEN6_RC_CTL_RC6_ENABLE) ? 3 : 0);
-
-	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
+	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
 
 }
 
@@ -5641,21 +5639,7 @@ static void gen6_enable_rps(struct drm_device *dev)
 	dev_priv->rps.power = HIGH_POWER; /* force a reset */
 	gen6_set_rps(dev_priv->dev, dev_priv->rps.min_freq_softlimit);
 
-	rc6vids = 0;
-	ret = sandybridge_pcode_read(dev_priv, GEN6_PCODE_READ_RC6VIDS, &rc6vids);
-	if (IS_GEN6(dev) && ret) {
-		DRM_DEBUG_DRIVER("Couldn't check for BIOS workaround\n");
-	} else if (IS_GEN6(dev) && (GEN6_DECODE_RC6_VID(rc6vids & 0xff) < 450)) {
-		DRM_DEBUG_DRIVER("You should update your BIOS. Correcting minimum rc6 voltage (%dmV->%dmV)\n",
-			  GEN6_DECODE_RC6_VID(rc6vids & 0xff), 450);
-		rc6vids &= 0xffff00;
-		rc6vids |= GEN6_ENCODE_RC6_VID(450);
-		ret = sandybridge_pcode_write(dev_priv, GEN6_PCODE_WRITE_RC6VIDS, rc6vids);
-		if (ret)
-			DRM_ERROR("Couldn't fix incorrect rc6 voltage\n");
-	}
-
-	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
+	gen6_gt_force_wake_put(dev_priv, FORCEWAKE_ALL);
 }
 
 static void __gen6_update_ring_freq(struct drm_device *dev)
@@ -6304,11 +6288,36 @@ void ironlake_teardown_rc6(struct drm_device *dev)
 		mutex_unlock(&dev_priv->rps.hw_lock);
 	}
 
-	if (dev_priv->ips.pwrctx) {
-		i915_gem_object_ggtt_unpin(dev_priv->ips.pwrctx);
-		drm_gem_object_unreference(&dev_priv->ips.pwrctx->base);
-		dev_priv->ips.pwrctx = NULL;
+	mutex_lock(&dev_priv->rps.hw_lock);
+
+	/*
+	 * TODO: reset/enable RPS interrupts on GEN9+ too, once RPS support is
+	 * added for it.
+	 */
+	if (INTEL_INFO(dev)->gen < 9)
+		gen6_reset_rps_interrupts(dev);
+
+	if (IS_CHERRYVIEW(dev)) {
+		cherryview_enable_rps(dev);
+	} else if (IS_VALLEYVIEW(dev)) {
+		valleyview_enable_rps(dev);
+	} else if (INTEL_INFO(dev)->gen >= 9) {
+		gen9_enable_rps(dev);
+	} else if (IS_BROADWELL(dev)) {
+		gen8_enable_rps(dev);
+		__gen6_update_ring_freq(dev);
+	} else {
+		gen6_enable_rps(dev);
+		__gen6_update_ring_freq(dev);
 	}
+	dev_priv->rps.enabled = true;
+
+	if (INTEL_INFO(dev)->gen < 9)
+		gen6_enable_rps_interrupts(dev);
+
+	mutex_unlock(&dev_priv->rps.hw_lock);
+
+	intel_runtime_pm_put(dev_priv);
 }
 
 static void ironlake_disable_rc6(struct drm_device *dev)
