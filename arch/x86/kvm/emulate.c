@@ -651,8 +651,7 @@ static __always_inline int __linearize(struct x86_emulate_ctxt *ctxt,
 	u32 lim;
 	u16 sel;
 
-	la = seg_base(ctxt, addr.seg) +
-	    (fetch || ctxt->ad_bytes == 8 ? addr.ea : (u32)addr.ea);
+	la = seg_base(ctxt, addr.seg) + addr.ea;
 	*max_size = 0;
 	switch (mode) {
 	case X86EMUL_MODE_PROT64:
