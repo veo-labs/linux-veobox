@@ -512,16 +512,20 @@ void svc_wake_up(struct svc_serv *serv)
 
 	pool = &serv->sv_pools[0];
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(rqstp, &pool->sp_all_threads, rq_all) {
-		/* skip any that aren't queued */
-		if (test_bit(RQ_BUSY, &rqstp->rq_flags))
-			continue;
-		rcu_read_unlock();
-		dprintk("svc: daemon %p woken up.\n", rqstp);
-		wake_up_process(rqstp->rq_task);
-		trace_svc_wake_up(rqstp->rq_task->pid);
-		return;
+		spin_lock_bh(&pool->sp_lock);
+		if (!list_empty(&pool->sp_threads)) {
+			rqstp = list_entry(pool->sp_threads.next,
+					   struct svc_rqst,
+					   rq_list);
+			dprintk("svc: daemon %p woken up.\n", rqstp);
+			/*
+			svc_thread_dequeue(pool, rqstp);
+			rqstp->rq_xprt = NULL;
+			 */
+			wake_up_process(rqstp->rq_task);
+		} else
+			set_bit(SP_TASK_PENDING, &pool->sp_flags);
+		spin_unlock_bh(&pool->sp_lock);
 	}
 	rcu_read_unlock();
 
@@ -687,8 +691,16 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 		 */
 		rqstp->rq_chandle.thread_wait = 1*HZ;
 		clear_bit(SP_TASK_PENDING, &pool->sp_flags);
-		return xprt;
-	}
+	} else {
+		if (test_and_clear_bit(SP_TASK_PENDING, &pool->sp_flags)) {
+			xprt = ERR_PTR(-EAGAIN);
+			goto out;
+		}
+		/*
+		 * We have to be able to interrupt this wait
+		 * to bring down the daemons ...
+		 */
+		set_current_state(TASK_INTERRUPTIBLE);
 
 	/*
 	 * We have to be able to interrupt this wait
