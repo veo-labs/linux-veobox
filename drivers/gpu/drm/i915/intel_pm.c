@@ -4631,6 +4631,52 @@ static void parse_rp_state_cap(struct drm_i915_private *dev_priv, u32 rp_state_c
 
 	active->pipe_enabled = intel_crtc_active(crtc);
 
+int intel_enable_rc6(const struct drm_device *dev)
+{
+	return i915.enable_rc6;
+}
+
+static void gen6_init_rps_frequencies(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	uint32_t rp_state_cap;
+	u32 ddcc_status = 0;
+	int ret;
+
+	rp_state_cap = I915_READ(GEN6_RP_STATE_CAP);
+	/* All of these values are in units of 50MHz */
+	dev_priv->rps.cur_freq		= 0;
+	/* static values from HW: RP0 > RP1 > RPn (min_freq) */
+	dev_priv->rps.rp0_freq		= (rp_state_cap >>  0) & 0xff;
+	dev_priv->rps.rp1_freq		= (rp_state_cap >>  8) & 0xff;
+	dev_priv->rps.min_freq		= (rp_state_cap >> 16) & 0xff;
+	/* hw_max = RP0 until we check for overclocking */
+	dev_priv->rps.max_freq		= dev_priv->rps.rp0_freq;
+
+	dev_priv->rps.efficient_freq = dev_priv->rps.rp1_freq;
+	if (IS_HASWELL(dev) || IS_BROADWELL(dev)) {
+		ret = sandybridge_pcode_read(dev_priv,
+					HSW_PCODE_DYNAMIC_DUTY_CYCLE_CONTROL,
+					&ddcc_status);
+		if (0 == ret)
+			dev_priv->rps.efficient_freq =
+				(ddcc_status >> 8) & 0xff;
+	}
+
+	/* Preserve min/max settings in case of re-init */
+	if (dev_priv->rps.max_freq_softlimit == 0)
+		dev_priv->rps.max_freq_softlimit = dev_priv->rps.max_freq;
+
+	if (dev_priv->rps.min_freq_softlimit == 0) {
+		if (IS_HASWELL(dev) || IS_BROADWELL(dev))
+			dev_priv->rps.min_freq_softlimit =
+				dev_priv->rps.efficient_freq;
+		else
+			dev_priv->rps.min_freq_softlimit =
+				dev_priv->rps.min_freq;
+	}
+}
+
 static void gen9_enable_rps(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -4674,22 +4720,21 @@ static void gen8_enable_rps(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_engine_cs *ring;
-	uint32_t rc6_mask = 0, rp_state_cap;
+	uint32_t rc6_mask = 0;
 	int unused;
 
-		/*
-		 * For active pipes LP0 watermark is marked as
-		 * enabled, and LP1+ watermaks as disabled since
-		 * we can't really reverse compute them in case
-		 * multiple pipes are active.
-		 */
-		active->wm[0].enable = true;
-		active->wm[0].pri_val = (tmp & WM0_PIPE_PLANE_MASK) >> WM0_PIPE_PLANE_SHIFT;
-		active->wm[0].spr_val = (tmp & WM0_PIPE_SPRITE_MASK) >> WM0_PIPE_SPRITE_SHIFT;
-		active->wm[0].cur_val = tmp & WM0_PIPE_CURSOR_MASK;
-		active->linetime = hw->wm_linetime[pipe];
-	} else {
-		int level, max_level = ilk_wm_max_level(dev);
+	/* 1a: Software RC state - RC0 */
+	I915_WRITE(GEN6_RC_STATE, 0);
+
+	/* 1c & 1d: Get forcewake during program sequence. Although the driver
+	 * hasn't enabled a state yet where we need forcewake, BIOS may have.*/
+	gen6_gt_force_wake_get(dev_priv, FORCEWAKE_ALL);
+
+	/* 2a: Disable RC states. */
+	I915_WRITE(GEN6_RC_CONTROL, 0);
+
+	/* Initialize rps frequencies */
+	gen6_init_rps_frequencies(dev);
 
 		/*
 		 * For inactive pipes, all watermark levels
@@ -4777,8 +4822,14 @@ void intel_update_watermarks(struct drm_crtc *crtc)
 static struct drm_i915_gem_object *
 intel_alloc_context_page(struct drm_device *dev)
 {
-	struct drm_i915_gem_object *ctx;
-	int ret;
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_engine_cs *ring;
+	u32 rc6vids, pcu_mbox = 0, rc6_mask = 0;
+	u32 gtfifodbg;
+	int rc6_mode;
+	int i, ret;
+
+	WARN_ON(!mutex_is_locked(&dev_priv->rps.hw_lock));
 
 	WARN_ON(!mutex_is_locked(&dev->struct_mutex));
 
@@ -4788,17 +4839,10 @@ intel_alloc_context_page(struct drm_device *dev)
 		return NULL;
 	}
 
-	ret = i915_gem_obj_ggtt_pin(ctx, 4096, 0);
-	if (ret) {
-		DRM_ERROR("failed to pin power context: %d\n", ret);
-		goto err_unref;
-	}
+	gen6_gt_force_wake_get(dev_priv, FORCEWAKE_ALL);
 
-	ret = i915_gem_object_set_to_gtt_domain(ctx, 1);
-	if (ret) {
-		DRM_ERROR("failed to set-domain on power context: %d\n", ret);
-		goto err_unpin;
-	}
+	/* Initialize rps frequencies */
+	gen6_init_rps_frequencies(dev);
 
 	return ctx;
 
