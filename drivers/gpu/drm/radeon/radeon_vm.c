@@ -819,7 +819,7 @@ static int radeon_vm_update_ptes(struct radeon_device *rdev,
 		uint64_t pte;
 		int r;
 
-		radeon_sync_resv(rdev, &ib->sync, pt->tbo.resv, false);
+		radeon_sync_resv(rdev, &ib->sync, pt->tbo.resv, true);
 
 		if ((addr & ~mask) == (end & ~mask))
 			nptes = end - addr;
@@ -1015,13 +1015,9 @@ int radeon_vm_bo_update(struct radeon_device *rdev,
 			radeon_sync_fence(&ib.sync, vm->ids[i].last_id_use);
 	}
 
-	r = radeon_vm_update_ptes(rdev, vm, &ib, bo_va->it.start,
-				  bo_va->it.last + 1, addr,
-				  radeon_vm_page_flags(bo_va->flags));
-	if (r) {
-		radeon_ib_free(rdev, &ib);
-		return r;
-	}
+	radeon_vm_update_ptes(rdev, vm, &ib, bo_va->it.start,
+			      bo_va->it.last + 1, addr,
+			      radeon_vm_page_flags(bo_va->flags));
 
 	radeon_asic_vm_pad_ib(rdev, &ib);
 	WARN_ON(ib.length_dw > ndw);
