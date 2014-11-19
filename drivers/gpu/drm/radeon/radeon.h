@@ -926,12 +926,7 @@ struct radeon_vm_id {
 };
 
 struct radeon_vm {
-	struct mutex		mutex;
-
 	struct rb_root		va;
-
-	/* protecting invalidated and freed */
-	spinlock_t		status_lock;
 
 	/* BOs moved, but not yet updated in the PT */
 	struct list_head	invalidated;
@@ -948,13 +943,12 @@ struct radeon_vm {
 
 	struct radeon_bo_va	*ib_bo_va;
 
-	struct mutex			mutex;
+	struct mutex		mutex;
 	/* last fence for cs using this vm */
-	struct radeon_fence		*fence;
-	/* last flushed PD/PT update */
-	struct radeon_fence		*flushed_updates;
-	/* last use of vmid */
-	struct radeon_fence		*last_id_use;
+	struct radeon_fence	*fence;
+
+	/* for id and flush management per ring */
+	struct radeon_vm_id	ids[RADEON_NUM_RINGS];
 };
 
 struct radeon_vm_manager {

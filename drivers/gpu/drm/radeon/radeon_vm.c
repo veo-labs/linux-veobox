@@ -189,7 +189,7 @@ struct radeon_fence *radeon_vm_grab_id(struct radeon_device *rdev,
 		return NULL;
 
 	/* we definately need to flush */
-	vm->pd_gpu_addr = ~0ll;
+	vm_id->pd_gpu_addr = ~0ll;
 
 	/* skip over VMID 0, since it is the system VM */
 	for (i = 1; i < rdev->vm_manager.nvm; ++i) {
@@ -250,15 +250,6 @@ void radeon_vm_flush(struct radeon_device *rdev,
 		radeon_ring_vm_flush(rdev, &rdev->ring[ring],
 				     vm_id->id, vm_id->pd_gpu_addr);
 
-	if (pd_addr != vm->pd_gpu_addr || !vm->flushed_updates ||
-	    radeon_fence_is_earlier(vm->flushed_updates, updates)) {
-
-		trace_radeon_vm_flush(pd_addr, ring, vm->id);
-		radeon_fence_unref(&vm->flushed_updates);
-		vm->flushed_updates = radeon_fence_ref(updates);
-		vm->pd_gpu_addr = pd_addr;
-		radeon_ring_vm_flush(rdev, &rdev->ring[ring],
-				     vm->id, vm->pd_gpu_addr);
 	}
 }
 
@@ -280,8 +271,14 @@ void radeon_vm_fence(struct radeon_device *rdev,
 {
 	unsigned vm_id = vm->ids[fence->ring].id;
 
-	radeon_fence_unref(&vm->last_id_use);
-	vm->last_id_use = radeon_fence_ref(fence);
+	radeon_fence_unref(&vm->fence);
+	vm->fence = radeon_fence_ref(fence);
+
+	radeon_fence_unref(&rdev->vm_manager.active[vm_id]);
+	rdev->vm_manager.active[vm_id] = radeon_fence_ref(fence);
+
+	radeon_fence_unref(&vm->ids[fence->ring].last_id_use);
+	vm->ids[fence->ring].last_id_use = radeon_fence_ref(fence);
 }
 
 /**
@@ -1194,8 +1191,12 @@ int radeon_vm_init(struct radeon_device *rdev, struct radeon_vm *vm)
 
 	vm->ib_bo_va = NULL;
 	vm->fence = NULL;
-	vm->flushed_updates = NULL;
-	vm->last_id_use = NULL;
+
+	for (i = 0; i < RADEON_NUM_RINGS; ++i) {
+		vm->ids[i].id = 0;
+		vm->ids[i].flushed_updates = NULL;
+		vm->ids[i].last_id_use = NULL;
+	}
 	mutex_init(&vm->mutex);
 	vm->va = RB_ROOT;
 	spin_lock_init(&vm->status_lock);
@@ -1269,8 +1270,11 @@ void radeon_vm_fini(struct radeon_device *rdev, struct radeon_vm *vm)
 	radeon_bo_unref(&vm->page_directory);
 
 	radeon_fence_unref(&vm->fence);
-	radeon_fence_unref(&vm->flushed_updates);
-	radeon_fence_unref(&vm->last_id_use);
+
+	for (i = 0; i < RADEON_NUM_RINGS; ++i) {
+		radeon_fence_unref(&vm->ids[i].flushed_updates);
+		radeon_fence_unref(&vm->ids[i].last_id_use);
+	}
 
 	mutex_destroy(&vm->mutex);
 }
