@@ -4225,7 +4225,7 @@ done:
  * them more meaningful names.
  *
  * Returns:
- * Zero on success, errno on failure.
+ * Zero on success, negative errno on failure.
  */
 int drm_mode_connector_set_path_property(struct drm_connector *connector,
 					 const char *path)
