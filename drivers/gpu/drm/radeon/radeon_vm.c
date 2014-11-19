@@ -250,6 +250,12 @@ void radeon_vm_flush(struct radeon_device *rdev,
 		radeon_ring_vm_flush(rdev, &rdev->ring[ring],
 				     vm_id->id, vm_id->pd_gpu_addr);
 
+	/* if we can't remember our last VM flush then flush now! */
+	if (!vm->last_flush || pd_addr != vm->pd_gpu_addr) {
+		trace_radeon_vm_flush(pd_addr, ring, vm->id);
+		vm->pd_gpu_addr = pd_addr;
+		radeon_ring_vm_flush(rdev, &rdev->ring[ring],
+				     vm->id, vm->pd_gpu_addr);
 	}
 }
 
