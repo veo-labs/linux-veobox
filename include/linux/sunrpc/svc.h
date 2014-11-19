@@ -253,6 +253,7 @@ struct svc_rqst {
 	u32			rq_vers;	/* program version */
 	u32			rq_proc;	/* procedure number */
 	u32			rq_prot;	/* IP protocol */
+	int			rq_cachetype;	/* catering to nfsd */
 #define	RQ_SECURE	(0)			/* secure port */
 #define	RQ_LOCAL	(1)			/* local request */
 #define	RQ_USEDEFERRAL	(2)			/* use deferral */
