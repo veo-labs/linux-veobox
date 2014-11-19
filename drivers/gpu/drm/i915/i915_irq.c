@@ -3049,13 +3049,10 @@ void i915_queue_hangcheck(struct drm_device *dev)
 	if (!i915.enable_hangcheck)
 		return;
 
-	/* Don't continually defer the hangcheck so that it is always run at
-	 * least once after work has been scheduled on any ring. Otherwise,
-	 * we will ignore a hung ring if a second ring is kept busy.
-	 */
-
-	queue_delayed_work(e->hangcheck_wq, &e->hangcheck_work,
-			   round_jiffies_up_relative(DRM_I915_HANGCHECK_JIFFIES));
+	/* Don't continually defer the hangcheck, but make sure it is active */
+	if (!timer_pending(timer))
+		timer->expires = round_jiffies_up(jiffies + DRM_I915_HANGCHECK_JIFFIES);
+	mod_timer(timer, timer->expires);
 }
 
 static void ibx_irq_reset(struct drm_device *dev)
