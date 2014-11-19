@@ -253,17 +253,9 @@ struct svc_rqst {
 	u32			rq_vers;	/* program version */
 	u32			rq_proc;	/* procedure number */
 	u32			rq_prot;	/* IP protocol */
-	int			rq_cachetype;	/* catering to nfsd */
 #define	RQ_SECURE	(0)			/* secure port */
-#define	RQ_LOCAL	(1)			/* local request */
-#define	RQ_USEDEFERRAL	(2)			/* use deferral */
-#define	RQ_DROPME	(3)			/* drop current reply */
-#define	RQ_SPLICE_OK	(4)			/* turned off in gss privacy
-						 * to prevent encrypting page
-						 * cache pages */
-#define	RQ_VICTIM	(5)			/* about to be shut down */
-#define	RQ_BUSY		(6)			/* request is busy */
 	unsigned long		rq_flags;	/* flags field */
+	unsigned short		rq_local   : 1;	/* local request */
 
 	void *			rq_argp;	/* decoded arguments */
 	void *			rq_resp;	/* xdr'd results */

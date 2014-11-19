@@ -413,15 +413,9 @@ TRACE_EVENT(xs_tcp_data_recv,
 			__entry->copied, __entry->reclen, __entry->offset)
 );
 
-#define show_rqstp_flags(flags)						\
-	__print_flags(flags, "|",					\
-		{ (1UL << RQ_SECURE),		"RQ_SECURE"},		\
-		{ (1UL << RQ_LOCAL),		"RQ_LOCAL"},		\
-		{ (1UL << RQ_USEDEFERRAL),	"RQ_USEDEFERRAL"},	\
-		{ (1UL << RQ_DROPME),		"RQ_DROPME"},		\
-		{ (1UL << RQ_SPLICE_OK),	"RQ_SPLICE_OK"},	\
-		{ (1UL << RQ_VICTIM),		"RQ_VICTIM"},		\
-		{ (1UL << RQ_BUSY),		"RQ_BUSY"})
+#define show_rqstp_flags(flags)				\
+	__print_flags(flags, "|",			\
+		{ (1UL << RQ_SECURE),	"RQ_SECURE"})
 
 TRACE_EVENT(svc_recv,
 	TP_PROTO(struct svc_rqst *rqst, int status),
@@ -468,8 +462,8 @@ DECLARE_EVENT_CLASS(svc_rqst_status,
 		__entry->flags = rqst->rq_flags;
 	),
 
-	TP_printk("addr=%pIScp rq_xid=0x%x status=%d flags=%s",
-		__entry->addr, be32_to_cpu(__entry->xid),
+	TP_printk("addr=%pIScp rq_xid=0x%x dropme=%d status=%d flags=%s",
+		__entry->addr, be32_to_cpu(__entry->xid), __entry->dropme,
 		__entry->status, show_rqstp_flags(__entry->flags))
 );
 
