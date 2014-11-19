@@ -6245,11 +6245,17 @@ static void valleyview_enable_rps(struct drm_device *dev)
 			 intel_gpu_freq(dev_priv, dev_priv->rps.cur_freq),
 			 dev_priv->rps.cur_freq);
 
-	DRM_DEBUG_DRIVER("setting GPU freq to %d MHz (%u)\n",
-			 intel_gpu_freq(dev_priv, dev_priv->rps.efficient_freq),
-			 dev_priv->rps.efficient_freq);
+	if (INTEL_INFO(dev)->gen < 6)
+		return;
 
-	valleyview_set_rps(dev_priv->dev, dev_priv->rps.efficient_freq);
+	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
+
+	/*
+	 * TODO: disable RPS interrupts on GEN9+ too once RPS support
+	 * is added for it.
+	 */
+	if (INTEL_INFO(dev)->gen < 9)
+		gen6_disable_rps_interrupts(dev);
 
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
 }
@@ -6276,13 +6282,6 @@ void ironlake_teardown_rc6(struct drm_device *dev)
 			valleyview_disable_rps(dev);
 		else
 			gen6_disable_rps(dev);
-
-		/*
-		 * TODO: disable RPS interrupts on GEN9+ too once RPS support
-		 * is added for it.
-		 */
-		if (INTEL_INFO(dev)->gen < 9)
-			gen6_disable_rps_interrupts(dev);
 
 		dev_priv->rps.enabled = false;
 		mutex_unlock(&dev_priv->rps.hw_lock);
