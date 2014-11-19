@@ -4426,16 +4426,9 @@ static void skl_flush_wm_values(struct drm_i915_private *dev_priv,
 		vlv_punit_write(dev_priv, PUNIT_REG_GPU_FREQ_REQ, val);
 
 
-	/*
-	 * Second pass: flush the pipes that are having their allocation
-	 * reduced, but overlapping with a previous allocation.
-	 *
-	 * Here as well we need to wait for the vblank to make sure the freed
-	 * space is not used anymore.
-	 */
-	for_each_intel_crtc(dev, crtc) {
-		if (!crtc->active)
-			continue;
+	if (wait_for(((vlv_punit_read(dev_priv, PUNIT_REG_GPU_FREQ_STS))
+				& GENFREQSTATUS) == 0, 100))
+		DRM_ERROR("timed out waiting for Punit\n");
 
 static void gen9_disable_rps(struct drm_device *dev)
 {
