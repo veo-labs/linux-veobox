@@ -257,6 +257,9 @@ struct svc_rqst {
 #define	RQ_LOCAL	(1)			/* local request */
 #define	RQ_USEDEFERRAL	(2)			/* use deferral */
 #define	RQ_DROPME	(3)			/* drop current reply */
+#define	RQ_SPLICE_OK	(4)			/* turned off in gss privacy
+						 * to prevent encrypting page
+						 * cache pages */
 	unsigned long		rq_flags;	/* flags field */
 
 	void *			rq_argp;	/* decoded arguments */
