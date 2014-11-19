@@ -422,6 +422,8 @@ struct kfd_process_device {
 	bool bound;
 };
 
+#define qpd_to_pdd(x) container_of(x, struct kfd_process_device, qpd)
+
 /* Process data */
 struct kfd_process {
 	/*
