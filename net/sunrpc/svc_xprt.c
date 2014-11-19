@@ -512,27 +512,16 @@ void svc_wake_up(struct svc_serv *serv)
 
 	pool = &serv->sv_pools[0];
 
-		spin_lock_bh(&pool->sp_lock);
-		if (!list_empty(&pool->sp_threads)) {
-			rqstp = list_entry(pool->sp_threads.next,
-					   struct svc_rqst,
-					   rq_list);
-			dprintk("svc: daemon %p woken up.\n", rqstp);
-			/*
-			svc_thread_dequeue(pool, rqstp);
-			rqstp->rq_xprt = NULL;
-			 */
-			wake_up_process(rqstp->rq_task);
-		} else
-			set_bit(SP_TASK_PENDING, &pool->sp_flags);
-		spin_unlock_bh(&pool->sp_lock);
-	}
-	rcu_read_unlock();
-
-	/* No free entries available */
-	set_bit(SP_TASK_PENDING, &pool->sp_flags);
-	smp_wmb();
-	trace_svc_wake_up(0);
+	spin_lock_bh(&pool->sp_lock);
+	if (!list_empty(&pool->sp_threads)) {
+		rqstp = list_entry(pool->sp_threads.next,
+				   struct svc_rqst,
+				   rq_list);
+		dprintk("svc: daemon %p woken up.\n", rqstp);
+		wake_up_process(rqstp->rq_task);
+	} else
+		set_bit(SP_TASK_PENDING, &pool->sp_flags);
+	spin_unlock_bh(&pool->sp_lock);
 }
 EXPORT_SYMBOL_GPL(svc_wake_up);
 
