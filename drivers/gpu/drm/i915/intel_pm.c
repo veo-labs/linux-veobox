@@ -4940,6 +4940,10 @@ static void ironlake_enable_drps(struct drm_device *dev)
 	/*
 	 * Interrupts will be enabled in ironlake_irq_postinstall
 	 */
+	for (gpu_freq = dev_priv->rps.max_freq; gpu_freq >= dev_priv->rps.min_freq;
+	     gpu_freq--) {
+		int diff = dev_priv->rps.max_freq - gpu_freq;
+		unsigned int ia_freq = 0, ring_freq = 0;
 
 	I915_WRITE(VIDSTART, vstart);
 	POSTING_READ(VIDSTART);
