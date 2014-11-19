@@ -1216,8 +1216,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	/*
 	 * Someone might have exchanged the framebuffer while we dropped locks
@@ -1284,8 +1284,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	/*
 	 * Someone might have exchanged the framebuffer while we dropped locks
@@ -1461,8 +1461,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	/*
 	 * Someone might have exchanged the framebuffer while we dropped locks
@@ -1527,8 +1527,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	goto retry;
 }
@@ -1586,8 +1586,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	goto retry;
 }
@@ -1645,8 +1645,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	goto retry;
 }
@@ -1724,8 +1724,8 @@ fail:
 
 	return ret;
 backoff:
-	drm_atomic_legacy_backoff(state);
 	drm_atomic_state_clear(state);
+	drm_atomic_legacy_backoff(state);
 
 	/*
 	 * Someone might have exchanged the framebuffer while we dropped locks
