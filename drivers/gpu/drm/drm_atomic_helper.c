@@ -331,7 +331,7 @@ mode_fixup(struct drm_atomic_state *state)
 }
 
 static int
-drm_atomic_helper_check_prepare(struct drm_device *dev,
+drm_atomic_helper_check_modeset(struct drm_device *dev,
 				struct drm_atomic_state *state)
 {
 	int ncrtcs = dev->mode_config.num_crtc;
@@ -427,10 +427,6 @@ drm_atomic_helper_check_planes(struct drm_device *dev,
 	int ncrtcs = dev->mode_config.num_crtc;
 	int i, ret = 0;
 
-	ret = drm_atomic_helper_check_prepare(dev, state);
-	if (ret)
-		return ret;
-
 	for (i = 0; i < nplanes; i++) {
 		struct drm_plane_helper_funcs *funcs;
 		struct drm_plane *plane = state->planes[i];
@@ -473,6 +469,10 @@ drm_atomic_helper_check_planes(struct drm_device *dev,
 			return ret;
 		}
 	}
+
+	ret = drm_atomic_helper_check_modeset(dev, state);
+	if (ret)
+		return ret;
 
 	return ret;
 }
