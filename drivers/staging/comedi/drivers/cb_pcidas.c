@@ -650,7 +650,19 @@ static int cb_pcidas_dac08_insn_write(struct comedi_device *dev,
 				      struct comedi_insn *insn,
 				      unsigned int *data)
 {
-	unsigned int chan = CR_CHAN(insn->chanspec);
+	struct cb_pcidas_private *devpriv = dev->private;
+
+	if (insn->n) {
+		unsigned int val = data[insn->n - 1];
+
+		if (devpriv->dac08_value != val) {
+			dac08_write(dev, val);
+			devpriv->dac08_value = val;
+		}
+	}
+
+	return insn->n;
+}
 
 	if (insn->n) {
 		unsigned int val = data[insn->n - 1];
@@ -1520,17 +1532,11 @@ static int cb_pcidas_auto_attach(struct comedi_device *dev,
 		s->type = COMEDI_SUBD_CALIB;
 		s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
 		s->n_chan = NUM_CHANNELS_DAC08;
-		s->maxdata = 0xff;
+		s->insn_read = dac08_read_insn;
 		s->insn_write = cb_pcidas_dac08_insn_write;
-
-		ret = comedi_alloc_subdev_readback(s);
-		if (ret)
-			return ret;
-
-		for (i = 0; i < s->n_chan; i++) {
-			dac08_write(dev, s->maxdata / 2);
-			s->readback[i] = s->maxdata / 2;
-		}
+		s->maxdata = 0xff;
+		dac08_write(dev, s->maxdata / 2);
+		devpriv->dac08_value = s->maxdata / 2;
 	} else
 		s->type = COMEDI_SUBD_UNUSED;
 
