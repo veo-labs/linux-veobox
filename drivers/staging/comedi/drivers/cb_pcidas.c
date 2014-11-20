@@ -600,6 +600,11 @@ static void caldac_8800_write(struct comedi_device *dev,
 	unsigned int bitstream = ((chan & 0x7) << 8) | val;
 	static const int caldac_8800_udelay = 1;
 
+	if (value == devpriv->caldac_value[address])
+		return 1;
+
+	devpriv->caldac_value[address] = value;
+
 	write_calibration_bitstream(dev, cal_enable_bits(dev), bitstream,
 				    bitstream_length);
 
