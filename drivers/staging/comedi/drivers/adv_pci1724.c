@@ -79,28 +79,94 @@ static const struct comedi_lrange adv_pci1724_ao_ranges = {
 	}
 };
 
-static int adv_pci1724_dac_idle(struct comedi_device *dev,
-				struct comedi_subdevice *s,
-				struct comedi_insn *insn,
-				unsigned long context)
-{
-	unsigned int status;
+/* this structure is for data unique to this hardware driver. */
+struct adv_pci1724_private {
+	int offset_value[NUM_AO_CHANNELS];
+	int gain_value[NUM_AO_CHANNELS];
+};
 
-	status = inl(dev->iobase + PCI1724_SYNC_CTRL_REG);
-	if ((status & PCI1724_SYNC_CTRL_DACSTAT) == 0)
-		return 0;
-	return -EBUSY;
+static int wait_for_dac_idle(struct comedi_device *dev)
+{
+	static const int timeout = 10000;
+	int i;
+
+	for (i = 0; i < timeout; ++i) {
+		if ((inl(dev->iobase + SYNC_OUTPUT_REG) & DAC_BUSY) == 0)
+			break;
+		udelay(1);
+	}
+	if (i == timeout) {
+		dev_err(dev->class_dev,
+			"Timed out waiting for dac to become idle\n");
+		return -EIO;
+	}
+	return 0;
 }
 
-static int adv_pci1724_insn_write(struct comedi_device *dev,
-				  struct comedi_subdevice *s,
-				  struct comedi_insn *insn,
-				  unsigned int *data)
+static int set_dac(struct comedi_device *dev, unsigned mode, unsigned channel,
+		   unsigned data)
 {
-	unsigned long mode = (unsigned long)s->private;
-	unsigned int chan = CR_CHAN(insn->chanspec);
-	unsigned int ctrl;
-	int ret;
+	int retval;
+	unsigned control_bits;
+
+	retval = wait_for_dac_idle(dev);
+	if (retval < 0)
+		return retval;
+
+	control_bits = mode;
+	control_bits |= dac_channel_and_group_select_bits(channel);
+	control_bits |= dac_data_bits(data);
+	outl(control_bits, dev->iobase + DAC_CONTROL_REG);
+	return 0;
+}
+
+static int ao_winsn(struct comedi_device *dev, struct comedi_subdevice *s,
+		    struct comedi_insn *insn, unsigned int *data)
+{
+	int channel = CR_CHAN(insn->chanspec);
+	int retval;
+	int i;
+
+	/* turn off synchronous mode */
+	outl(0, dev->iobase + SYNC_OUTPUT_REG);
+
+	for (i = 0; i < insn->n; ++i) {
+		retval = set_dac(dev, DAC_NORMAL_MODE, channel, data[i]);
+		if (retval < 0)
+			return retval;
+		s->readback[channel] = data[i];
+	}
+	return insn->n;
+}
+
+static int offset_write_insn(struct comedi_device *dev,
+			     struct comedi_subdevice *s,
+			     struct comedi_insn *insn, unsigned int *data)
+{
+	struct adv_pci1724_private *devpriv = dev->private;
+	int channel = CR_CHAN(insn->chanspec);
+	int retval;
+	int i;
+
+	/* turn off synchronous mode */
+	outl(0, dev->iobase + SYNC_OUTPUT_REG);
+
+	for (i = 0; i < insn->n; ++i) {
+		retval = set_dac(dev, DAC_OFFSET_MODE, channel, data[i]);
+		if (retval < 0)
+			return retval;
+		devpriv->offset_value[channel] = data[i];
+	}
+
+	return insn->n;
+}
+
+static int offset_read_insn(struct comedi_device *dev,
+			    struct comedi_subdevice *s,
+			    struct comedi_insn *insn, unsigned int *data)
+{
+	struct adv_pci1724_private *devpriv = dev->private;
+	unsigned int channel = CR_CHAN(insn->chanspec);
 	int i;
 
 	ctrl = PCI1724_DAC_CTRL_GX(chan) | PCI1724_DAC_CTRL_CX(chan) | mode;
@@ -147,19 +213,18 @@ static int adv_pci1724_auto_attach(struct comedi_device *dev,
 
 	/* Analog Output subdevice */
 	s = &dev->subdevices[0];
-	s->type		= COMEDI_SUBD_AO;
-	s->subdev_flags	= SDF_READABLE | SDF_WRITABLE | SDF_GROUND;
-	s->n_chan	= 32;
-	s->maxdata	= 0x3fff;
-	s->range_table	= &adv_pci1724_ao_ranges;
-	s->insn_write	= adv_pci1724_insn_write;
-	s->private	= (void *)PCI1724_DAC_CTRL_MODE_NORMAL;
+	s->type = COMEDI_SUBD_AO;
+	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_GROUND;
+	s->n_chan = NUM_AO_CHANNELS;
+	s->maxdata = 0x3fff;
+	s->range_table = &ao_ranges_1724;
+	s->insn_write = ao_winsn;
 
 	ret = comedi_alloc_subdev_readback(s);
 	if (ret)
 		return ret;
 
-	/* Offset Calibration subdevice */
+	/* offset calibration */
 	s = &dev->subdevices[1];
 	s->type		= COMEDI_SUBD_CALIB;
 	s->subdev_flags	= SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
@@ -174,16 +239,47 @@ static int adv_pci1724_auto_attach(struct comedi_device *dev,
 
 	/* Gain Calibration subdevice */
 	s = &dev->subdevices[2];
-	s->type		= COMEDI_SUBD_CALIB;
-	s->subdev_flags	= SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
-	s->n_chan	= 32;
-	s->maxdata	= 0x3fff;
-	s->insn_write	= adv_pci1724_insn_write;
-	s->private	= (void *)PCI1724_DAC_CTRL_MODE_GAIN;
+	s->type = COMEDI_SUBD_CALIB;
+	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
+	s->n_chan = NUM_AO_CHANNELS;
+	s->insn_read = gain_read_insn;
+	s->insn_write = gain_write_insn;
+	s->maxdata = 0x3fff;
 
-	ret = comedi_alloc_subdev_readback(s);
-	if (ret)
-		return ret;
+	return 0;
+}
+
+static int adv_pci1724_auto_attach(struct comedi_device *dev,
+				   unsigned long context_unused)
+{
+	struct pci_dev *pcidev = comedi_to_pci_dev(dev);
+	struct adv_pci1724_private *devpriv;
+	int i;
+	int retval;
+	unsigned int board_id;
+
+	devpriv = comedi_alloc_devpriv(dev, sizeof(*devpriv));
+	if (!devpriv)
+		return -ENOMEM;
+
+	/* init software copies of output values to indicate we don't know
+	 * what the output value is since it has never been written. */
+	for (i = 0; i < NUM_AO_CHANNELS; ++i) {
+		devpriv->offset_value[i] = -1;
+		devpriv->gain_value[i] = -1;
+	}
+
+	retval = comedi_pci_enable(dev);
+	if (retval)
+		return retval;
+
+	dev->iobase = pci_resource_start(pcidev, 2);
+	board_id = inl(dev->iobase + BOARD_ID_REG) & BOARD_ID_MASK;
+	dev_info(dev->class_dev, "board id: %d\n", board_id);
+
+	retval = setup_subdevices(dev);
+	if (retval < 0)
+		return retval;
 
 	return 0;
 }
