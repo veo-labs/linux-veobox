@@ -2002,7 +2002,7 @@ static int path_lookupat(int dfd, const char *name,
 	 * be handled by restarting a traditional ref-walk (which will always
 	 * be able to complete).
 	 */
-	err = path_init(dfd, name, flags | LOOKUP_PARENT, nd);
+	err = path_init(dfd, name, flags, nd);
 
 	if (unlikely(err))
 		goto out;
@@ -2364,7 +2364,7 @@ path_mountpoint(int dfd, const char *name, struct path *path, unsigned int flags
 	struct nameidata nd;
 	int err;
 
-	err = path_init(dfd, name, flags | LOOKUP_PARENT, &nd);
+	err = path_init(dfd, name, flags, &nd);
 	if (unlikely(err))
 		goto out;
 
@@ -3247,7 +3247,7 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 		goto out;
 	}
 
-	error = path_init(dfd, pathname->name, flags | LOOKUP_PARENT, nd);
+	error = path_init(dfd, pathname->name, flags, nd);
 	if (unlikely(error))
 		goto out;
 
