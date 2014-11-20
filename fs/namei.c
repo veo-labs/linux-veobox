@@ -502,6 +502,7 @@ struct nameidata {
 	unsigned	seq, m_seq;
 	int		last_type;
 	unsigned	depth;
+	struct file	*base;
 	char *saved_names[MAX_NESTED_LINKS + 1];
 };
 
@@ -1991,7 +1992,14 @@ static int path_lookupat(int dfd, const char *name,
 	 * be handled by restarting a traditional ref-walk (which will always
 	 * be able to complete).
 	 */
-	err = path_init(dfd, name, flags, nd);
+	err = path_init(dfd, name, flags | LOOKUP_PARENT, nd);
+
+	if (unlikely(err))
+		goto out;
+
+	current->total_link_count = 0;
+	err = link_path_walk(name, nd);
+
 	if (!err && !(flags & LOOKUP_PARENT)) {
 		err = lookup_last(nd, &path);
 		while (err > 0) {
@@ -2019,7 +2027,14 @@ static int path_lookupat(int dfd, const char *name,
 		}
 	}
 
-	path_cleanup(nd);
+out:
+	if (nd->base)
+		fput(nd->base);
+
+	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
+		path_put(&nd->root);
+		nd->root.mnt = NULL;
+	}
 	return err;
 }
 
@@ -2345,7 +2360,7 @@ path_mountpoint(int dfd, const char *name, struct path *path, unsigned int flags
 	struct nameidata nd;
 	int err;
 
-	err = path_init(dfd, name, flags, &nd);
+	err = path_init(dfd, name, flags | LOOKUP_PARENT, &nd);
 	if (unlikely(err))
 		goto out;
 
@@ -2364,7 +2379,12 @@ path_mountpoint(int dfd, const char *name, struct path *path, unsigned int flags
 		put_link(&nd, &link, cookie);
 	}
 out:
-	path_cleanup(&nd);
+	if (nd.base)
+		fput(nd.base);
+
+	if (nd.root.mnt && !(nd.flags & LOOKUP_ROOT))
+		path_put(&nd.root);
+
 	return err;
 }
 
@@ -3228,7 +3248,12 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 		goto out;
 	}
 
-	error = path_init(dfd, pathname->name, flags, nd);
+	error = path_init(dfd, pathname->name, flags | LOOKUP_PARENT, nd);
+	if (unlikely(error))
+		goto out;
+
+	current->total_link_count = 0;
+	error = link_path_walk(pathname->name, nd);
 	if (unlikely(error))
 		goto out;
 
@@ -3254,7 +3279,10 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 		put_link(nd, &link, cookie);
 	}
 out:
-	path_cleanup(nd);
+	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT))
+		path_put(&nd->root);
+	if (nd->base)
+		fput(nd->base);
 	if (!(opened & FILE_OPENED)) {
 		BUG_ON(!error);
 		put_filp(file);
