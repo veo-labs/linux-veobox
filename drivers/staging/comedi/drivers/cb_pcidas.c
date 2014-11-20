@@ -600,11 +600,6 @@ static void caldac_8800_write(struct comedi_device *dev,
 	unsigned int bitstream = ((chan & 0x7) << 8) | val;
 	static const int caldac_8800_udelay = 1;
 
-	if (value == devpriv->caldac_value[address])
-		return 1;
-
-	devpriv->caldac_value[address] = value;
-
 	write_calibration_bitstream(dev, cal_enable_bits(dev), bitstream,
 				    bitstream_length);
 
@@ -620,7 +615,20 @@ static int cb_pcidas_caldac_insn_write(struct comedi_device *dev,
 				       struct comedi_insn *insn,
 				       unsigned int *data)
 {
+	struct cb_pcidas_private *devpriv = dev->private;
 	unsigned int chan = CR_CHAN(insn->chanspec);
+
+	if (insn->n) {
+		unsigned int val = data[insn->n - 1];
+
+		if (devpriv->caldac_value[chan] != val) {
+			caldac_8800_write(dev, chan, val);
+			devpriv->caldac_value[chan] = val;
+		}
+	}
+
+	return insn->n;
+}
 
 	if (insn->n) {
 		unsigned int val = data[insn->n - 1];
@@ -1488,15 +1496,11 @@ static int cb_pcidas_auto_attach(struct comedi_device *dev,
 	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
 	s->n_chan = NUM_CHANNELS_8800;
 	s->maxdata = 0xff;
+	s->insn_read = caldac_read_insn;
 	s->insn_write = cb_pcidas_caldac_insn_write;
-
-	ret = comedi_alloc_subdev_readback(s);
-	if (ret)
-		return ret;
-
 	for (i = 0; i < s->n_chan; i++) {
 		caldac_8800_write(dev, i, s->maxdata / 2);
-		s->readback[i] = s->maxdata / 2;
+		devpriv->caldac_value[i] = s->maxdata / 2;
 	}
 
 	/*  trim potentiometer */
