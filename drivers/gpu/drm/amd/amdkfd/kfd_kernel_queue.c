@@ -66,8 +66,7 @@ static bool initialize(struct kernel_queue *kq, struct kfd_dev *dev,
 	if (kq->mqd == NULL)
 		return false;
 
-	prop.doorbell_ptr =
-		(uint32_t *)kfd_get_kernel_doorbell(dev, &prop.doorbell_off);
+	prop.doorbell_ptr = kfd_get_kernel_doorbell(dev, &prop.doorbell_off);
 
 	if (prop.doorbell_ptr == NULL)
 		goto err_get_kernel_doorbell;
@@ -166,7 +165,7 @@ err_eop_allocate_vidmem:
 	kfd_gtt_sa_free(dev, kq->pq);
 err_pq_allocate_vidmem:
 	pr_err("kfd: error init pq\n");
-	kfd_release_kernel_doorbell(dev, (u32 *)prop.doorbell_ptr);
+	kfd_release_kernel_doorbell(dev, prop.doorbell_ptr);
 err_get_kernel_doorbell:
 	pr_err("kfd: error init doorbell");
 	return false;
@@ -192,7 +191,7 @@ static void uninitialize(struct kernel_queue *kq)
 	kq->ops_asic_specific.uninitialize(kq);
 	kfd_gtt_sa_free(kq->dev, kq->pq);
 	kfd_release_kernel_doorbell(kq->dev,
-				(u32 *)kq->queue->properties.doorbell_ptr);
+					kq->queue->properties.doorbell_ptr);
 	uninit_queue(kq->queue);
 }
 
@@ -252,7 +251,7 @@ static void submit_packet(struct kernel_queue *kq)
 #endif
 
 	*kq->wptr_kernel = kq->pending_wptr;
-	write_kernel_doorbell((u32 *)kq->queue->properties.doorbell_ptr,
+	write_kernel_doorbell(kq->queue->properties.doorbell_ptr,
 				kq->pending_wptr);
 }
 
