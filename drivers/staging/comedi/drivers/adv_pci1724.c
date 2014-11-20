@@ -51,26 +51,63 @@
 
 #include "../comedidev.h"
 
-/*
- * PCI bar 2 Register I/O map (dev->iobase)
- */
-#define PCI1724_DAC_CTRL_REG		0x00
-#define PCI1724_DAC_CTRL_GX(x)		(1 << (20 + ((x) / 8)))
-#define PCI1724_DAC_CTRL_CX(x)		(((x) % 8) << 16)
-#define PCI1724_DAC_CTRL_MODE_GAIN	(1 << 14)
-#define PCI1724_DAC_CTRL_MODE_OFFSET	(2 << 14)
-#define PCI1724_DAC_CTRL_MODE_NORMAL	(3 << 14)
-#define PCI1724_DAC_CTRL_MODE_MASK	(3 << 14)
-#define PCI1724_DAC_CTRL_DATA(x)	(((x) & 0x3fff) << 0)
-#define PCI1724_SYNC_CTRL_REG		0x04
-#define PCI1724_SYNC_CTRL_DACSTAT	(1 << 1)
-#define PCI1724_SYNC_CTRL_SYN		(1 << 0)
-#define PCI1724_EEPROM_CTRL_REG		0x08
-#define PCI1724_SYNC_TRIG_REG		0x0c  /* any value works */
-#define PCI1724_BOARD_ID_REG		0x10
-#define PCI1724_BOARD_ID_MASK		(0xf << 0)
+#define PCI_VENDOR_ID_ADVANTECH	0x13fe
 
-static const struct comedi_lrange adv_pci1724_ao_ranges = {
+/* register offsets */
+enum board_registers {
+	DAC_CONTROL_REG = 0x0,
+	SYNC_OUTPUT_REG = 0x4,
+	EEPROM_CONTROL_REG = 0x8,
+	SYNC_OUTPUT_TRIGGER_REG = 0xc,
+	BOARD_ID_REG = 0x10
+};
+
+/* bit definitions for registers */
+enum dac_control_contents {
+	DAC_DATA_MASK = 0x3fff,
+	DAC_DESTINATION_MASK = 0xc000,
+	DAC_NORMAL_MODE = 0xc000,
+	DAC_OFFSET_MODE = 0x8000,
+	DAC_GAIN_MODE = 0x4000,
+	DAC_CHANNEL_SELECT_MASK = 0xf0000,
+	DAC_GROUP_SELECT_MASK = 0xf00000
+};
+
+static uint32_t dac_data_bits(uint16_t dac_data)
+{
+	return dac_data & DAC_DATA_MASK;
+}
+
+static uint32_t dac_channel_select_bits(unsigned channel)
+{
+	return (channel << 16) & DAC_CHANNEL_SELECT_MASK;
+}
+
+static uint32_t dac_group_select_bits(unsigned group)
+{
+	return (1 << (20 + group)) & DAC_GROUP_SELECT_MASK;
+}
+
+static uint32_t dac_channel_and_group_select_bits(unsigned comedi_channel)
+{
+	return dac_channel_select_bits(comedi_channel % 8) |
+		dac_group_select_bits(comedi_channel / 8);
+}
+
+enum sync_output_contents {
+	SYNC_MODE = 0x1,
+	DAC_BUSY = 0x2, /* dac state machine is not ready */
+};
+
+enum sync_output_trigger_contents {
+	SYNC_TRIGGER_BITS = 0x0 /* any value works */
+};
+
+enum board_id_contents {
+	BOARD_ID_MASK = 0xf
+};
+
+static const struct comedi_lrange ao_ranges_1724 = {
 	4, {
 		BIP_RANGE(10),
 		RANGE_mA(0, 20),
@@ -200,7 +237,7 @@ static int adv_pci1724_auto_attach(struct comedi_device *dev,
 	s = &dev->subdevices[0];
 	s->type = COMEDI_SUBD_AO;
 	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_GROUND;
-	s->n_chan = NUM_AO_CHANNELS;
+	s->n_chan = 32;
 	s->maxdata = 0x3fff;
 	s->range_table = &ao_ranges_1724;
 	s->insn_write = ao_winsn;
@@ -213,7 +250,7 @@ static int adv_pci1724_auto_attach(struct comedi_device *dev,
 	s = &dev->subdevices[1];
 	s->type = COMEDI_SUBD_CALIB;
 	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
-	s->n_chan = NUM_AO_CHANNELS;
+	s->n_chan = 32;
 	s->maxdata = 0x3fff;
 	s->insn_write = offset_write_insn;
 
@@ -229,7 +266,7 @@ static int adv_pci1724_auto_attach(struct comedi_device *dev,
 	s = &dev->subdevices[2];
 	s->type = COMEDI_SUBD_CALIB;
 	s->subdev_flags = SDF_READABLE | SDF_WRITABLE | SDF_INTERNAL;
-	s->n_chan = NUM_AO_CHANNELS;
+	s->n_chan = 32;
 	s->maxdata = 0x3fff;
 	s->insn_write = gain_write_insn;
 
