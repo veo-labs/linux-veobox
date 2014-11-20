@@ -734,7 +734,20 @@ static int cb_pcidas_trimpot_insn_write(struct comedi_device *dev,
 					struct comedi_insn *insn,
 					unsigned int *data)
 {
+	struct cb_pcidas_private *devpriv = dev->private;
 	unsigned int chan = CR_CHAN(insn->chanspec);
+
+	if (insn->n) {
+		unsigned int val = data[insn->n - 1];
+
+		if (devpriv->trimpot_value[chan] != val) {
+			cb_pcidas_trimpot_write(dev, chan, val);
+			devpriv->trimpot_value[chan] = val;
+		}
+	}
+
+	return insn->n;
+}
 
 	if (insn->n) {
 		unsigned int val = data[insn->n - 1];
@@ -1504,15 +1517,11 @@ static int cb_pcidas_auto_attach(struct comedi_device *dev,
 		s->n_chan = NUM_CHANNELS_8402;
 		s->maxdata = 0xff;
 	}
+	s->insn_read = trimpot_read_insn;
 	s->insn_write = cb_pcidas_trimpot_insn_write;
-
-	ret = comedi_alloc_subdev_readback(s);
-	if (ret)
-		return ret;
-
 	for (i = 0; i < s->n_chan; i++) {
 		cb_pcidas_trimpot_write(dev, i, s->maxdata / 2);
-		s->readback[i] = s->maxdata / 2;
+		devpriv->trimpot_value[i] = s->maxdata / 2;
 	}
 
 	/*  dac08 caldac */
