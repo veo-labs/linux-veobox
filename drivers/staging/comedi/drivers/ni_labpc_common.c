@@ -1076,20 +1076,6 @@ static void labpc_eeprom_write(struct comedi_device *dev,
 	const int write_enable_instruction = 0x6;
 	const int write_instruction = 0x2;
 	const int write_length = 8;	/*  8 bit write lengths to eeprom */
-	const int write_in_progress_bit = 0x1;
-	const int timeout = 10000;
-	int i;
-
-	/*  make sure there isn't already a write in progress */
-	for (i = 0; i < timeout; i++) {
-		if ((labpc_eeprom_read_status(dev) & write_in_progress_bit) ==
-		    0)
-			break;
-	}
-	if (i == timeout) {
-		dev_err(dev->class_dev, "eeprom write timed out\n");
-		return -ETIME;
-	}
 
 	/*  enable read/write to eeprom */
 	devpriv->cmd5 &= ~CMD5_EEPROMCS;
@@ -1172,6 +1158,20 @@ static int labpc_calib_insn_write(struct comedi_device *dev,
 	return insn->n;
 }
 
+static int labpc_eeprom_ready(struct comedi_device *dev,
+			      struct comedi_subdevice *s,
+			      struct comedi_insn *insn,
+			      unsigned long context)
+{
+	unsigned int status;
+
+	/* make sure there isn't already a write in progress */
+	status = labpc_eeprom_read_status(dev);
+	if ((status & 0x1) == 0)
+		return 0;
+	return -EBUSY;
+}
+
 static int labpc_eeprom_insn_write(struct comedi_device *dev,
 				   struct comedi_subdevice *s,
 				   struct comedi_insn *insn,
@@ -1191,10 +1191,11 @@ static int labpc_eeprom_insn_write(struct comedi_device *dev,
 	if (insn->n > 0) {
 		unsigned int val = data[insn->n - 1];
 
-		ret = labpc_eeprom_write(dev, chan, val);
+		ret = comedi_timeout(dev, s, insn, labpc_eeprom_ready, 0);
 		if (ret)
 			return ret;
 
+		labpc_eeprom_write(dev, chan, val);
 		s->readback[chan] = val;
 	}
 
