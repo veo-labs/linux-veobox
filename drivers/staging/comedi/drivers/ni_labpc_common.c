@@ -1140,6 +1140,7 @@ static int labpc_calib_insn_write(struct comedi_device *dev,
 				  struct comedi_insn *insn,
 				  unsigned int *data)
 {
+	struct labpc_private *devpriv = dev->private;
 	unsigned int chan = CR_CHAN(insn->chanspec);
 
 	/*
@@ -1149,9 +1150,9 @@ static int labpc_calib_insn_write(struct comedi_device *dev,
 	if (insn->n > 0) {
 		unsigned int val = data[insn->n - 1];
 
-		if (s->readback[chan] != val) {
+		if (devpriv->caldac[chan] != val) {
 			write_caldac(dev, chan, val);
-			s->readback[chan] = val;
+			devpriv->caldac[chan] = val;
 		}
 	}
 
@@ -1301,13 +1302,9 @@ int labpc_common_attach(struct comedi_device *dev,
 		s->maxdata	= 0xff;
 		s->insn_write	= labpc_calib_insn_write;
 
-		ret = comedi_alloc_subdev_readback(s);
-		if (ret)
-			return ret;
-
 		for (i = 0; i < s->n_chan; i++) {
 			write_caldac(dev, i, s->maxdata / 2);
-			s->readback[i] = s->maxdata / 2;
+			devpriv->caldac[i] = s->maxdata / 2;
 		}
 	} else {
 		s->type		= COMEDI_SUBD_UNUSED;
