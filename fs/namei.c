@@ -1962,16 +1962,6 @@ static void path_cleanup(struct nameidata *nd)
 		fput(nd->base);
 }
 
-static void path_cleanup(struct nameidata *nd)
-{
-	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT)) {
-		path_put(&nd->root);
-		nd->root.mnt = NULL;
-	}
-	if (unlikely(nd->base))
-		fput(nd->base);
-}
-
 static inline int lookup_last(struct nameidata *nd, struct path *path)
 {
 	if (nd->last_type == LAST_NORM && nd->last.name[nd->last.len])
@@ -2003,13 +1993,6 @@ static int path_lookupat(int dfd, const char *name,
 	 * be able to complete).
 	 */
 	err = path_init(dfd, name, flags, nd);
-
-	if (unlikely(err))
-		goto out;
-
-	current->total_link_count = 0;
-	err = link_path_walk(name, nd);
-
 	if (!err && !(flags & LOOKUP_PARENT)) {
 		err = lookup_last(nd, &path);
 		while (err > 0) {
@@ -2037,7 +2020,6 @@ static int path_lookupat(int dfd, const char *name,
 		}
 	}
 
-out:
 	path_cleanup(nd);
 	return err;
 }
@@ -3248,11 +3230,6 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 	}
 
 	error = path_init(dfd, pathname->name, flags, nd);
-	if (unlikely(error))
-		goto out;
-
-	current->total_link_count = 0;
-	error = link_path_walk(pathname->name, nd);
 	if (unlikely(error))
 		goto out;
 
