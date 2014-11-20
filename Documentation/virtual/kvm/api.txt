@@ -1263,7 +1263,7 @@ The flags bitmap is defined as:
 4.48 KVM_ASSIGN_PCI_DEVICE
 
 Capability: none
-Architectures: x86 ia64
+Architectures: x86
 Type: vm ioctl
 Parameters: struct kvm_assigned_pci_dev (in)
 Returns: 0 on success, -1 on error
@@ -1313,7 +1313,7 @@ Errors:
 4.49 KVM_DEASSIGN_PCI_DEVICE
 
 Capability: none
-Architectures: x86 ia64
+Architectures: x86
 Type: vm ioctl
 Parameters: struct kvm_assigned_pci_dev (in)
 Returns: 0 on success, -1 on error
@@ -1446,7 +1446,7 @@ struct kvm_irq_routing_s390_adapter {
 4.53 KVM_ASSIGN_SET_MSIX_NR
 
 Capability: none
-Architectures: x86 ia64
+Architectures: x86
 Type: vm ioctl
 Parameters: struct kvm_assigned_msix_nr (in)
 Returns: 0 on success, -1 on error
@@ -1468,7 +1468,7 @@ struct kvm_assigned_msix_nr {
 4.54 KVM_ASSIGN_SET_MSIX_ENTRY
 
 Capability: none
-Architectures: x86 ia64
+Architectures: x86
 Type: vm ioctl
 Parameters: struct kvm_assigned_msix_entry (in)
 Returns: 0 on success, -1 on error
