@@ -1170,6 +1170,8 @@ struct pcidas64_private {
 	uint8_t i2c_cal_range_bits;
 	/*  configure digital triggers to trigger on falling edge */
 	unsigned int ext_trig_falling;
+	/*  states of various devices stored to enable read-back */
+	unsigned int ad8402_state[2];
 	short ai_cmd_running;
 	unsigned int ai_fifo_segment_length;
 	struct ext_clock_info ext_clock;
@@ -3594,20 +3596,15 @@ static int cb_pcidas64_calib_insn_write(struct comedi_device *dev,
 					struct comedi_insn *insn,
 					unsigned int *data)
 {
-	unsigned int chan = CR_CHAN(insn->chanspec);
+	int channel = CR_CHAN(insn->chanspec);
 
-	/*
-	 * Programming the calib device is slow. Only write the
-	 * last data value if the value has changed.
-	 */
-	if (insn->n) {
-		unsigned int val = data[insn->n - 1];
+	/* return immediately if setting hasn't changed, since
+	 * programming these things is slow */
+	if (s->readback[channel] == data[0])
+		return 1;
 
-		if (s->readback[chan] != val) {
-			caldac_write(dev, chan, val);
-			s->readback[chan] = val;
-		}
-	}
+	caldac_write(dev, channel, data[0]);
+	s->readback[channel] = data[0];
 
 	return insn->n;
 }
@@ -3870,7 +3867,7 @@ static int setup_subdevices(struct comedi_device *dev)
 		s->maxdata = 0xfff;
 	else
 		s->maxdata = 0xff;
-	s->insn_write = cb_pcidas64_calib_insn_write;
+	s->insn_write = calib_write_insn;
 
 	ret = comedi_alloc_subdev_readback(s);
 	if (ret)
