@@ -1318,31 +1318,25 @@ int i915_get_reset_stats_ioctl(struct drm_device *dev,
 static int i915_reset_complete(struct drm_device *dev)
 {
 	u8 gdrst;
-	pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
+	pci_read_config_byte(dev->pdev, I965_GDRST, &gdrst);
 	return (gdrst & GRDOM_RESET_STATUS) == 0;
 }
 
 static int i915_do_reset(struct drm_device *dev)
 {
 	/* assert reset for at least 20 usec */
-	pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
+	pci_write_config_byte(dev->pdev, I965_GDRST, GRDOM_RESET_ENABLE);
 	udelay(20);
-	pci_write_config_byte(dev->pdev, I915_GDRST, 0);
+	pci_write_config_byte(dev->pdev, I965_GDRST, 0);
 
-	return wait_for(i915_reset_complete(dev), 500);
+	return wait_for(i965_reset_complete(dev), 500);
 }
 
 static int g4x_reset_complete(struct drm_device *dev)
 {
 	u8 gdrst;
-	pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
+	pci_read_config_byte(dev->pdev, I965_GDRST, &gdrst);
 	return (gdrst & GRDOM_RESET_ENABLE) == 0;
-}
-
-static int g33_do_reset(struct drm_device *dev)
-{
-	pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
-	return wait_for(g4x_reset_complete(dev), 500);
 }
 
 static int g4x_do_reset(struct drm_device *dev)
