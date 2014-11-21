@@ -327,8 +327,6 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 
 	mbus_code_to_bus_cfg(csicfg, mbus_fmt->code);
 
-	csicfg->force_eof = 1;
-
 	switch (mbus_cfg->type) {
 	case V4L2_MBUS_PARALLEL:
 		csicfg->ext_vsync = 1;
