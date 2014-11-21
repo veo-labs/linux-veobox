@@ -262,6 +262,7 @@ struct svc_rqst {
 						 * to prevent encrypting page
 						 * cache pages */
 #define	RQ_VICTIM	(5)			/* about to be shut down */
+#define	RQ_BUSY		(6)			/* request is busy */
 	unsigned long		rq_flags;	/* flags field */
 
 	void *			rq_argp;	/* decoded arguments */
