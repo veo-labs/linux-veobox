@@ -83,7 +83,6 @@
 #define PCI1723_VREF_POS10V		(3 << 0)
 
 struct pci1723_private {
-	unsigned char da_range[8];	/* D/A output range for each channel */
 	unsigned short ao_data[8];	/* data output buffer */
 };
 
@@ -139,8 +138,7 @@ static int pci1723_ao_insn_write(struct comedi_device *dev,
 		devpriv->ao_data[i] = 0x8000;
 		outw(devpriv->ao_data[i], dev->iobase + PCI1723_AO_REG(i));
 		/* set all ranges to +/- 10V */
-		devpriv->da_range[i] = 0;
-		outw(((devpriv->da_range[i] << 4) | i),
+		outw(PCI1723_CTRL_RANGE(0) | PCI1723_CTRL_CHAN(i),
 		     PCI1723_CTRL_REG);
 	}
 
