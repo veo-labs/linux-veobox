@@ -117,7 +117,7 @@ static int pci1723_dio_insn_config(struct comedi_device *dev,
 	if (!(s->io_bits & 0x00ff))
 		mode |= PCI1723_DIO_CTRL_LDIO;	/* low byte input */
 	if (!(s->io_bits & 0xff00))
-		mode |= 0x0002;		/* high byte input */
+		mode |= PCI1723_DIO_CTRL_HDIO;	/* high byte input */
 	outw(mode, dev->iobase + PCI1723_DIO_CTRL_REG);
 
 	return insn->n;
