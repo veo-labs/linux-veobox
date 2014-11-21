@@ -208,7 +208,7 @@
 	hdmiin2: adv7604@20 {
 		compatible = "adi,adv7604";
 		reg = <0x20>;
-		hpd-gpios = <&gpio2 0 0>;
+		hpd-gpios = <&gpio2 1 0>;
 
 		ports {
 			#address-cells = <1>;
@@ -233,9 +233,9 @@
 			};
 			port@6 {
 				reg = <6>;
-/*				hdmi1_out: endpoint@6 {
+				hdmi1_out: endpoint@6 {
 					remote-endpoint = <&hdmi1_fpga_in>;
-				};*/
+				};
 			};
 		};
 	};
@@ -266,9 +266,9 @@
 			};
 			port@3 {
 				reg = <3>;
-/*				hdmi1_fpga_in: endpoint {
+				hdmi1_fpga_in: endpoint {
 					remote-endpoint = <&hdmi1_out>;
-				};*/
+				};
 			};
 			port@4 {
 				reg = <4>;
@@ -400,7 +400,7 @@
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_0__CCM_CLKO1		0x000b0		/* SGTL5000 sys_mclk */
-				/*MX6QDL_PAD_NANDF_D1__GPIO2_IO01		0x1b800	*/	/* ADV7604 Hotplug */
+				MX6QDL_PAD_NANDF_D1__GPIO2_IO01		0x1b800		/* ADV7604 Hotplug */
 			>;
 		};
 

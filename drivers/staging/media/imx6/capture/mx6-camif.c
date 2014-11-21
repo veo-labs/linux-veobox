@@ -109,7 +109,7 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
-		.codes = {V4L2_MBUS_FMT_YUYV8_2X8, V4L2_MBUS_FMT_YUYV8_1X16},
+		.codes = {V4L2_MBUS_FMT_YUYV8_1X16, V4L2_MBUS_FMT_YUYV8_2X8},
 		.depth  = 16,
 	}, {
 		.name	= "4:2:2 packed, UYVY",
@@ -240,8 +240,8 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->subdev_fmt.width = dev->format.width;
 	dev->subdev_fmt.height = dev->format.height;
 	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
-	dev->subdev_fmt.code = V4L2_MBUS_FMT_YUYV8_1X16;
-	dev->subdev_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
+	dev->subdev_fmt.code = V4L2_MBUS_FMT_YUYV8_2X8;
+	dev->subdev_pixfmt = mx6cam_get_format(0, dev->format.pixelformat);
 }
 
 /*
@@ -261,6 +261,9 @@ static bool update_signal_lock_status(struct mx6cam_dev *dev)
 	locked = ((status & V4L2_IN_ST_NO_SYNC) == 0);
 	changed = (dev->signal_locked != locked);
 	dev->signal_locked = locked;
+	v4l2_err(&dev->v4l2_dev,
+		"status: %d, locked: %d, changed: %d, dev->signal_locked: %d\n",
+		status, locked, changed, dev->signal_locked);
 
 	return changed;
 }
@@ -1371,6 +1374,11 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 	struct mx6cam_dev *dev = ctx->dev;
 	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
+	struct v4l2_subdev_format sd_fmt = {
+		.pad = 1,
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+		.format.code = V4L2_MBUS_FMT_YUYV8_2X8,
+	};
 	int ret, sensor_input;
 
 	if (index == dev->current_input)
@@ -1416,10 +1424,10 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 					 "csi2 power on failed\n");
 			else
 				v4l2_err(&dev->v4l2_dev, "CSI2 is powered\n");
-		} else {
+		}/* else {
 			if (ep->ep.bus_type != V4L2_MBUS_CSI2)
 				v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", ep->ep.bus_type, V4L2_MBUS_CSI2);
-		}
+		}*/
 	}
 
 	dev->vfd->tvnorms = 0;
@@ -1429,7 +1437,7 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
  *		dev->vfd->tvnorms = V4L2_STD_ALL;
  */
 	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing, 0, 0, 0);
-	v4l2_warn(&dev->v4l2_dev, "Calling s_routing returned with ret=%d\n", ret);
+//	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
 
 	dev->current_input = index;
 
@@ -1737,6 +1745,22 @@ static int vidioc_dv_timings_cap(struct file *file, void *priv_fh,
 	return v4l2_subdev_call(dev->ep->sd,
 			pad, dv_timings_cap, cap);
 }
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+static int vidioc_g_register(struct file *file, void *f,
+				struct v4l2_dbg_register *reg)
+{
+	struct video_device *vdev = video_devdata(file);
+	v4l2_device_call_all(vdev->v4l2_dev, 0, core, g_register, reg);
+	return 0;
+}
+static int vidioc_s_register(struct file *file, void *f,
+				struct v4l2_dbg_register *reg)
+{
+	struct video_device *vdev = video_devdata(file);
+	v4l2_device_call_all(vdev->v4l2_dev, 0, core, s_register, reg);
+	return 0;
+}
+#endif
 
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
@@ -1792,6 +1816,10 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_query_dv_timings = vidioc_query_dv_timings,
 	.vidioc_enum_dv_timings	= vidioc_enum_dv_timings,
 	.vidioc_dv_timings_cap	= vidioc_dv_timings_cap,
+#ifdef CONFIG_VIDEO_ADV_DEBUG
+	.vidioc_g_register      = vidioc_g_register,
+	.vidioc_s_register	= vidioc_s_register,
+#endif
 };
 
 
@@ -1969,10 +1997,10 @@ static int mx6cam_open(struct file *file)
 			goto sensor_off;
 		} else
 			v4l2_err(&dev->v4l2_dev, "CSI2 is powered\n");
-	} else {
+	}/* else {
 		if (dev->ep->ep.bus_type != V4L2_MBUS_CSI2)
 			v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", dev->ep->ep.bus_type, V4L2_MBUS_CSI2);
-	}
+	}*/
 
 	/* update the sensor's current format */
 	update_subdev_fmt(dev);
@@ -2122,6 +2150,12 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 			//v4l2_err(&dev->v4l2_dev, "Set hotplug for ADV7604 to %d\n", hotplug);
 			break;
 		}
+	case ADV7604_FMT_CHANGE:
+		if (dev) {
+			atomic_set(&dev->status_change, 1);
+			v4l2_warn(&dev->v4l2_dev, "Format change on %s\n", dev->ep->sd->name);
+			break;
+		}
 	}
 }
 
@@ -2132,11 +2166,6 @@ static int mx6cam_add_sensor(struct mx6cam_dev *dev,
 	struct platform_device *sensor_pdev = NULL;
 	struct i2c_client *i2c_client;
 	struct device *sensor_dev;
-	struct v4l2_subdev_format sd_fmt = {
-		.pad = 1,
-		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
-	};
 	int ret = 0;
 
 	i2c_client = of_find_i2c_device_by_node(remote);
@@ -2167,9 +2196,6 @@ static int mx6cam_add_sensor(struct mx6cam_dev *dev,
 			 ep->sd->name);
 		goto mod_put;
 	}
-
-	ret = v4l2_subdev_call(ep->sd, pad, set_fmt, NULL, &sd_fmt);
-	v4l2_warn(&dev->v4l2_dev, "Calling s_fmt returned with ret=%d\n", ret);
 
 	v4l2_info(&dev->v4l2_dev, "Registered sensor subdev %s on CSI%d\n",
 		  ep->sd->name, ep->ep.base.port);
@@ -2525,7 +2551,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	struct v4l2_subdev_format sd_fmt = {
 		.pad = 1,
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
+		.format.code = V4L2_MBUS_FMT_YUYV8_2X8,
 	};
 	int ret, i;
 
@@ -2545,6 +2571,11 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 		dev_err(camdev->dev, "failed to register subdev nodes\n");
 	else {
 		camdev->ep = &camdev->eplist[0];
+		list_for_each_entry(entity, &camdev->entities, list) {
+			if (strcmp(camdev->ep->sd->name, "adv7611 1-004c") == 0) {
+				dev_dbg(camdev->dev, "Entity %s found, now set format\n", camdev->ep->sd->name);
+			}
+		}
 /*		ret = v4l2_subdev_call(camdev->ep->sd,
 			video, s_dv_timings, &timings);
 		if (ret < 0)
@@ -2845,6 +2876,8 @@ static int mx6cam_probe(struct platform_device *pdev)
 
 	/* setup some defaults */
 	dev->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	atomic_set(&dev->status_change, 1);
+	dev->signal_locked = 0;
 
 	/* Initialize the buffer queues */
 	vfd->queue = &dev->buffer_queue;

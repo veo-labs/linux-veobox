@@ -210,7 +210,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 	dma_addr_t phys;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
-	v4l2_err(&priv->sd, "Encoder EOF interrupt\n");
+//	v4l2_err(&priv->sd, "Encoder EOF interrupt\n");
 
 	/* timestamp and return the completed frame */
 	frame = priv->active_frame[priv->buf_num];
@@ -221,7 +221,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 		frame->vb.v4l2_buf.sequence = dev->sequence++;
 		state = dev->signal_locked ?
 			VB2_BUF_STATE_DONE : VB2_BUF_STATE_ERROR;
-		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", dev->signal_locked ? "DONE" : "ERROR");
+//		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", frame->vb.v4l2_buf.sequence, dev->signal_locked ? "DONE" : "ERROR");
 		vb2_buffer_done(&frame->vb, state);
 	}
 
@@ -727,7 +727,7 @@ static int encoder_stop(struct encoder_priv *priv)
 			frame->vb.v4l2_buf.timestamp = cur_time;
 			frame->vb.v4l2_buf.field = V4L2_FIELD_NONE;
 			frame->vb.v4l2_buf.sequence = dev->sequence++;
-			v4l2_err(&priv->sd, "frame seq: %d\n");
+			v4l2_err(&priv->sd, "[Encoder stop]frame seq: %d\n", frame->vb.v4l2_buf.sequence);
 			vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
 			priv->active_frame[i] = NULL;
 		}
