@@ -1221,7 +1221,7 @@ retry:
 		goto fail;
 	}
 
-	ret = drm_atomic_set_crtc_for_plane(plane_state, crtc);
+	ret = drm_atomic_set_crtc_for_plane(state, plane, crtc);
 	if (ret != 0)
 		goto fail;
 	drm_atomic_set_fb_for_plane(plane_state, fb);
@@ -1300,7 +1300,7 @@ retry:
 		goto fail;
 	}
 
-	ret = drm_atomic_set_crtc_for_plane(plane_state, NULL);
+	ret = drm_atomic_set_crtc_for_plane(state, plane, NULL);
 	if (ret != 0)
 		goto fail;
 	drm_atomic_set_fb_for_plane(plane_state, NULL);
@@ -1471,7 +1471,7 @@ retry:
 		goto fail;
 	}
 
-	ret = drm_atomic_set_crtc_for_plane(primary_state, crtc);
+	ret = drm_atomic_set_crtc_for_plane(state, crtc->primary, crtc);
 	if (ret != 0)
 		goto fail;
 	drm_atomic_set_fb_for_plane(primary_state, set->fb);
@@ -1743,7 +1743,7 @@ retry:
 		goto fail;
 	}
 
-	ret = drm_atomic_set_crtc_for_plane(plane_state, crtc);
+	ret = drm_atomic_set_crtc_for_plane(state, plane, crtc);
 	if (ret != 0)
 		goto fail;
 	drm_atomic_set_fb_for_plane(plane_state, fb);
