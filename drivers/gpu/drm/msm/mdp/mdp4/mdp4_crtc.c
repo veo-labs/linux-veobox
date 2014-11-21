@@ -166,10 +166,8 @@ static const int idxs[] = {
  */
 static void setup_mixer(struct mdp4_kms *mdp4_kms)
 {
-	struct mdp4_crtc *mdp4_crtc = to_mdp4_crtc(crtc);
-	struct mdp4_kms *mdp4_kms = get_kms(crtc);
-	struct drm_plane *plane;
-	int i, ovlp = mdp4_crtc->ovlp;
+	struct drm_mode_config *config = &mdp4_kms->dev->mode_config;
+	struct drm_crtc *crtc;
 	uint32_t mixer_cfg = 0;
 	static const enum mdp_mixer_stage_id stages[] = {
 			STAGE_BASE, STAGE0, STAGE1, STAGE2, STAGE3,
@@ -179,7 +177,7 @@ static void setup_mixer(struct mdp4_kms *mdp4_kms)
 		struct mdp4_crtc *mdp4_crtc = to_mdp4_crtc(crtc);
 		struct drm_plane *plane;
 
-		drm_atomic_crtc_for_each_plane(plane, crtc) {
+		for_each_plane_on_crtc(crtc, plane) {
 			enum mdp4_pipe pipe_id = mdp4_plane_pipe(plane);
 			int idx = idxs[pipe_id];
 			mixer_cfg = mixercfg(mixer_cfg, mdp4_crtc->mixer,
@@ -211,8 +209,6 @@ static void blend_setup(struct drm_crtc *crtc)
 					to_mdp_format(msm_framebuffer_format(plane->fb));
 			alpha[idx-1] = format->alpha_enable;
 		}
-		mixer_cfg = mixercfg(mixer_cfg, mdp4_crtc->mixer,
-				pipe_id, stages[idx]);
 	}
 
 	for (i = 0; i < 4; i++) {
