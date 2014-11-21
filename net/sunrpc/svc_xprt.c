@@ -377,19 +377,9 @@ redo_search:
 
 		atomic_long_inc(&pool->sp_stats.threads_woken);
 		wake_up_process(rqstp->rq_task);
-		put_cpu();
-		goto out;
-	}
-	rcu_read_unlock();
-
-	/*
-	 * We didn't find an idle thread to use, so we need to queue the xprt.
-	 * Do so and then search again. If we find one, we can't hook this one
-	 * up to it directly but we can wake the thread up in the hopes that it
-	 * will pick it up once it searches for a xprt to service.
-	 */
-	if (!queued) {
-		queued = true;
+		rqstp->rq_xprt = xprt;
+		atomic_long_inc(&pool->sp_stats.threads_woken);
+	} else {
 		dprintk("svc: transport %p put into queue\n", xprt);
 		spin_lock_bh(&pool->sp_lock);
 		list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
@@ -710,9 +700,9 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 	set_bit(RQ_BUSY, &rqstp->rq_flags);
 	spin_unlock_bh(&rqstp->rq_lock);
 
-	xprt = rqstp->rq_xprt;
-	if (xprt != NULL)
-		return xprt;
+		spin_lock_bh(&pool->sp_lock);
+		if (!time_left)
+			atomic_long_inc(&pool->sp_stats.threads_timedout);
 
 	if (!time_left)
 		atomic_long_inc(&pool->sp_stats.threads_timedout);
