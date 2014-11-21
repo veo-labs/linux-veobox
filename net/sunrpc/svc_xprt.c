@@ -378,7 +378,7 @@ redo_search:
 		atomic_long_inc(&pool->sp_stats.threads_woken);
 		wake_up_process(rqstp->rq_task);
 		put_cpu();
-		return;
+		goto out;
 	}
 	rcu_read_unlock();
 
@@ -397,6 +397,7 @@ redo_search:
 		spin_unlock_bh(&pool->sp_lock);
 		goto redo_search;
 	}
+	rqstp = NULL;
 	put_cpu();
 out:
 	trace_svc_xprt_do_enqueue(xprt, rqstp);
@@ -423,7 +424,7 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 	struct svc_xprt	*xprt = NULL;
 
 	if (list_empty(&pool->sp_sockets))
-		return NULL;
+		goto out;
 
 	spin_lock_bh(&pool->sp_lock);
 	if (likely(!list_empty(&pool->sp_sockets))) {
@@ -431,11 +432,6 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 					struct svc_xprt, xpt_ready);
 		list_del_init(&xprt->xpt_ready);
 		svc_xprt_get(xprt);
-
-		dprintk("svc: transport %p dequeued, inuse=%d\n",
-			xprt, atomic_read(&xprt->xpt_ref.refcount));
-	}
-	spin_unlock_bh(&pool->sp_lock);
 
 		dprintk("svc: transport %p dequeued, inuse=%d\n",
 			xprt, atomic_read(&xprt->xpt_ref.refcount));
@@ -524,6 +520,7 @@ void svc_wake_up(struct svc_serv *serv)
 		rcu_read_unlock();
 		dprintk("svc: daemon %p woken up.\n", rqstp);
 		wake_up_process(rqstp->rq_task);
+		trace_svc_wake_up(rqstp->rq_task->pid);
 		return;
 	}
 	rcu_read_unlock();
@@ -531,6 +528,7 @@ void svc_wake_up(struct svc_serv *serv)
 	/* No free entries available */
 	set_bit(SP_TASK_PENDING, &pool->sp_flags);
 	smp_wmb();
+	trace_svc_wake_up(0);
 }
 EXPORT_SYMBOL_GPL(svc_wake_up);
 
