@@ -86,70 +86,6 @@ struct pci1723_private {
 	unsigned short ao_data[8];	/* data output buffer */
 };
 
-/*
- * PCI Bar 2 I/O Register map (dev->iobase)
- */
-#define PCI1723_AO_REG(x)		(0x00 + ((x) * 2))
-#define PCI1723_BOARD_ID_REG		0x10
-#define PCI1723_BOARD_ID_MASK		(0xf << 0)
-#define PCI1723_SYNC_CTRL_REG		0x12
-#define PCI1723_SYNC_CTRL_ASYNC		(0 << 0)
-#define PCI1723_SYNC_CTRL_SYNC		(1 << 0)
-#define PCI1723_CTRL_REG		0x14
-#define PCI1723_CTRL_BUSY		(1 << 15)
-#define PCI1723_CTRL_INIT		(1 << 14)
-#define PCI1723_CTRL_SELF		(1 << 8)
-#define PCI1723_CTRL_IDX(x)		(((x) & 0x3) << 6)
-#define PCI1723_CTRL_RANGE(x)		(((x) & 0x3) << 4)
-#define PCI1723_CTRL_GAIN		(0 << 3)
-#define PCI1723_CTRL_OFFSET		(1 << 3)
-#define PCI1723_CTRL_CHAN(x)		(((x) & 0x7) << 0)
-#define PCI1723_CALIB_CTRL_REG		0x16
-#define PCI1723_CALIB_CTRL_CS		(1 << 2)
-#define PCI1723_CALIB_CTRL_DAT		(1 << 1)
-#define PCI1723_CALIB_CTRL_CLK		(1 << 0)
-#define PCI1723_CALIB_STROBE_REG	0x18
-#define PCI1723_DIO_CTRL_REG		0x1a
-#define PCI1723_DIO_CTRL_HDIO		(1 << 1)
-#define PCI1723_DIO_CTRL_LDIO		(1 << 0)
-#define PCI1723_DIO_DATA_REG		0x1c
-#define PCI1723_CALIB_DATA_REG		0x1e
-#define PCI1723_SYNC_STROBE_REG		0x20
-#define PCI1723_RESET_AO_STROBE_REG	0x22
-#define PCI1723_RESET_CALIB_STROBE_REG	0x24
-#define PCI1723_RANGE_STROBE_REG	0x26
-#define PCI1723_VREF_REG		0x28
-#define PCI1723_VREF_NEG10V		(0 << 0)
-#define PCI1723_VREF_0V			(1 << 0)
-#define PCI1723_VREF_POS10V		(3 << 0)
-
-static int pci1723_ao_insn_write(struct comedi_device *dev,
-				 struct comedi_subdevice *s,
-				 struct comedi_insn *insn,
-				 unsigned int *data)
-{
-	unsigned int chan = CR_CHAN(insn->chanspec);
-	int i;
-
-	outw(PCI1723_SYNC_CTRL_SYNC, dev->iobase + PCI1723_SYNC_CTRL_REG);
-
-	for (i = 0; i < 8; i++) {
-		/* set all outputs to 0V */
-		devpriv->ao_data[i] = 0x8000;
-		outw(devpriv->ao_data[i], dev->iobase + PCI1723_AO_REG(i));
-		/* set all ranges to +/- 10V */
-		outw(PCI1723_CTRL_RANGE(0) | PCI1723_CTRL_CHAN(i),
-		     PCI1723_CTRL_REG);
-	}
-
-	outw(0, dev->iobase + PCI1723_RANGE_STROBE_REG);
-	outw(0, dev->iobase + PCI1723_SYNC_STROBE_REG);
-
-	outw(PCI1723_SYNC_CTRL_ASYNC, dev->iobase + PCI1723_SYNC_CTRL_REG);
-
-	return 0;
-}
-
 static int pci1723_insn_read_ao(struct comedi_device *dev,
 				struct comedi_subdevice *s,
 				struct comedi_insn *insn, unsigned int *data)
@@ -228,6 +164,10 @@ static int pci1723_auto_attach(struct comedi_device *dev,
 	int ret;
 	int i;
 
+	devpriv = comedi_alloc_devpriv(dev, sizeof(*devpriv));
+	if (!devpriv)
+		return -ENOMEM;
+
 	ret = comedi_pci_enable(dev);
 	if (ret)
 		return ret;
@@ -264,6 +204,21 @@ static int pci1723_auto_attach(struct comedi_device *dev,
 	/* disable syncronous control */
 	outw(PCI1723_SYNC_CTRL_ASYNC, dev->iobase + PCI1723_SYNC_CTRL_REG);
 
+	/* synchronously reset all analog outputs to 0V, +/-10V range */
+	outw(PCI1723_SYNC_CTRL_SYNC, dev->iobase + PCI1723_SYNC_CTRL_REG);
+	for (i = 0; i < s->n_chan; i++) {
+		outw(PCI1723_CTRL_RANGE(0) | PCI1723_CTRL_CHAN(i),
+		     PCI1723_CTRL_REG);
+		outw(0, dev->iobase + PCI1723_RANGE_STROBE_REG);
+
+		devpriv->ao_data[i] = 0x8000;
+		outw(devpriv->ao_data[i], dev->iobase + PCI1723_AO_REG(i));
+	}
+	outw(0, dev->iobase + PCI1723_SYNC_STROBE_REG);
+
+	/* disable syncronous control */
+	outw(PCI1723_SYNC_CTRL_ASYNC, dev->iobase + PCI1723_SYNC_CTRL_REG);
+
 	s = &dev->subdevices[1];
 	s->type		= COMEDI_SUBD_DIO;
 	s->subdev_flags	= SDF_READABLE | SDF_WRITABLE;
@@ -290,8 +245,6 @@ static int pci1723_auto_attach(struct comedi_device *dev,
 	}
 	/* read DIO port state */
 	s->state = inw(dev->iobase + PCI1723_DIO_DATA_REG);
-
-	pci1723_reset(dev);
 
 	return 0;
 }
