@@ -761,6 +761,10 @@ void kvm_free_irq_source_id(struct kvm *kvm, int irq_source_id);
 #ifdef CONFIG_KVM_DEVICE_ASSIGNMENT
 int kvm_iommu_map_pages(struct kvm *kvm, struct kvm_memory_slot *slot);
 void kvm_iommu_unmap_pages(struct kvm *kvm, struct kvm_memory_slot *slot);
+int kvm_assign_device(struct kvm *kvm,
+		      struct kvm_assigned_dev_kernel *assigned_dev);
+int kvm_deassign_device(struct kvm *kvm,
+			struct kvm_assigned_dev_kernel *assigned_dev);
 #else
 static inline int kvm_iommu_map_pages(struct kvm *kvm,
 				      struct kvm_memory_slot *slot)
