@@ -1608,7 +1608,7 @@ int do_statahead_enter(struct inode *dir, struct dentry **dentryp,
 				} else if ((*dentryp)->d_inode != inode) {
 					/* revalidate, but inode is recreated */
 					CDEBUG(D_READA,
-					      "stale dentry %pd inode %lu/%u, statahead inode %lu/%u\n",
+					      "stale dentry %.*s inode %lu/%u, statahead inode %lu/%u\n",
 					      *dentryp,
 					      (*dentryp)->d_inode->i_ino,
 					      (*dentryp)->d_inode->i_generation,
@@ -1660,7 +1660,7 @@ int do_statahead_enter(struct inode *dir, struct dentry **dentryp,
 	if (unlikely(sai->sai_inode != parent->d_inode)) {
 		struct ll_inode_info *nlli = ll_i2info(parent->d_inode);
 
-		CWARN("Race condition, someone changed %pd just now: old parent "DFID", new parent "DFID"\n",
+		CWARN("Race condition, someone changed %.*s just now: old parent " DFID ", new parent " DFID "\n",
 		      *dentryp,
 		      PFID(&lli->lli_fid), PFID(&nlli->lli_fid));
 		dput(parent);

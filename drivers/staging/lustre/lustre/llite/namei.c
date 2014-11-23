@@ -600,7 +600,7 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	long long lookup_flags = LOOKUP_OPEN;
 	int rc = 0;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd,dir=%lu/%u(%p),file %p,open_flags %x,mode %x opened %d\n",
+	CDEBUG(D_VFSTRACE, "VFS Op:name=%.*s,dir=%lu/%u(%p),file %p,open_flags %x,mode %x opened %d\n",
 	       dentry, dir->i_ino,
 	       dir->i_generation, dir, file, open_flags, mode, *opened);
 
@@ -844,7 +844,7 @@ static int ll_create_nd(struct inode *dir, struct dentry *dentry,
 {
 	int rc;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd,dir=%lu/%u(%p),flags=%u, excl=%d\n",
+	CDEBUG(D_VFSTRACE, "VFS Op:name=%.*s,dir=%lu/%u(%p),flags=%u, excl=%d\n",
 	       dentry, dir->i_ino,
 	       dir->i_generation, dir, mode, want_excl);
 
@@ -1137,8 +1137,11 @@ static int ll_rmdir(struct inode *dir, struct dentry *dentry)
 	struct md_op_data *op_data;
 	int rc;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd,dir=%lu/%u(%p)\n",
-	       dentry, dir->i_ino, dir->i_generation, dir);
+	CDEBUG(D_VFSTRACE,
+	       "VFS Op:oldname=%.*s,src_dir=%lu/%u(%p),newname=%.*s,tgt_dir=%lu/%u(%p)\n",
+	       src_name->len, src_name->name,
+	       src->i_ino, src->i_generation, src, tgt_name->len,
+	       tgt_name->name, tgt->i_ino, tgt->i_generation, tgt);
 
 	op_data = ll_prep_md_op_data(NULL, dir, NULL,
 				     dentry->d_name.name, 
