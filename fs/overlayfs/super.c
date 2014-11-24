@@ -62,8 +62,6 @@ struct ovl_entry {
 
 #define OVL_MAX_STACK 500
 
-const char *ovl_opaque_xattr = "trusted.overlay.opaque";
-
 static struct dentry *__ovl_dentry_lower(struct ovl_entry *oe)
 {
 	return oe->numlower ? oe->lowerstack[0].dentry : NULL;
