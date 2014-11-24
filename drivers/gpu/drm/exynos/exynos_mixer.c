@@ -1022,8 +1022,7 @@ static void mixer_win_disable(struct exynos_drm_crtc *crtc, int zpos)
 
 static void mixer_wait_for_vblank(struct exynos_drm_crtc *crtc)
 {
-	struct mixer_context *mixer_ctx = crtc->ctx;
-	int err;
+	struct mixer_context *mixer_ctx = mgr_to_mixer(mgr);
 
 	mutex_lock(&mixer_ctx->mixer_mutex);
 	if (!mixer_ctx->powered) {
@@ -1320,7 +1319,6 @@ static int mixer_probe(struct platform_device *pdev)
 	ctx->mxr_ver = drv->version;
 	init_waitqueue_head(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);
-	ctx->manager.ctx = ctx;
 
 	platform_set_drvdata(pdev, ctx);
 
