@@ -1265,6 +1265,8 @@ static int mixer_bind(struct device *dev, struct device *manager, void *data)
 		goto free_ctx;
 	}
 
+	pm_runtime_enable(dev);
+
 	return 0;
 
 free_ctx:
@@ -1276,7 +1278,9 @@ static void mixer_unbind(struct device *dev, struct device *master, void *data)
 {
 	struct mixer_context *ctx = dev_get_drvdata(dev);
 
-	mixer_ctx_remove(ctx);
+	mixer_mgr_remove(&ctx->manager);
+
+	pm_runtime_disable(dev);
 }
 
 static const struct component_ops mixer_component_ops = {
@@ -1316,6 +1320,7 @@ static int mixer_probe(struct platform_device *pdev)
 	ctx->mxr_ver = drv->version;
 	init_waitqueue_head(&ctx->wait_vsync_queue);
 	atomic_set(&ctx->wait_vsync_event, 0);
+	ctx->manager.ctx = ctx;
 
 	platform_set_drvdata(pdev, ctx);
 
