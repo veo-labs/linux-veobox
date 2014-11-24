@@ -629,6 +629,7 @@ static struct platform_driver exynos_drm_platform_driver = {
 
 static int exynos_drm_init(void)
 {
+	bool is_exynos = false;
 	int ret, i, j;
 
 	/*
