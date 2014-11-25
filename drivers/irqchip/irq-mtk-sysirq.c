@@ -139,12 +139,10 @@ static int __init mtk_sysirq_of_init(struct device_node *node,
 	if (!chip_data)
 		return -ENOMEM;
 
-	size = resource_size(&res);
-	intpol_num = size * 8;
-	chip_data->intpol_base = ioremap(res.start, size);
+	chip_data->intpol_base = of_io_request_and_map(node, 0, "intpol");
 	if (!chip_data->intpol_base) {
 		pr_err("mtk_sysirq: unable to map sysirq register\n");
-		ret = PTR_ERR(chip_data->intpol_base);
+		ret = -ENOMEM;
 		goto out_free;
 	}
 
