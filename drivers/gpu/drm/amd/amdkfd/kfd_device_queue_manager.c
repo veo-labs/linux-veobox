@@ -586,11 +586,15 @@ static int initialize_nocpsch(struct device_queue_manager *dqm)
 
 static void uninitialize_nocpsch(struct device_queue_manager *dqm)
 {
+	int i;
+
 	BUG_ON(!dqm);
 
 	BUG_ON(dqm->queue_count > 0 || dqm->processes_count > 0);
 
 	kfree(dqm->allocated_queues);
+	for (i = 0 ; i < KFD_MQD_TYPE_MAX ; i++)
+		kfree(dqm->mqds[i]);
 	mutex_destroy(&dqm->lock);
 	kfd_gtt_sa_free(dqm->dev, dqm->pipeline_mem);
 }
