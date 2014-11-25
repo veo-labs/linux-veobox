@@ -2241,6 +2241,7 @@ int drm_mode_getencoder(struct drm_device *dev, void *data,
 {
 	struct drm_mode_get_encoder *enc_resp = data;
 	struct drm_encoder *encoder;
+	struct drm_crtc *crtc;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
@@ -2250,7 +2251,10 @@ int drm_mode_getencoder(struct drm_device *dev, void *data,
 		return -ENOENT;
 
 	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
-	if (encoder->crtc)
+	crtc = drm_encoder_get_crtc(encoder);
+	if (crtc)
+		enc_resp->crtc_id = crtc->base.id;
+	else if (encoder->crtc)
 		enc_resp->crtc_id = encoder->crtc->base.id;
 	else
 		enc_resp->crtc_id = 0;
