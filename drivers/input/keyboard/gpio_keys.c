@@ -619,30 +619,34 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 
 	i = 0;
 	for_each_child_of_node(node, pp) {
+		int gpio = -1;
+		int irq;
 		enum of_gpio_flags flags;
 
-		button = &pdata->buttons[i++];
-
-		button->gpio = of_get_gpio_flags(pp, 0, &flags);
-		if (button->gpio < 0) {
-			error = button->gpio;
-			if (error != -ENOENT) {
+		if (!of_find_property(pp, "gpios", NULL)) {
+			irq = irq_of_parse_and_map(pp, 0);
+			if (irq == 0) {
+				pdata->nbuttons--;
+				dev_warn(dev, "Found button without gpios or irqs\n");
+				continue;
+			}
+		} else {
+			gpio = of_get_gpio_flags(pp, 0, &flags);
+			if (gpio < 0) {
+				error = gpio;
 				if (error != -EPROBE_DEFER)
 					dev_err(dev,
 						"Failed to get gpio flags, error: %d\n",
 						error);
 				return ERR_PTR(error);
 			}
-		} else {
-			button->active_low = flags & OF_GPIO_ACTIVE_LOW;
 		}
 
 		button->irq = irq_of_parse_and_map(pp, 0);
 
-		if (!gpio_is_valid(button->gpio) && !button->irq) {
-			dev_err(dev, "Found button without gpios or irqs\n");
-			return ERR_PTR(-EINVAL);
-		}
+		button->gpio = gpio;
+		button->irq = irq;
+		button->active_low = flags & OF_GPIO_ACTIVE_LOW;
 
 		if (of_property_read_u32(pp, "linux,code", &button->code)) {
 			dev_err(dev, "Button without keycode: 0x%x\n",
