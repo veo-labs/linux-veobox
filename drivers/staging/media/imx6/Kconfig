@@ -8,7 +8,7 @@ config VIDEO_IMX6
 
 config VIDEO_IMX6_CAMERA
 	tristate "i.MX6 Camera Interface driver"
-	depends on VIDEO_IMX6 && VIDEO_DEV && I2C
+	depends on VIDEO_IMX6 && VIDEO_DEV && I2C && MEDIA_CONTROLLER
 	select VIDEOBUF2_DMA_CONTIG
 	default y
 	---help---
