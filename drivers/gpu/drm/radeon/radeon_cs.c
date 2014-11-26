@@ -240,7 +240,7 @@ static int radeon_cs_sync_rings(struct radeon_cs_parser *p)
 
 		resv = reloc->robj->tbo.resv;
 		r = radeon_sync_resv(p->rdev, &p->ib.sync, resv,
-				     p->relocs[i].tv.shared);
+				     reloc->tv.shared);
 
 		if (r)
 			return r;
@@ -484,9 +484,6 @@ static int radeon_bo_vm_update_pte(struct radeon_cs_parser *p,
 	r = radeon_vm_update_page_directory(rdev, vm);
 	if (r)
 		return r;
-
-	radeon_sync_resv(p->rdev, &p->ib.sync, vm->page_directory->tbo.resv,
-			 true);
 
 	r = radeon_vm_clear_freed(rdev, vm);
 	if (r)
