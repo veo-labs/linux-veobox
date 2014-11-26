@@ -4191,7 +4191,7 @@ static const struct opcode twobyte_table[256] = {
 	D(DstReg | SrcMem8 | ModRM | Mov), D(DstReg | SrcMem16 | ModRM | Mov),
 	/* 0xC0 - 0xC7 */
 	F2bv(DstMem | SrcReg | ModRM | SrcWrite | Lock, em_xadd),
-	N, I(DstMem | SrcReg | ModRM | No16 | Mov, em_mov),
+	N, ID(0, &instr_dual_0f_c3),
 	N, N, N, GD(0, &group9),
 	/* 0xC8 - 0xCF */
 	X8(I(DstReg, em_bswap)),
