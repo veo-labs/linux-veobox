@@ -563,7 +563,6 @@ static void adv7604_set_hpd(struct adv7604_state *state, unsigned int hpd)
 		if (IS_ERR(state->hpd_gpio[i]))
 			continue;
 
-		printk("%s: Set gpio %d to value %d\n", __func__, state->hpd_gpio[i], hpd & BIT(i));
 		gpiod_set_value_cansleep(state->hpd_gpio[i], hpd & BIT(i));
 	}
 
@@ -2696,7 +2695,7 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 	state->pdata.int1_config = ADV7604_INT1_CONFIG_DISABLED;
 
 	/* Hardcode the remaining platform data fields. */
-	state->pdata.disable_pwrdnb = 0;
+	state->pdata.disable_pwrdnb = 1;
 	state->pdata.disable_cable_det_rst = 0;
 	state->pdata.default_input = 0;
 	state->pdata.blank_data = 1;
