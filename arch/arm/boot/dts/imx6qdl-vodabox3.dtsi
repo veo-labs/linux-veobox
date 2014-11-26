@@ -77,11 +77,10 @@
 				//remote-endpoint = <&hdmi0_out>;
 				remote-endpoint = <&csi0_fpga_out>;
 				bus-width = <16>;
-				data-shift = <4>; /* Lines 20:4 used */
+				//data-shift = <4>; /* Lines 19:4 used */
 			};
 		};
 	};
-
 };
 
 &audmux {
@@ -182,6 +181,7 @@
 
 	hdmiin1: adv7611@4c {
 		compatible = "adi,adv7611";
+		reset-gpios = <&gpio1 20 0>;
 		reg = <0x4c 0x68 0x66 0x64 0x62
 			0x60 0x5e 0x5c 0x5a 0x58 0x56
 			0x54 0x52>;
@@ -207,6 +207,7 @@
 
 	hdmiin2: adv7604@20 {
 		compatible = "adi,adv7604";
+		reset-gpios = <&gpio1 18 0>;
 		reg = <0x20>;
 		hpd-gpios = <&gpio2 1 0>;
 
@@ -277,6 +278,13 @@
 					remote-endpoint = <&csi0>;
 				};
 			};
+/*			port@5 {
+				reg = <5>;
+				csi1_fpga_out: endpoint {
+					bus-width = <16>;
+					remote-endpoint = <&csi1>;
+				};
+			};*/
 		};
 	};
 
@@ -401,6 +409,8 @@
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_0__CCM_CLKO1		0x000b0		/* SGTL5000 sys_mclk */
 				MX6QDL_PAD_NANDF_D1__GPIO2_IO01		0x1b800		/* ADV7604 Hotplug */
+				MX6QDL_PAD_SD1_CLK__GPIO1_IO20		0x1b0b0		/* ADV7611 reset */
+				MX6QDL_PAD_SD1_CMD__GPIO1_IO18		0x1b0b0		/* ADV7604 reset */
 			>;
 		};
 
@@ -490,17 +500,17 @@
 		pinctrl_ipu1_csi0: ipu1_csi0grp {
 			fsl,pins = <
 				/*MX6QDL_PAD_EIM_D27__IPU1_CSI0_DATA00 0x80000000
-				MX6QDL_PAD_EIM_D26__IPU1_CSI0_DATA01 0x80000000
+				MX6QDL_PAD_EIM_D26__IPU1_CSI0_DATA01 0x80000000*/
+				MX6QDL_PAD_EIM_D31__IPU1_CSI0_DATA02 0x80000000
 				MX6QDL_PAD_EIM_D30__IPU1_CSI0_DATA03 0x80000000
-				MX6QDL_PAD_EIM_D31__IPU1_CSI0_DATA02 0x80000000*/
 				MX6QDL_PAD_CSI0_DAT4__IPU1_CSI0_DATA04 0x80000000
 				MX6QDL_PAD_CSI0_DAT5__IPU1_CSI0_DATA05 0x80000000
 				MX6QDL_PAD_CSI0_DAT6__IPU1_CSI0_DATA06 0x80000000
 				MX6QDL_PAD_CSI0_DAT7__IPU1_CSI0_DATA07 0x80000000
 				MX6QDL_PAD_CSI0_DAT8__IPU1_CSI0_DATA08 0x80000000
 				MX6QDL_PAD_CSI0_DAT9__IPU1_CSI0_DATA09 0x80000000
-				MX6QDL_PAD_CSI0_DAT10__IPU1_CSI0_DATA10 0x80000000
-				MX6QDL_PAD_CSI0_DAT11__IPU1_CSI0_DATA11 0x80000000
+				/*MX6QDL_PAD_CSI0_DAT10__IPU1_CSI0_DATA10 0x80000000
+				MX6QDL_PAD_CSI0_DAT11__IPU1_CSI0_DATA11 0x80000000*/
 				MX6QDL_PAD_CSI0_DAT12__IPU1_CSI0_DATA12 0x80000000
 				MX6QDL_PAD_CSI0_DAT13__IPU1_CSI0_DATA13 0x80000000
 				MX6QDL_PAD_CSI0_DAT14__IPU1_CSI0_DATA14 0x80000000
