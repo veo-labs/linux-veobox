@@ -651,6 +651,7 @@ static int encoder_start(struct encoder_priv *priv)
 		v4l2_err(&priv->sd, "CSI enable error: %d\n", err);
 		goto out_free_eof_irq;
 	}
+	ipu_cpmem_dump(priv->enc_ch);
 	ipu_csi_dump(priv->csi);
 
 	/* start the EOF timeout timer */

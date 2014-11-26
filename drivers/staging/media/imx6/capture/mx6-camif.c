@@ -109,7 +109,7 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
-		.codes = {V4L2_MBUS_FMT_YUYV8_1X16, V4L2_MBUS_FMT_YUYV8_2X8},
+		.codes = {V4L2_MBUS_FMT_YUYV8_2X8},//, V4L2_MBUS_FMT_YUYV8_1X16},
 		.depth  = 16,
 	}, {
 		.name	= "4:2:2 packed, UYVY",
@@ -151,8 +151,9 @@ const struct mx6cam_pixfmt *mx6cam_get_format_by_fourcc(u32 fourcc)
 	for ( i = 0; i < ARRAY_SIZE(mx6cam_pixformats); i++) {
 		const struct mx6cam_pixfmt *format = &mx6cam_pixformats[i];
 
-		if (format->fourcc == fourcc)
+		if (format->fourcc == fourcc) {
 			return format;
+		}
 	}
 
 	return ERR_PTR(-EINVAL);
@@ -216,7 +217,7 @@ static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 
 static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_timings *timings)
 {
-
+	printk("--> %s\n", __func__);
 	dev->format.pixelformat = V4L2_PIX_FMT_YUYV;
 	dev->format.width = timings->bt.width;
 	dev->format.height = timings->bt.height;
@@ -235,13 +236,14 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->format.sizeimage = dev->format.bytesperline * dev->format.height;
 	dev->format.priv = 0;
 	dev->user_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
+	printk("Format of CSI set to %s\n", dev->user_pixfmt->name);
 
 	/* Update subdev_fmt as well */
 	dev->subdev_fmt.width = dev->format.width;
 	dev->subdev_fmt.height = dev->format.height;
 	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
 	dev->subdev_fmt.code = V4L2_MBUS_FMT_YUYV8_2X8;
-	dev->subdev_pixfmt = mx6cam_get_format(0, dev->format.pixelformat);
+	dev->subdev_pixfmt = mx6cam_get_format(0, dev->subdev_fmt.code);
 }
 
 /*
@@ -1015,7 +1017,7 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 		info = mx6cam_get_format_by_fourcc(MX6CAM_DEF_FORMAT);
 
 	pix->pixelformat = info->fourcc;
-	pix->colorspace = V4L2_COLORSPACE_SRGB;
+	pix->colorspace = V4L2_COLORSPACE_REC709;
 	pix->field = V4L2_FIELD_NONE;
 	pix->width = clamp(pix->width, MIN_W, MAX_W);
 	pix->height = clamp(pix->height, MIN_H, MAX_H);
@@ -1374,11 +1376,6 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 	struct mx6cam_dev *dev = ctx->dev;
 	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	struct v4l2_subdev_format sd_fmt = {
-		.pad = 1,
-		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.format.code = V4L2_MBUS_FMT_YUYV8_2X8,
-	};
 	int ret, sensor_input;
 
 	if (index == dev->current_input)
@@ -1437,7 +1434,6 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
  *		dev->vfd->tvnorms = V4L2_STD_ALL;
  */
 	ret = v4l2_subdev_call(dev->ep->sd, video, s_routing, 0, 0, 0);
-//	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
 
 	dev->current_input = index;
 
@@ -1689,17 +1685,27 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
 	struct mx6cam_endpoint *ep;
+	struct v4l2_subdev_format sd_fmt = {
+		.pad = 1,
+		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
+	};
 	int ret;
 
 	ep = find_ep_by_input_index(dev, dev->current_input);
 	if (!ep)
 		return -EINVAL;
 
+	printk("--> %s\n", __func__);
 	ret = v4l2_subdev_call(dev->ep->sd,
 			video, s_dv_timings, timings);
 
 	dev->dv_timings_cap = *timings;
 	update_format_from_timings(dev, timings);
+
+	sd_fmt.format.code = dev->subdev_fmt.code;
+
+	printk("Calling set_fmt on %s\n", dev->ep->sd->name);
+	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
 	return ret;
 
 }
@@ -2547,12 +2553,12 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	struct mx6cam_dev *camdev =
 		container_of(notifier, struct mx6cam_dev, notifier);
 	struct mx6cam_graph_entity *entity;
-	struct v4l2_dv_timings timings;
+/*	struct v4l2_dv_timings timings;
 	struct v4l2_subdev_format sd_fmt = {
 		.pad = 1,
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.format.code = V4L2_MBUS_FMT_YUYV8_2X8,
-	};
+		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
+	};*/
 	int ret, i;
 
 	dev_dbg(camdev->dev, "notify complete, all subdevs registered\n");
@@ -2910,6 +2916,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	dev->restart_timer.function = mx6cam_restart_timeout;
 
 	INIT_LIST_HEAD(&dev->entities);
+	dev->ep = NULL;
 	/* init our controls */
 	ret = mx6cam_init_controls(dev);
 	if (ret) {
@@ -2930,6 +2937,8 @@ static int mx6cam_probe(struct platform_device *pdev)
 	ret = mx6cam_graph_init(dev);
 	if (ret)
 		goto unreg_subdevs;
+	if (!dev->ep)
+		ret = -EPROBE_DEFER;
 
 	dev->encoder_sd = mx6cam_encoder_init(dev);
 	if (IS_ERR(dev->encoder_sd)) {

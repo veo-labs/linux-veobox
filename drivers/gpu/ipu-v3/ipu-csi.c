@@ -340,10 +340,16 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 		break;
 	case V4L2_MBUS_BT656:
 		csicfg->ext_vsync = 0;
-		if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
-			csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_INTERLACED;
+		if (mbus_fmt->code == V4L2_MBUS_FMT_YUYV8_2X8)
+			if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
+				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_INTERLACED_SDR;
+			else
+				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_PROGRESSIVE_SDR;
 		else
-			csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_PROGRESSIVE;
+			if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
+				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_INTERLACED;
+			else
+				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_PROGRESSIVE;
 		break;
 	case V4L2_MBUS_CSI2:
 		/*
