@@ -107,7 +107,7 @@ static void crtc_flush_all(struct drm_crtc *crtc)
 	if (!mdp5_crtc->ctl)
 		return;
 
-	for_each_plane_on_crtc(crtc, plane) {
+	drm_atomic_crtc_for_each_plane(plane, crtc) {
 		flush_mask |= mdp5_plane_get_flush(plane);
 	}
 	flush_mask |= mdp5_ctl_get_flush(mdp5_crtc->ctl);
@@ -140,8 +140,9 @@ static void complete_flip(struct drm_crtc *crtc, struct drm_file *file)
 	}
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 
-	for_each_plane_on_crtc(crtc, plane)
+	drm_atomic_crtc_for_each_plane(plane, crtc) {
 		mdp5_plane_complete_flip(plane);
+	}
 }
 
 static void mdp5_crtc_destroy(struct drm_crtc *crtc)
@@ -190,7 +191,7 @@ static void blend_setup(struct drm_crtc *crtc)
 	if (!mdp5_crtc->ctl)
 		goto out;
 
-	for_each_plane_on_crtc(crtc, plane) {
+	drm_atomic_crtc_for_each_plane(plane, crtc) {
 		enum mdp_mixer_stage_id stage =
 			to_mdp5_plane_state(plane->state)->stage;
 
@@ -326,7 +327,7 @@ static int mdp5_crtc_atomic_check(struct drm_crtc *crtc,
 	/* verify that there are not too many planes attached to crtc
 	 * and that we don't have conflicting mixer stages:
 	 */
-	for_each_pending_plane_on_crtc(state->state, crtc, plane) {
+	drm_atomic_crtc_state_for_each_plane(plane, state) {
 		struct drm_plane_state *pstate;
 
 		if (cnt >= ARRAY_SIZE(pstates)) {
