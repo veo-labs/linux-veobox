@@ -192,11 +192,6 @@ static void recalculate_apic_map(struct kvm *kvm)
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		struct kvm_lapic *apic = vcpu->arch.apic;
 		u16 cid, lid;
-		u32 ldr;
-
-	kvm_for_each_vcpu(i, vcpu, kvm) {
-		struct kvm_lapic *apic = vcpu->arch.apic;
-		u16 cid, lid;
 		u32 ldr, aid;
 
 		if (!kvm_apic_present(vcpu))
