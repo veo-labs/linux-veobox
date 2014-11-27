@@ -820,6 +820,9 @@ static int radeon_vm_update_ptes(struct radeon_device *rdev,
 		int r;
 
 		radeon_sync_resv(rdev, &ib->sync, pt->tbo.resv, true);
+		r = reservation_object_reserve_shared(pt->tbo.resv);
+		if (r)
+			return r;
 
 		if ((addr & ~mask) == (end & ~mask))
 			nptes = end - addr;
@@ -880,31 +883,6 @@ static void radeon_vm_fence_pts(struct radeon_vm *vm,
 
 	for (i = start; i <= end; ++i)
 		radeon_bo_fence(vm->page_tables[i].bo, fence, true);
-}
-
-/**
- * radeon_vm_fence_pts - fence page tables after an update
- *
- * @vm: requested vm
- * @start: start of GPU address range
- * @end: end of GPU address range
- * @fence: fence to use
- *
- * Fence the page tables in the range @start - @end (cayman+).
- *
- * Global and local mutex must be locked!
- */
-static void radeon_vm_fence_pts(struct radeon_vm *vm,
-				uint64_t start, uint64_t end,
-				struct radeon_fence *fence)
-{
-	unsigned i;
-
-	start >>= radeon_vm_block_size;
-	end >>= radeon_vm_block_size;
-
-	for (i = start; i <= end; ++i)
-		radeon_bo_fence(vm->page_tables[i].bo, fence, false);
 }
 
 /**
@@ -1015,9 +993,13 @@ int radeon_vm_bo_update(struct radeon_device *rdev,
 			radeon_sync_fence(&ib.sync, vm->ids[i].last_id_use);
 	}
 
-	radeon_vm_update_ptes(rdev, vm, &ib, bo_va->it.start,
-			      bo_va->it.last + 1, addr,
-			      radeon_vm_page_flags(bo_va->flags));
+	r = radeon_vm_update_ptes(rdev, vm, &ib, bo_va->it.start,
+				  bo_va->it.last + 1, addr,
+				  radeon_vm_page_flags(bo_va->flags));
+	if (r) {
+		radeon_ib_free(rdev, &ib);
+		return r;
+	}
 
 	radeon_asic_vm_pad_ib(rdev, &ib);
 	WARN_ON(ib.length_dw > ndw);
