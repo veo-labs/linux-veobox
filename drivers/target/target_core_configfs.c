@@ -586,6 +586,42 @@ EXPORT_SYMBOL(target_fabric_configfs_deregister);
 
 /* Start functions for struct config_item_type tb_dev_attrib_cit */
 
+#define DEF_DEV_ATTRIB_SHOW(_name)					\
+static ssize_t target_core_dev_show_attr_##_name(			\
+	struct se_dev_attrib *da,					\
+	char *page)							\
+{									\
+	return snprintf(page, PAGE_SIZE, "%u\n",			\
+		(u32)da->da_dev->dev_attrib._name);			\
+}
+
+#define DEF_DEV_ATTRIB_STORE(_name)					\
+static ssize_t target_core_dev_store_attr_##_name(			\
+	struct se_dev_attrib *da,					\
+	const char *page,						\
+	size_t count)							\
+{									\
+	unsigned long val;						\
+	int ret;							\
+									\
+	ret = kstrtoul(page, 0, &val);				\
+	if (ret < 0) {							\
+		pr_err("kstrtoul() failed with"		\
+			" ret: %d\n", ret);				\
+		return -EINVAL;						\
+	}								\
+	ret = se_dev_set_##_name(da->da_dev, (u32)val);			\
+									\
+	return (!ret) ? count : -EINVAL;				\
+}
+
+#define DEF_DEV_ATTRIB(_name)						\
+DEF_DEV_ATTRIB_SHOW(_name);						\
+DEF_DEV_ATTRIB_STORE(_name);
+
+#define DEF_DEV_ATTRIB_RO(_name)					\
+DEF_DEV_ATTRIB_SHOW(_name);
+
 CONFIGFS_EATTR_STRUCT(target_core_dev_attrib, se_dev_attrib);
 CONFIGFS_EATTR_OPS(target_core_dev_attrib, se_dev_attrib, da_group);
 
@@ -594,7 +630,8 @@ static struct configfs_item_operations target_core_dev_attrib_ops = {
 	.store_attribute	= target_core_dev_attrib_attr_store,
 };
 
-TB_CIT_SETUP(dev_attrib, &target_core_dev_attrib_ops, NULL, NULL);
+TB_CIT_SETUP(dev_attrib, &target_core_dev_attrib_ops, NULL,
+	     target_core_dev_attrib_attrs);
 
 /* End functions for struct config_item_type tb_dev_attrib_cit */
 
@@ -2940,6 +2977,7 @@ static struct config_item_type target_core_cit = {
 void target_core_setup_sub_cits(struct se_subsystem_api *sa)
 {
 	target_core_setup_dev_cit(sa);
+	target_core_setup_dev_attrib_cit(sa);
 }
 EXPORT_SYMBOL(target_core_setup_sub_cits);
 
