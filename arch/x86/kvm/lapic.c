@@ -690,6 +690,8 @@ bool kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *src,
 	if (irq->dest_id == map->broadcast)
 		goto out;
 
+	ret = true;
+
 	if (irq->dest_mode == 0) { /* physical mode */
 		if (irq->delivery_mode == APIC_DM_LOWEST)
 			goto out;
