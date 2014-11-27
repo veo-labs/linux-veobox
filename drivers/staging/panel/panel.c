@@ -249,45 +249,18 @@ static wait_queue_head_t keypad_read_wait;
 /* lcd-specific variables */
 static struct {
 	bool enabled;
-	bool initialized;
-	bool must_clear;
-
-	int height;
-	int width;
-	int bwidth;
-	int hwidth;
-	int charset;
-	int proto;
-	int light_tempo;
-
-	/* TODO: use union here? */
-	struct {
-		int e;
-		int rs;
-		int rw;
-		int cl;
-		int da;
-		int bl;
-	} pins;
-
-	/* contains the LCD config state */
-	unsigned long int flags;
-
-	/* Contains the LCD X and Y offset */
-	struct {
-		unsigned long int x;
-		unsigned long int y;
-	} addr;
-
-	/* Current escape sequence and it's length or -1 if outside */
-	struct {
-		char buf[LCD_ESCAPE_LEN + 1];
-		int len;
-	} esc_seq;
 } lcd;
 
-/* Needed only for init */
-static int selected_lcd_type = NOT_SET;
+/* contains the LCD config state */
+static unsigned long int lcd_flags;
+/* contains the LCD X offset */
+static unsigned long int lcd_addr_x;
+/* contains the LCD Y offset */
+static unsigned long int lcd_addr_y;
+/* current escape sequence, 0 terminated */
+static char lcd_escape[LCD_ESCAPE_LEN + 1];
+/* not in escape state. >=0 = escape cmd len */
+static int lcd_escape_len = -1;
 
 /*
  * Bit masks to convert LCD signals to parallel port outputs.
@@ -1456,7 +1429,7 @@ static void panel_lcd_print(const char *s)
 	const char *tmp = s;
 	int count = strlen(s);
 
-	if (lcd.enabled && lcd.initialized) {
+	if (lcd.enabled && lcd_initialized) {
 		for (; count-- > 0; tmp++) {
 			if (!in_interrupt() && (((count + 1) & 0x1f) == 0))
 				/* let's be a little nice with other processes
@@ -2024,7 +1997,7 @@ static void panel_scan_timer(void)
 			panel_process_inputs();
 	}
 
-	if (lcd.enabled && lcd.initialized) {
+	if (lcd.enabled && lcd_initialized) {
 		if (keypressed) {
 			if (lcd.light_tempo == 0
 					&& ((lcd.flags & LCD_FLAG_L) == 0))
@@ -2205,7 +2178,7 @@ static void keypad_init(void)
 static int panel_notify_sys(struct notifier_block *this, unsigned long code,
 			    void *unused)
 {
-	if (lcd.enabled && lcd.initialized) {
+	if (lcd.enabled && lcd_initialized) {
 		switch (code) {
 		case SYS_DOWN:
 			panel_lcd_print
@@ -2298,7 +2271,7 @@ static void panel_detach(struct parport *port)
 		keypad_initialized = 0;
 	}
 
-	if (lcd.enabled && lcd.initialized) {
+	if (lcd.enabled && lcd_initialized) {
 		misc_deregister(&lcd_dev);
 		lcd.initialized = false;
 	}
@@ -2374,43 +2347,8 @@ static int __init panel_init_module(void)
 		break;
 	}
 
-	/*
-	 * Init lcd struct with load-time values to preserve exact current
-	 * functionality (at least for now).
-	 */
-	lcd.height = lcd_height;
-	lcd.width = lcd_width;
-	lcd.bwidth = lcd_bwidth;
-	lcd.hwidth = lcd_hwidth;
-	lcd.charset = lcd_charset;
-	lcd.proto = lcd_proto;
-	lcd.pins.e = lcd_e_pin;
-	lcd.pins.rs = lcd_rs_pin;
-	lcd.pins.rw = lcd_rw_pin;
-	lcd.pins.cl = lcd_cl_pin;
-	lcd.pins.da = lcd_da_pin;
-	lcd.pins.bl = lcd_bl_pin;
-
-	/* Leave it for now, just in case */
-	lcd.esc_seq.len = -1;
-
-	/*
-	 * Overwrite selection with module param values (both keypad and lcd),
-	 * where the deprecated params have lower prio.
-	 */
-	if (keypad_enabled != NOT_SET)
-		selected_keypad_type = keypad_enabled;
-	if (keypad_type != NOT_SET)
-		selected_keypad_type = keypad_type;
-
-	keypad.enabled = (selected_keypad_type > 0);
-
-	if (lcd_enabled != NOT_SET)
-		selected_lcd_type = lcd_enabled;
-	if (lcd_type != NOT_SET)
-		selected_lcd_type = lcd_type;
-
-	lcd.enabled = (selected_lcd_type > 0);
+	lcd.enabled = (lcd_type > 0);
+	keypad.enabled = (keypad_type > 0);
 
 	switch (selected_keypad_type) {
 	case KEYPAD_TYPE_OLD:
