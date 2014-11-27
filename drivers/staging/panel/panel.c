@@ -249,12 +249,20 @@ static wait_queue_head_t keypad_read_wait;
 /* lcd-specific variables */
 static struct {
 	bool enabled;
+	bool initialized;
+	bool must_clear;
+
+	/* TODO: use bool here? */
+	char left_shift;
+
 	int height;
 	int width;
 	int bwidth;
 	int hwidth;
 	int charset;
 	int proto;
+	int light_tempo;
+
 	/* TODO: use union here? */
 	struct {
 		int e;
@@ -264,21 +272,25 @@ static struct {
 		int da;
 		int bl;
 	} pins;
+
+	/* contains the LCD config state */
+	unsigned long int flags;
+
+	/* Contains the LCD X and Y offset */
+	struct {
+		unsigned long int x;
+		unsigned long int y;
+	} addr;
+
+	/* Current escape sequence and it's length or -1 if outside */
+	struct {
+		char buf[LCD_ESCAPE_LEN + 1];
+		int len;
+	} esc_seq;
 } lcd;
 
 /* Needed only for init */
 static int selected_lcd_type = NOT_SET;
-
-/* contains the LCD config state */
-static unsigned long int lcd_flags;
-/* contains the LCD X offset */
-static unsigned long int lcd_addr_x;
-/* contains the LCD Y offset */
-static unsigned long int lcd_addr_y;
-/* current escape sequence, 0 terminated */
-static char lcd_escape[LCD_ESCAPE_LEN + 1];
-/* not in escape state. >=0 = escape cmd len */
-static int lcd_escape_len = -1;
 
 /*
  * Bit masks to convert LCD signals to parallel port outputs.
@@ -899,23 +911,23 @@ static void lcd_write_data_tilcd(int data)
 static void lcd_gotoxy(void)
 {
 	lcd_write_cmd(0x80	/* set DDRAM address */
-		      | (lcd_addr_y ? lcd.hwidth : 0)
+		      | (lcd.addr.y ? lcd.hwidth : 0)
 		      /* we force the cursor to stay at the end of the
 			 line if it wants to go farther */
-		      | ((lcd_addr_x < lcd.bwidth) ? lcd_addr_x &
+		      | ((lcd.addr.x < lcd.bwidth) ? lcd.addr.x &
 			 (lcd.hwidth - 1) : lcd.bwidth - 1));
 }
 
 static void lcd_print(char c)
 {
-	if (lcd_addr_x < lcd.bwidth) {
+	if (lcd.addr.x < lcd.bwidth) {
 		if (lcd_char_conv != NULL)
 			c = lcd_char_conv[(unsigned char)c];
 		lcd_write_data(c);
 		lcd.addr.x++;
 	}
 	/* prevents the cursor from wrapping onto the next line */
-	if (lcd_addr_x == lcd.bwidth)
+	if (lcd.addr.x == lcd.bwidth)
 		lcd_gotoxy();
 }
 
@@ -1015,7 +1027,7 @@ static void lcd_clear_display(void)
 
 static void lcd_init_display(void)
 {
-	lcd_flags = ((lcd.height > 1) ? LCD_FLAG_N : 0)
+	lcd.flags = ((lcd.height > 1) ? LCD_FLAG_N : 0)
 	    | LCD_FLAG_D | LCD_FLAG_C | LCD_FLAG_B;
 
 	long_sleep(20);		/* wait 20 ms after power-up for the paranoid */
@@ -1133,16 +1145,16 @@ static inline int handle_lcd_special_code(void)
 	case 'l':	/* Shift Cursor Left */
 		if (lcd.addr.x > 0) {
 			/* back one char if not at end of line */
-			if (lcd_addr_x < lcd.bwidth)
+			if (lcd.addr.x < lcd.bwidth)
 				lcd_write_cmd(0x10);
 			lcd.addr.x--;
 		}
 		processed = 1;
 		break;
 	case 'r':	/* shift cursor right */
-		if (lcd_addr_x < lcd.width) {
+		if (lcd.addr.x < lcd.width) {
 			/* allow the cursor to pass the end of the line */
-			if (lcd_addr_x <
+			if (lcd.addr.x <
 			    (lcd.bwidth - 1))
 				lcd_write_cmd(0x14);
 			lcd.addr.x++;
@@ -1161,7 +1173,7 @@ static inline int handle_lcd_special_code(void)
 	case 'k': {	/* kill end of line */
 		int x;
 
-		for (x = lcd_addr_x; x < lcd.bwidth; x++)
+		for (x = lcd.addr.x; x < lcd.bwidth; x++)
 			lcd_write_data(' ');
 
 		/* restore cursor position */
@@ -1316,7 +1328,7 @@ static void lcd_write_char(char c)
 			if (lcd.addr.x > 0) {
 				/* check if we're not at the
 				   end of the line */
-				if (lcd_addr_x < lcd.bwidth)
+				if (lcd.addr.x < lcd.bwidth)
 					/* back one char */
 					lcd_write_cmd(LCD_CMD_SHIFT);
 				lcd.addr.x--;
@@ -1333,10 +1345,10 @@ static void lcd_write_char(char c)
 		case '\n':
 			/* flush the remainder of the current line and
 			   go to the beginning of the next line */
-			for (; lcd_addr_x < lcd.bwidth; lcd_addr_x++)
+			for (; lcd.addr.x < lcd.bwidth; lcd.addr.x++)
 				lcd_write_data(' ');
-			lcd_addr_x = 0;
-			lcd_addr_y = (lcd_addr_y + 1) % lcd.height;
+			lcd.addr.x = 0;
+			lcd.addr.y = (lcd.addr.y + 1) % lcd.height;
 			lcd_gotoxy();
 			break;
 		case '\r':
@@ -1447,7 +1459,7 @@ static void panel_lcd_print(const char *s)
 	const char *tmp = s;
 	int count = strlen(s);
 
-	if (lcd.enabled && lcd_initialized) {
+	if (lcd.enabled && lcd.initialized) {
 		for (; count-- > 0; tmp++) {
 			if (!in_interrupt() && (((count + 1) & 0x1f) == 0))
 				/* let's be a little nice with other processes
@@ -1979,7 +1991,7 @@ static void panel_scan_timer(void)
 			panel_process_inputs();
 	}
 
-	if (lcd.enabled && lcd_initialized) {
+	if (lcd.enabled && lcd.initialized) {
 		if (keypressed) {
 			if (lcd.light_tempo == 0
 					&& ((lcd.flags & LCD_FLAG_L) == 0))
@@ -2160,7 +2172,7 @@ static void keypad_init(void)
 static int panel_notify_sys(struct notifier_block *this, unsigned long code,
 			    void *unused)
 {
-	if (lcd.enabled && lcd_initialized) {
+	if (lcd.enabled && lcd.initialized) {
 		switch (code) {
 		case SYS_DOWN:
 			panel_lcd_print
@@ -2253,7 +2265,7 @@ static void panel_detach(struct parport *port)
 		keypad_initialized = 0;
 	}
 
-	if (lcd.enabled && lcd_initialized) {
+	if (lcd.enabled && lcd.initialized) {
 		misc_deregister(&lcd_dev);
 		lcd.initialized = false;
 	}
@@ -2330,6 +2342,9 @@ static int __init panel_init_module(void)
 	lcd.pins.cl = lcd_cl_pin;
 	lcd.pins.da = lcd_da_pin;
 	lcd.pins.bl = lcd_bl_pin;
+
+	/* Leave it for now, just in case */
+	lcd.esc_seq.len = -1;
 
 	/*
 	 * Overwrite selection with module param values (both keypad and lcd),
