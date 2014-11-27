@@ -494,17 +494,17 @@ MODULE_PARM_DESC(profile,
 		 "1=16x2 old kp; 2=serial 16x2, new kp; 3=16x2 hantronix; "
 		 "4=16x2 nexcom; default=40x2, old kp");
 
-static int keypad_type = -1;
+static int keypad_type = NOT_SET;
 module_param(keypad_type, int, 0000);
 MODULE_PARM_DESC(keypad_type,
 		 "Keypad type: 0=none, 1=old 6 keys, 2=new 6+1 keys, 3=nexcom 4 keys");
 
-static int lcd_type = -1;
+static int lcd_type = NOT_SET;
 module_param(lcd_type, int, 0000);
 MODULE_PARM_DESC(lcd_type,
 		 "LCD type: 0=none, 1=old //, 2=serial ks0074, 3=hantronix //, 4=nexcom //, 5=compiled-in");
 
-static int lcd_height = -1;
+static int lcd_height = NOT_SET;
 module_param(lcd_height, int, 0000);
 MODULE_PARM_DESC(lcd_height, "Number of lines on the LCD");
 
@@ -520,7 +520,7 @@ static int lcd_hwidth = NOT_SET;	/* hardware buffer width (usually 64) */
 module_param(lcd_hwidth, int, 0000);
 MODULE_PARM_DESC(lcd_hwidth, "LCD line hardware address (64)");
 
-static int lcd_charset = -1;
+static int lcd_charset = NOT_SET;
 module_param(lcd_charset, int, 0000);
 MODULE_PARM_DESC(lcd_charset, "LCD character set: 0=standard, 1=KS0074");
 
@@ -570,11 +570,11 @@ MODULE_PARM_DESC(lcd_bl_pin,
 
 /* Deprecated module parameters - consider not using them anymore */
 
-static int lcd_enabled = -1;
+static int lcd_enabled = NOT_SET;
 module_param(lcd_enabled, int, 0000);
 MODULE_PARM_DESC(lcd_enabled, "Deprecated option, use lcd_type instead");
 
-static int keypad_enabled = -1;
+static int keypad_enabled = NOT_SET;
 module_param(keypad_enabled, int, 0000);
 MODULE_PARM_DESC(keypad_enabled, "Deprecated option, use keypad_type instead");
 
