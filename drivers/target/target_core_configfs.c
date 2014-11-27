@@ -2978,6 +2978,7 @@ void target_core_setup_sub_cits(struct se_subsystem_api *sa)
 {
 	target_core_setup_dev_cit(sa);
 	target_core_setup_dev_attrib_cit(sa);
+	target_core_setup_dev_pr_cit(sa);
 }
 EXPORT_SYMBOL(target_core_setup_sub_cits);
 
