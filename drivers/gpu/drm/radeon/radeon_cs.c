@@ -101,12 +101,25 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 		unsigned priority;
 
 		r = (struct drm_radeon_cs_reloc *)&chunk->kdata[i*4];
+		for (j = 0; j < i; j++) {
+			if (r->handle == p->relocs[j].handle) {
+				p->relocs_ptr[i] = &p->relocs[j];
+				duplicate = true;
+				break;
+			}
+		}
+		if (duplicate) {
+			p->relocs[i].handle = 0;
+			continue;
+		}
+
 		gobj = drm_gem_object_lookup(ddev, p->filp, r->handle);
 		if (gobj == NULL) {
 			DRM_ERROR("gem object lookup failed 0x%x\n",
 				  r->handle);
 			return -ENOENT;
 		}
+		p->relocs_ptr[i] = &p->relocs[i];
 		p->relocs[i].robj = gem_to_radeon_bo(gobj);
 
 		/* The userspace buffer priorities are from 0 to 15. A higher

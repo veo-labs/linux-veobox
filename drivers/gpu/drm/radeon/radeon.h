@@ -1054,6 +1054,16 @@ void cayman_dma_fini(struct radeon_device *rdev);
 /*
  * CS.
  */
+struct radeon_cs_reloc {
+	struct radeon_bo		*robj;
+	struct ttm_validate_buffer	tv;
+	uint64_t			gpu_offset;
+	unsigned			prefered_domains;
+	unsigned			allowed_domains;
+	uint32_t			tiling_flags;
+	uint32_t			handle;
+};
+
 struct radeon_cs_chunk {
 	uint32_t		length_dw;
 	uint32_t		*kdata;
