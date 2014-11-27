@@ -1474,60 +1474,96 @@ static void lcd_init(void)
 	switch (selected_lcd_type) {
 	case LCD_TYPE_OLD:
 		/* parallel mode, 8 bits */
-		lcd.proto = LCD_PROTO_PARALLEL;
-		lcd.charset = LCD_CHARSET_NORMAL;
-		lcd.pins.e = PIN_STROBE;
-		lcd.pins.rs = PIN_AUTOLF;
+		if (lcd_proto == NOT_SET)
+			lcd_proto = LCD_PROTO_PARALLEL;
+		if (lcd_charset == NOT_SET)
+			lcd_charset = LCD_CHARSET_NORMAL;
+		if (lcd_e_pin == PIN_NOT_SET)
+			lcd_e_pin = PIN_STROBE;
+		if (lcd_rs_pin == PIN_NOT_SET)
+			lcd_rs_pin = PIN_AUTOLF;
 
-		lcd.width = 40;
-		lcd.bwidth = 40;
-		lcd.hwidth = 64;
-		lcd.height = 2;
+		if (lcd_width == NOT_SET)
+			lcd_width = 40;
+		if (lcd_bwidth == NOT_SET)
+			lcd_bwidth = 40;
+		if (lcd_hwidth == NOT_SET)
+			lcd_hwidth = 64;
+		if (lcd_height == NOT_SET)
+			lcd_height = 2;
 		break;
 	case LCD_TYPE_KS0074:
 		/* serial mode, ks0074 */
-		lcd.proto = LCD_PROTO_SERIAL;
-		lcd.charset = LCD_CHARSET_KS0074;
-		lcd.pins.bl = PIN_AUTOLF;
-		lcd.pins.cl = PIN_STROBE;
-		lcd.pins.da = PIN_D0;
+		if (lcd_proto == NOT_SET)
+			lcd_proto = LCD_PROTO_SERIAL;
+		if (lcd_charset == NOT_SET)
+			lcd_charset = LCD_CHARSET_KS0074;
+		if (lcd_bl_pin == PIN_NOT_SET)
+			lcd_bl_pin = PIN_AUTOLF;
+		if (lcd_cl_pin == PIN_NOT_SET)
+			lcd_cl_pin = PIN_STROBE;
+		if (lcd_da_pin == PIN_NOT_SET)
+			lcd_da_pin = PIN_D0;
 
-		lcd.width = 16;
-		lcd.bwidth = 40;
-		lcd.hwidth = 16;
-		lcd.height = 2;
+		if (lcd_width == NOT_SET)
+			lcd_width = 16;
+		if (lcd_bwidth == NOT_SET)
+			lcd_bwidth = 40;
+		if (lcd_hwidth == NOT_SET)
+			lcd_hwidth = 16;
+		if (lcd_height == NOT_SET)
+			lcd_height = 2;
 		break;
 	case LCD_TYPE_NEXCOM:
 		/* parallel mode, 8 bits, generic */
-		lcd.proto = LCD_PROTO_PARALLEL;
-		lcd.charset = LCD_CHARSET_NORMAL;
-		lcd.pins.e = PIN_AUTOLF;
-		lcd.pins.rs = PIN_SELECP;
-		lcd.pins.rw = PIN_INITP;
+		if (lcd_proto == NOT_SET)
+			lcd_proto = LCD_PROTO_PARALLEL;
+		if (lcd_charset == NOT_SET)
+			lcd_charset = LCD_CHARSET_NORMAL;
+		if (lcd_e_pin == PIN_NOT_SET)
+			lcd_e_pin = PIN_AUTOLF;
+		if (lcd_rs_pin == PIN_NOT_SET)
+			lcd_rs_pin = PIN_SELECP;
+		if (lcd_rw_pin == PIN_NOT_SET)
+			lcd_rw_pin = PIN_INITP;
 
-		lcd.width = 16;
-		lcd.bwidth = 40;
-		lcd.hwidth = 64;
-		lcd.height = 2;
+		if (lcd_width == NOT_SET)
+			lcd_width = 16;
+		if (lcd_bwidth == NOT_SET)
+			lcd_bwidth = 40;
+		if (lcd_hwidth == NOT_SET)
+			lcd_hwidth = 64;
+		if (lcd_height == NOT_SET)
+			lcd_height = 2;
 		break;
 	case LCD_TYPE_CUSTOM:
 		/* customer-defined */
-		lcd.proto = DEFAULT_LCD_PROTO;
-		lcd.charset = DEFAULT_LCD_CHARSET;
+		if (lcd_proto == NOT_SET)
+			lcd_proto = DEFAULT_LCD_PROTO;
+		if (lcd_charset == NOT_SET)
+			lcd_charset = DEFAULT_LCD_CHARSET;
 		/* default geometry will be set later */
 		break;
 	case LCD_TYPE_HANTRONIX:
 		/* parallel mode, 8 bits, hantronix-like */
 	default:
-		lcd.proto = LCD_PROTO_PARALLEL;
-		lcd.charset = LCD_CHARSET_NORMAL;
-		lcd.pins.e = PIN_STROBE;
-		lcd.pins.rs = PIN_SELECP;
+		if (lcd_proto == NOT_SET)
+			lcd_proto = LCD_PROTO_PARALLEL;
+		if (lcd_charset == NOT_SET)
+			lcd_charset = LCD_CHARSET_NORMAL;
+		if (lcd_e_pin == PIN_NOT_SET)
+			lcd_e_pin = PIN_STROBE;
+		if (lcd_rs_pin == PIN_NOT_SET)
+			lcd_rs_pin = PIN_SELECP;
 
-		lcd.width = 16;
-		lcd.bwidth = 40;
-		lcd.hwidth = 64;
-		lcd.height = 2;
+		if (lcd_width == NOT_SET)
+			lcd_width = 16;
+		if (lcd_bwidth == NOT_SET)
+			lcd_bwidth = 40;
+		if (lcd_hwidth == NOT_SET)
+			lcd_hwidth = 64;
+		if (lcd_height == NOT_SET)
+			lcd_height = 2;
 		break;
 	}
 
@@ -1594,26 +1630,26 @@ static void lcd_init(void)
 		lcd_clear_fast = lcd_clear_fast_tilcd;
 	}
 
-	if (lcd.pins.bl == PIN_NOT_SET)
-		lcd.pins.bl = DEFAULT_LCD_PIN_BL;
+	if (lcd_bl_pin == PIN_NOT_SET)
+		lcd_bl_pin = DEFAULT_LCD_PIN_BL;
 
-	if (lcd.pins.e == PIN_NOT_SET)
-		lcd.pins.e = PIN_NONE;
-	if (lcd.pins.rs == PIN_NOT_SET)
-		lcd.pins.rs = PIN_NONE;
-	if (lcd.pins.rw == PIN_NOT_SET)
-		lcd.pins.rw = PIN_NONE;
-	if (lcd.pins.bl == PIN_NOT_SET)
-		lcd.pins.bl = PIN_NONE;
-	if (lcd.pins.cl == PIN_NOT_SET)
-		lcd.pins.cl = PIN_NONE;
-	if (lcd.pins.da == PIN_NOT_SET)
-		lcd.pins.da = PIN_NONE;
+	if (lcd_e_pin == PIN_NOT_SET)
+		lcd_e_pin = PIN_NONE;
+	if (lcd_rs_pin == PIN_NOT_SET)
+		lcd_rs_pin = PIN_NONE;
+	if (lcd_rw_pin == PIN_NOT_SET)
+		lcd_rw_pin = PIN_NONE;
+	if (lcd_bl_pin == PIN_NOT_SET)
+		lcd_bl_pin = PIN_NONE;
+	if (lcd_cl_pin == PIN_NOT_SET)
+		lcd_cl_pin = PIN_NONE;
+	if (lcd_da_pin == PIN_NOT_SET)
+		lcd_da_pin = PIN_NONE;
 
-	if (lcd.charset == NOT_SET)
-		lcd.charset = DEFAULT_LCD_CHARSET;
+	if (lcd_charset == NOT_SET)
+		lcd_charset = DEFAULT_LCD_CHARSET;
 
-	if (lcd.charset == LCD_CHARSET_KS0074)
+	if (lcd_charset == LCD_CHARSET_KS0074)
 		lcd_char_conv = lcd_char_conv_ks0074;
 	else
 		lcd_char_conv = NULL;
@@ -2282,27 +2318,27 @@ static struct parport_driver panel_driver = {
 static int __init panel_init_module(void)
 {
 	/* for backwards compatibility */
-	if (keypad_type < 0)
+	if (keypad_type == NOT_SET)
 		keypad_type = keypad_enabled;
 
-	if (lcd_type < 0)
+	if (lcd_type == NOT_SET)
 		lcd_type = lcd_enabled;
 
 	/* take care of an eventual profile */
 	switch (profile) {
 	case PANEL_PROFILE_CUSTOM:
 		/* custom profile */
-		if (keypad_type < 0)
+		if (keypad_type == NOT_SET)
 			keypad_type = DEFAULT_KEYPAD_TYPE;
-		if (lcd_type < 0)
+		if (lcd_type == NOT_SET)
 			lcd_type = DEFAULT_LCD_TYPE;
 		break;
 	case PANEL_PROFILE_OLD:
 		/* 8 bits, 2*16, old keypad */
-		selected_keypad_type = KEYPAD_TYPE_OLD;
-		selected_lcd_type = LCD_TYPE_OLD;
-
-		/* TODO: This two are a little hacky, sort it out later */
+		if (keypad_type == NOT_SET)
+			keypad_type = KEYPAD_TYPE_OLD;
+		if (lcd_type == NOT_SET)
+			lcd_type = LCD_TYPE_OLD;
 		if (lcd_width == NOT_SET)
 			lcd_width = 16;
 		if (lcd_hwidth == NOT_SET)
@@ -2310,23 +2346,31 @@ static int __init panel_init_module(void)
 		break;
 	case PANEL_PROFILE_NEW:
 		/* serial, 2*16, new keypad */
-		selected_keypad_type = KEYPAD_TYPE_NEW;
-		selected_lcd_type = LCD_TYPE_KS0074;
+		if (keypad_type == NOT_SET)
+			keypad_type = KEYPAD_TYPE_NEW;
+		if (lcd_type == NOT_SET)
+			lcd_type = LCD_TYPE_KS0074;
 		break;
 	case PANEL_PROFILE_HANTRONIX:
 		/* 8 bits, 2*16 hantronix-like, no keypad */
-		selected_keypad_type = KEYPAD_TYPE_NONE;
-		selected_lcd_type = LCD_TYPE_HANTRONIX;
+		if (keypad_type == NOT_SET)
+			keypad_type = KEYPAD_TYPE_NONE;
+		if (lcd_type == NOT_SET)
+			lcd_type = LCD_TYPE_HANTRONIX;
 		break;
 	case PANEL_PROFILE_NEXCOM:
 		/* generic 8 bits, 2*16, nexcom keypad, eg. Nexcom. */
-		selected_keypad_type = KEYPAD_TYPE_NEXCOM;
-		selected_lcd_type = LCD_TYPE_NEXCOM;
+		if (keypad_type == NOT_SET)
+			keypad_type = KEYPAD_TYPE_NEXCOM;
+		if (lcd_type == NOT_SET)
+			lcd_type = LCD_TYPE_NEXCOM;
 		break;
 	case PANEL_PROFILE_LARGE:
 		/* 8 bits, 2*40, old keypad */
-		selected_keypad_type = KEYPAD_TYPE_OLD;
-		selected_lcd_type = LCD_TYPE_OLD;
+		if (keypad_type == NOT_SET)
+			keypad_type = KEYPAD_TYPE_OLD;
+		if (lcd_type == NOT_SET)
+			lcd_type = LCD_TYPE_OLD;
 		break;
 	}
 
