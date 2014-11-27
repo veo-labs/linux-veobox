@@ -102,14 +102,15 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 
 		r = (struct drm_radeon_cs_reloc *)&chunk->kdata[i*4];
 		for (j = 0; j < i; j++) {
-			if (r->handle == p->relocs[j].handle) {
+			struct drm_radeon_cs_reloc *other;
+			other = (void *)&chunk->kdata[j*4];
+			if (r->handle == other->handle) {
 				p->relocs_ptr[i] = &p->relocs[j];
 				duplicate = true;
 				break;
 			}
 		}
 		if (duplicate) {
-			p->relocs[i].handle = 0;
 			continue;
 		}
 
