@@ -2754,7 +2754,7 @@ int evergreen_cs_parse(struct radeon_cs_parser *p)
  **/
 int evergreen_dma_cs_parse(struct radeon_cs_parser *p)
 {
-	struct radeon_cs_chunk *ib_chunk = p->chunk_ib;
+	struct radeon_cs_chunk *ib_chunk = &p->chunks[p->chunk_ib_idx];
 	struct radeon_bo_list *src_reloc, *dst_reloc, *dst2_reloc;
 	u32 header, cmd, count, sub_cmd;
 	volatile u32 *ib = p->ib.ptr;

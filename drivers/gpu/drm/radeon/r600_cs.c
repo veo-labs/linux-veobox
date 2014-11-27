@@ -2472,7 +2472,7 @@ int r600_dma_cs_next_reloc(struct radeon_cs_parser *p,
  **/
 int r600_dma_cs_parse(struct radeon_cs_parser *p)
 {
-	struct radeon_cs_chunk *ib_chunk = p->chunk_ib;
+	struct radeon_cs_chunk *ib_chunk = &p->chunks[p->chunk_ib_idx];
 	struct radeon_bo_list *src_reloc, *dst_reloc;
 	u32 header, cmd, count, tiled;
 	volatile u32 *ib = p->ib.ptr;

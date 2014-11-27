@@ -522,7 +522,7 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 			    struct list_head *head, int ring)
 {
 	struct radeon_bo_list *lobj;
-	struct list_head duplicates;
+	struct radeon_bo *bo;
 	int r;
 	u64 bytes_moved = 0, initial_bytes_moved;
 	u64 bytes_moved_threshold = radeon_bo_get_threshold_for_moves(rdev);
