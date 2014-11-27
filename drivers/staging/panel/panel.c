@@ -2281,7 +2281,12 @@ static struct parport_driver panel_driver = {
 /* init function */
 static int __init panel_init_module(void)
 {
-	int selected_keypad_type = NOT_SET;
+	/* for backwards compatibility */
+	if (keypad_type < 0)
+		keypad_type = keypad_enabled;
+
+	if (lcd_type < 0)
+		lcd_type = lcd_enabled;
 
 	/* take care of an eventual profile */
 	switch (profile) {
