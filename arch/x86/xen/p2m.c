@@ -671,65 +671,6 @@ static unsigned long mfn_hash(unsigned long mfn)
 	return hash_long(mfn, M2P_OVERRIDE_HASH_SHIFT);
 }
 
-int set_foreign_p2m_mapping(struct gnttab_map_grant_ref *map_ops,
-			    struct gnttab_map_grant_ref *kmap_ops,
-			    struct page **pages, unsigned int count)
-{
-	int i, ret = 0;
-	bool lazy = false;
-	pte_t *pte;
-
-	if (xen_feature(XENFEAT_auto_translated_physmap))
-		return 0;
-
-	if (kmap_ops &&
-	    !in_interrupt() &&
-	    paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE) {
-		arch_enter_lazy_mmu_mode();
-		lazy = true;
-	}
-
-	for (i = 0; i < count; i++) {
-		unsigned long mfn, pfn;
-
-		/* Do not add to override if the map failed. */
-		if (map_ops[i].status)
-			continue;
-
-		if (map_ops[i].flags & GNTMAP_contains_pte) {
-			pte = (pte_t *)(mfn_to_virt(PFN_DOWN(map_ops[i].host_addr)) +
-				(map_ops[i].host_addr & ~PAGE_MASK));
-			mfn = pte_mfn(*pte);
-		} else {
-			mfn = PFN_DOWN(map_ops[i].dev_bus_addr);
-		}
-		pfn = page_to_pfn(pages[i]);
-
-		WARN_ON(PagePrivate(pages[i]));
-		SetPagePrivate(pages[i]);
-		set_page_private(pages[i], mfn);
-		pages[i]->index = pfn_to_mfn(pfn);
-
-		if (unlikely(!set_phys_to_machine(pfn, FOREIGN_FRAME(mfn)))) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		if (kmap_ops) {
-			ret = m2p_add_override(mfn, pages[i], &kmap_ops[i]);
-			if (ret)
-				goto out;
-		}
-	}
-
-out:
-	if (lazy)
-		arch_leave_lazy_mmu_mode();
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(set_foreign_p2m_mapping);
-
 /* Add an MFN override for a particular page */
 static int m2p_add_override(unsigned long mfn, struct page *page,
 			    struct gnttab_map_grant_ref *kmap_op)
@@ -831,6 +772,124 @@ out:
 }
 EXPORT_SYMBOL_GPL(set_foreign_p2m_mapping);
 
+static struct page *m2p_find_override(unsigned long mfn)
+{
+	unsigned long flags;
+	struct list_head *bucket = &m2p_overrides[mfn_hash(mfn)];
+	struct page *p, *ret;
+
+	ret = NULL;
+
+	spin_lock_irqsave(&m2p_override_lock, flags);
+
+	list_for_each_entry(p, bucket, lru) {
+		if (page_private(p) == mfn) {
+			ret = p;
+			break;
+		}
+	}
+
+	spin_unlock_irqrestore(&m2p_override_lock, flags);
+
+	return ret;
+}
+
+static int m2p_remove_override(struct page *page,
+			       struct gnttab_map_grant_ref *kmap_op,
+			       unsigned long mfn)
+{
+	unsigned long flags;
+	unsigned long pfn;
+	unsigned long uninitialized_var(address);
+	unsigned level;
+	pte_t *ptep = NULL;
+
+	pfn = page_to_pfn(page);
+
+	if (!PageHighMem(page)) {
+		address = (unsigned long)__va(pfn << PAGE_SHIFT);
+		ptep = lookup_address(address, &level);
+
+		if (WARN(ptep == NULL || level != PG_LEVEL_4K,
+			 "m2p_remove_override: pfn %lx not mapped", pfn))
+			return -EINVAL;
+	}
+
+	spin_lock_irqsave(&m2p_override_lock, flags);
+	list_del(&page->lru);
+	spin_unlock_irqrestore(&m2p_override_lock, flags);
+
+	if (kmap_op != NULL) {
+		if (!PageHighMem(page)) {
+			struct multicall_space mcs;
+			struct gnttab_unmap_and_replace *unmap_op;
+			struct page *scratch_page = get_balloon_scratch_page();
+			unsigned long scratch_page_address = (unsigned long)
+				__va(page_to_pfn(scratch_page) << PAGE_SHIFT);
+
+			/*
+			 * It might be that we queued all the m2p grant table
+			 * hypercalls in a multicall, then m2p_remove_override
+			 * get called before the multicall has actually been
+			 * issued. In this case handle is going to -1 because
+			 * it hasn't been modified yet.
+			 */
+			if (kmap_op->handle == -1)
+				xen_mc_flush();
+			/*
+			 * Now if kmap_op->handle is negative it means that the
+			 * hypercall actually returned an error.
+			 */
+			if (kmap_op->handle == GNTST_general_error) {
+				pr_warn("m2p_remove_override: pfn %lx mfn %lx, failed to modify kernel mappings",
+					pfn, mfn);
+				put_balloon_scratch_page();
+				return -1;
+			}
+
+			xen_mc_batch();
+
+			mcs = __xen_mc_entry(
+				sizeof(struct gnttab_unmap_and_replace));
+			unmap_op = mcs.args;
+			unmap_op->host_addr = kmap_op->host_addr;
+			unmap_op->new_addr = scratch_page_address;
+			unmap_op->handle = kmap_op->handle;
+
+			MULTI_grant_table_op(mcs.mc,
+				GNTTABOP_unmap_and_replace, unmap_op, 1);
+
+			mcs = __xen_mc_entry(0);
+			MULTI_update_va_mapping(mcs.mc, scratch_page_address,
+					pfn_pte(page_to_pfn(scratch_page),
+					PAGE_KERNEL_RO), 0);
+
+			xen_mc_issue(PARAVIRT_LAZY_MMU);
+
+			kmap_op->host_addr = 0;
+			put_balloon_scratch_page();
+		}
+	}
+
+	/* p2m(m2p(mfn)) == FOREIGN_FRAME(mfn): the mfn is already present
+	 * somewhere in this domain, even before being added to the
+	 * m2p_override (see comment above in m2p_add_override).
+	 * If there are no other entries in the m2p_override corresponding
+	 * to this mfn, then remove the FOREIGN_FRAME_BIT from the p2m for
+	 * the original pfn (the one shared by the frontend): the backend
+	 * cannot do any IO on this page anymore because it has been
+	 * unshared. Removing the FOREIGN_FRAME_BIT from the p2m entry of
+	 * the original pfn causes mfn_to_pfn(mfn) to return the frontend
+	 * pfn again. */
+	mfn &= ~FOREIGN_FRAME_BIT;
+	pfn = mfn_to_pfn_no_overrides(mfn);
+	if (__pfn_to_mfn(pfn) == FOREIGN_FRAME(mfn) &&
+			m2p_find_override(mfn) == NULL)
+		set_phys_to_machine(pfn, mfn);
+
+	return 0;
+}
+
 int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 			      struct gnttab_unmap_grant_ref *kunmap_ops,
 			      struct page **pages, unsigned int count)
@@ -841,7 +900,7 @@ int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 		return 0;
 
 	for (i = 0; i < count; i++) {
-		unsigned long mfn = __pfn_to_mfn(page_to_pfn(pages[i]));
+		unsigned long mfn = get_phys_to_machine(page_to_pfn(pages[i]));
 		unsigned long pfn = page_to_pfn(pages[i]);
 
 		if (mfn == INVALID_P2M_ENTRY || !(mfn & FOREIGN_FRAME_BIT)) {
