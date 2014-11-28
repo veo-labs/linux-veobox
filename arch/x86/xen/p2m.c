@@ -320,10 +320,12 @@ static int xen_p2m_elem_type(unsigned long pfn)
 	if (mfn == INVALID_P2M_ENTRY)
 		return P2M_TYPE_MISSING;
 
-	if (mfn & IDENTITY_FRAME_BIT)
-		return P2M_TYPE_IDENTITY;
-
-	return P2M_TYPE_PFN;
+			p2midx = max_pfn % P2M_PER_PAGE;
+			for ( ; p2midx < P2M_PER_PAGE; p2midx++)
+				mfn_list[pfn + p2midx] = INVALID_P2M_ENTRY;
+		}
+		p2m_top[topidx][mididx] = &mfn_list[pfn];
+	}
 }
 
 static void __init xen_rebuild_p2m_list(unsigned long *p2m)
@@ -437,12 +439,18 @@ void __init xen_vmalloc_p2m_tree(void)
 	xen_p2m_addr = vm.addr;
 	xen_p2m_size = xen_max_p2m_pfn;
 
-	xen_inv_extra_mem();
+		}
+		/* This should be the leafs allocated for identity from _brk. */
+	}
+
+	m2p_override_init();
+	return (unsigned long)mfn_list;
 }
 #else
 unsigned long __init xen_revector_p2m_tree(void)
 {
 	use_brk = 0;
+	m2p_override_init();
 	return 0;
 }
 #endif
@@ -795,10 +803,14 @@ EXPORT_SYMBOL_GPL(set_foreign_p2m_mapping);
 static struct page *m2p_find_override(unsigned long mfn)
 {
 	unsigned long flags;
-	struct list_head *bucket = &m2p_overrides[mfn_hash(mfn)];
+	struct list_head *bucket;
 	struct page *p, *ret;
 
+	if (unlikely(!m2p_overrides))
+		return NULL;
+
 	ret = NULL;
+	bucket = &m2p_overrides[mfn_hash(mfn)];
 
 	spin_lock_irqsave(&m2p_override_lock, flags);
 
