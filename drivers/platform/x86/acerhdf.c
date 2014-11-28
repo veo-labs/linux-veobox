@@ -50,7 +50,7 @@
  */
 #undef START_IN_KERNEL_MODE
 
-#define DRV_VER "0.5.30"
+#define DRV_VER "0.7.0"
 
 /*
  * According to the Atom N270 datasheet,
@@ -266,6 +266,14 @@ static struct thermal_zone_params acerhdf_zone_params = {
 	.governor_name = "bang_bang",
 };
 
+/*
+ * this struct is used to instruct thermal layer to use bang_bang instead of
+ * default governor for acerhdf
+ */
+static struct thermal_zone_params acerhdf_zone_params = {
+	.governor_name = "bang_bang",
+};
+
 static int acerhdf_get_temp(int *temp)
 {
 	u8 read_temp;
@@ -447,6 +455,17 @@ static int acerhdf_get_trip_type(struct thermal_zone_device *thermal, int trip,
 		*type = THERMAL_TRIP_CRITICAL;
 	else
 		return -EINVAL;
+
+	return 0;
+}
+
+static int acerhdf_get_trip_hyst(struct thermal_zone_device *thermal, int trip,
+				 unsigned long *temp)
+{
+	if (trip != 0)
+		return -EINVAL;
+
+	*temp = fanon - fanoff;
 
 	return 0;
 }
@@ -720,7 +739,7 @@ static int acerhdf_register_thermal(void)
 	if (IS_ERR(cl_dev))
 		return -EINVAL;
 
-	thz_dev = thermal_zone_device_register("acerhdf", 2, 0, NULL,
+	thz_dev = thermal_zone_device_register("acerhdf", 1, 0, NULL,
 					      &acerhdf_dev_ops,
 					      &acerhdf_zone_params, 0,
 					      (kernelmode) ? interval*1000 : 0);
