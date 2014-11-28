@@ -59,44 +59,18 @@ extern int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 				     struct page **pages, unsigned int count);
 
 /*
- * Helper functions to write or read unsigned long values to/from
- * memory, when the access may fault.
- */
-static inline int xen_safe_write_ulong(unsigned long *addr, unsigned long val)
-{
-	return __put_user(val, (unsigned long __user *)addr);
-}
-
-static inline int xen_safe_read_ulong(unsigned long *addr, unsigned long *val)
-{
-	return __get_user(*val, (unsigned long __user *)addr);
-}
-
-/*
  * When to use pfn_to_mfn(), __pfn_to_mfn() or get_phys_to_machine():
  * - pfn_to_mfn() returns either INVALID_P2M_ENTRY or the mfn. No indicator
  *   bits (identity or foreign) are set.
  * - __pfn_to_mfn() returns the found entry of the p2m table. A possibly set
  *   identity or foreign indicator will be still set. __pfn_to_mfn() is
- *   encapsulating get_phys_to_machine() which is called in special cases only.
- * - get_phys_to_machine() is to be called by __pfn_to_mfn() only in special
- *   cases needing an extended handling.
+ *   encapsulating get_phys_to_machine().
+ * - get_phys_to_machine() is to be called by __pfn_to_mfn() only to allow
+ *   for future optimizations.
  */
 static inline unsigned long __pfn_to_mfn(unsigned long pfn)
 {
-	unsigned long mfn;
-
-	if (pfn < xen_p2m_size)
-		mfn = xen_p2m_addr[pfn];
-	else if (unlikely(pfn < xen_max_p2m_pfn))
-		return get_phys_to_machine(pfn);
-	else
-		return IDENTITY_FRAME(pfn);
-
-	if (unlikely(mfn == INVALID_P2M_ENTRY))
-		return get_phys_to_machine(pfn);
-
-	return mfn;
+	return get_phys_to_machine(pfn);
 }
 
 static inline unsigned long pfn_to_mfn(unsigned long pfn)

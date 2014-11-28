@@ -902,7 +902,7 @@ int clear_foreign_p2m_mapping(struct gnttab_unmap_grant_ref *unmap_ops,
 		return 0;
 
 	for (i = 0; i < count; i++) {
-		unsigned long mfn = get_phys_to_machine(page_to_pfn(pages[i]));
+		unsigned long mfn = __pfn_to_mfn(page_to_pfn(pages[i]));
 		unsigned long pfn = page_to_pfn(pages[i]);
 
 		if (mfn == INVALID_P2M_ENTRY || !(mfn & FOREIGN_FRAME_BIT)) {
