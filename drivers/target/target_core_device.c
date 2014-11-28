@@ -1124,22 +1124,12 @@ int se_dev_set_fabric_max_sectors(struct se_device *dev, u32 fabric_max_sectors)
 				DA_STATUS_MAX_SECTORS_MIN);
 		return -EINVAL;
 	}
-	if (dev->transport->transport_type == TRANSPORT_PLUGIN_PHBA_PDEV) {
-		if (fabric_max_sectors > dev->dev_attrib.hw_max_sectors) {
-			pr_err("dev[%p]: Passed fabric_max_sectors: %u"
-				" greater than TCM/SE_Device max_sectors:"
-				" %u\n", dev, fabric_max_sectors,
-				dev->dev_attrib.hw_max_sectors);
-			 return -EINVAL;
-		}
-	} else {
-		if (fabric_max_sectors > DA_STATUS_MAX_SECTORS_MAX) {
-			pr_err("dev[%p]: Passed fabric_max_sectors: %u"
-				" greater than DA_STATUS_MAX_SECTORS_MAX:"
-				" %u\n", dev, fabric_max_sectors,
-				DA_STATUS_MAX_SECTORS_MAX);
-			return -EINVAL;
-		}
+	if (fabric_max_sectors > DA_STATUS_MAX_SECTORS_MAX) {
+		pr_err("dev[%p]: Passed fabric_max_sectors: %u"
+			" greater than DA_STATUS_MAX_SECTORS_MAX:"
+			" %u\n", dev, fabric_max_sectors,
+			DA_STATUS_MAX_SECTORS_MAX);
+		return -EINVAL;
 	}
 	/*
 	 * Align max_sectors down to PAGE_SIZE to follow transport_allocate_data_tasks()
@@ -1166,7 +1156,7 @@ int se_dev_set_optimal_sectors(struct se_device *dev, u32 optimal_sectors)
 			dev, dev->export_count);
 		return -EINVAL;
 	}
-	if (optimal_sectors > dev->dev_attrib.hw_max_sectors) {
+	if (optimal_sectors > dev->dev_attrib.fabric_max_sectors) {
 		pr_err("dev[%p]: Passed optimal_sectors %u cannot be"
 			" greater than hw_max_sectors: %u\n", dev,
 			optimal_sectors, dev->dev_attrib.hw_max_sectors);
