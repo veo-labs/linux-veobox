@@ -648,6 +648,143 @@ bool set_phys_to_machine(unsigned long pfn, unsigned long mfn)
 	return true;
 }
 
+#define M2P_OVERRIDE_HASH_SHIFT	10
+#define M2P_OVERRIDE_HASH	(1 << M2P_OVERRIDE_HASH_SHIFT)
+
+static struct list_head *m2p_overrides;
+static DEFINE_SPINLOCK(m2p_override_lock);
+
+static void __init m2p_override_init(void)
+{
+	unsigned i;
+
+	m2p_overrides = alloc_bootmem_align(
+				sizeof(*m2p_overrides) * M2P_OVERRIDE_HASH,
+				sizeof(unsigned long));
+
+	for (i = 0; i < M2P_OVERRIDE_HASH; i++)
+		INIT_LIST_HEAD(&m2p_overrides[i]);
+}
+
+static unsigned long mfn_hash(unsigned long mfn)
+{
+	return hash_long(mfn, M2P_OVERRIDE_HASH_SHIFT);
+}
+
+int set_foreign_p2m_mapping(struct gnttab_map_grant_ref *map_ops,
+			    struct gnttab_map_grant_ref *kmap_ops,
+			    struct page **pages, unsigned int count)
+{
+	int i, ret = 0;
+	bool lazy = false;
+	pte_t *pte;
+
+	if (xen_feature(XENFEAT_auto_translated_physmap))
+		return 0;
+
+	if (kmap_ops &&
+	    !in_interrupt() &&
+	    paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE) {
+		arch_enter_lazy_mmu_mode();
+		lazy = true;
+	}
+
+	for (i = 0; i < count; i++) {
+		unsigned long mfn, pfn;
+
+		/* Do not add to override if the map failed. */
+		if (map_ops[i].status)
+			continue;
+
+		if (map_ops[i].flags & GNTMAP_contains_pte) {
+			pte = (pte_t *)(mfn_to_virt(PFN_DOWN(map_ops[i].host_addr)) +
+				(map_ops[i].host_addr & ~PAGE_MASK));
+			mfn = pte_mfn(*pte);
+		} else {
+			mfn = PFN_DOWN(map_ops[i].dev_bus_addr);
+		}
+		pfn = page_to_pfn(pages[i]);
+
+		WARN_ON(PagePrivate(pages[i]));
+		SetPagePrivate(pages[i]);
+		set_page_private(pages[i], mfn);
+		pages[i]->index = pfn_to_mfn(pfn);
+
+		if (unlikely(!set_phys_to_machine(pfn, FOREIGN_FRAME(mfn)))) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		if (kmap_ops) {
+			ret = m2p_add_override(mfn, pages[i], &kmap_ops[i]);
+			if (ret)
+				goto out;
+		}
+	}
+
+out:
+	if (lazy)
+		arch_leave_lazy_mmu_mode();
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(set_foreign_p2m_mapping);
+
+/* Add an MFN override for a particular page */
+static int m2p_add_override(unsigned long mfn, struct page *page,
+			    struct gnttab_map_grant_ref *kmap_op)
+{
+	unsigned long flags;
+	unsigned long pfn;
+	unsigned long uninitialized_var(address);
+	unsigned level;
+	pte_t *ptep = NULL;
+
+	pfn = page_to_pfn(page);
+	if (!PageHighMem(page)) {
+		address = (unsigned long)__va(pfn << PAGE_SHIFT);
+		ptep = lookup_address(address, &level);
+		if (WARN(ptep == NULL || level != PG_LEVEL_4K,
+			 "m2p_add_override: pfn %lx not mapped", pfn))
+			return -EINVAL;
+	}
+
+	if (kmap_op != NULL) {
+		if (!PageHighMem(page)) {
+			struct multicall_space mcs =
+				xen_mc_entry(sizeof(*kmap_op));
+
+			MULTI_grant_table_op(mcs.mc,
+					GNTTABOP_map_grant_ref, kmap_op, 1);
+
+			xen_mc_issue(PARAVIRT_LAZY_MMU);
+		}
+	}
+	spin_lock_irqsave(&m2p_override_lock, flags);
+	list_add(&page->lru,  &m2p_overrides[mfn_hash(mfn)]);
+	spin_unlock_irqrestore(&m2p_override_lock, flags);
+
+	/* p2m(m2p(mfn)) == mfn: the mfn is already present somewhere in
+	 * this domain. Set the FOREIGN_FRAME_BIT in the p2m for the other
+	 * pfn so that the following mfn_to_pfn(mfn) calls will return the
+	 * pfn from the m2p_override (the backend pfn) instead.
+	 * We need to do this because the pages shared by the frontend
+	 * (xen-blkfront) can be already locked (lock_page, called by
+	 * do_read_cache_page); when the userspace backend tries to use them
+	 * with direct_IO, mfn_to_pfn returns the pfn of the frontend, so
+	 * do_blockdev_direct_IO is going to try to lock the same pages
+	 * again resulting in a deadlock.
+	 * As a side effect get_user_pages_fast might not be safe on the
+	 * frontend pages while they are being shared with the backend,
+	 * because mfn_to_pfn (that ends up being called by GUPF) will
+	 * return the backend pfn rather than the frontend pfn. */
+	pfn = mfn_to_pfn_no_overrides(mfn);
+	if (__pfn_to_mfn(pfn) == mfn)
+		set_phys_to_machine(pfn, FOREIGN_FRAME(mfn));
+
+	return 0;
+}
+
 int set_foreign_p2m_mapping(struct gnttab_map_grant_ref *map_ops,
 			    struct gnttab_map_grant_ref *kmap_ops,
 			    struct page **pages, unsigned int count)
