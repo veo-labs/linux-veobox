@@ -91,15 +91,20 @@ EXPORT_SYMBOL_GPL(xen_p2m_size);
 unsigned long xen_max_p2m_pfn __read_mostly;
 EXPORT_SYMBOL_GPL(xen_max_p2m_pfn);
 
-static DEFINE_SPINLOCK(p2m_update_lock);
-
 static unsigned long *p2m_mid_missing_mfn;
 static unsigned long *p2m_top_mfn;
 static unsigned long **p2m_top_mfn_p;
-static unsigned long *p2m_missing;
-static unsigned long *p2m_identity;
-static pte_t *p2m_missing_pte;
-static pte_t *p2m_identity_pte;
+
+/* Placeholders for holes in the address space */
+static RESERVE_BRK_ARRAY(unsigned long, p2m_missing, P2M_PER_PAGE);
+static RESERVE_BRK_ARRAY(unsigned long *, p2m_mid_missing, P2M_MID_PER_PAGE);
+
+static RESERVE_BRK_ARRAY(unsigned long **, p2m_top, P2M_TOP_PER_PAGE);
+
+static RESERVE_BRK_ARRAY(unsigned long, p2m_identity, P2M_PER_PAGE);
+static RESERVE_BRK_ARRAY(unsigned long *, p2m_mid_identity, P2M_MID_PER_PAGE);
+
+RESERVE_BRK(p2m_mid, PAGE_SIZE * (MAX_DOMAIN_PAGES / (P2M_PER_PAGE * P2M_MID_PER_PAGE)));
 
 static int use_brk = 1;
 
@@ -292,7 +297,10 @@ void __init xen_build_dynamic_phys_to_machine(void)
 		return;
 
 	xen_p2m_addr = (unsigned long *)xen_start_info->mfn_list;
-	xen_p2m_size = ALIGN(xen_start_info->nr_pages, P2M_PER_PAGE);
+	mfn_list = (unsigned long *)xen_start_info->mfn_list;
+	max_pfn = min(MAX_DOMAIN_PAGES, xen_start_info->nr_pages);
+	xen_max_p2m_pfn = max_pfn;
+	xen_p2m_size = max_pfn;
 
 	p2m_missing = alloc_p2m_page();
 	p2m_init(p2m_missing);
@@ -443,6 +451,11 @@ void __init xen_vmalloc_p2m_tree(void)
 		/* This should be the leafs allocated for identity from _brk. */
 	}
 
+	xen_p2m_size = xen_max_p2m_pfn;
+	xen_p2m_addr = mfn_list;
+
+	xen_inv_extra_mem();
+
 	m2p_override_init();
 	return (unsigned long)mfn_list;
 }
@@ -450,6 +463,8 @@ void __init xen_vmalloc_p2m_tree(void)
 unsigned long __init xen_revector_p2m_tree(void)
 {
 	use_brk = 0;
+	xen_p2m_size = xen_max_p2m_pfn;
+	xen_inv_extra_mem();
 	m2p_override_init();
 	return 0;
 }
@@ -458,6 +473,10 @@ unsigned long get_phys_to_machine(unsigned long pfn)
 {
 	pte_t *ptep;
 	unsigned int level;
+
+	if (unlikely(pfn >= xen_p2m_size)) {
+		if (pfn < xen_max_p2m_pfn)
+			return xen_chk_extra_mem(pfn);
 
 	if (unlikely(pfn >= xen_p2m_size)) {
 		if (pfn < xen_max_p2m_pfn)
@@ -557,59 +576,10 @@ static bool alloc_p2m(unsigned long pfn)
 		if (p2m_pfn == PFN_DOWN(__pa(p2m_missing)))
 			p2m_init(p2m);
 		else
-			p2m_init_identity(p2m, pfn);
-
-	WARN(p2m_top[topidx][mididx] == p2m_identity,
-		"P2M[%d][%d] == IDENTITY, should be MISSING (or alloced)!\n",
-		topidx, mididx);
-
-	/*
-	 * Could be done by xen_build_dynamic_phys_to_machine..
-	 */
-	if (p2m_top[topidx][mididx] != p2m_missing)
-		return false;
-
-	/* Boundary cross-over for the edges: */
-	p2m = alloc_p2m_page();
-
-	p2m_init(p2m);
-
-	p2m_top[topidx][mididx] = p2m;
-
-	return true;
-}
-
-static bool __init early_alloc_p2m_middle(unsigned long pfn)
-{
-	unsigned topidx = p2m_top_index(pfn);
-	unsigned long **mid;
-
-	mid = p2m_top[topidx];
-	if (mid == p2m_mid_missing) {
-		mid = alloc_p2m_page();
-
-		p2m_mid_init(mid, p2m_missing);
-
-		p2m_top[topidx] = mid;
+			mid_mfn[mididx] = virt_to_mfn(p2m);
 	}
+
 	return true;
-}
-
-static void __init early_split_p2m(unsigned long pfn)
-{
-	unsigned long mididx, idx;
-
-	mididx = p2m_mid_index(pfn);
-	idx = p2m_index(pfn);
-
-	/*
-	 * Allocate new middle and leaf pages if this pfn lies in the
-	 * middle of one.
-	 */
-	if (mididx || idx)
-		early_alloc_p2m_middle(pfn);
-	if (idx)
-		early_alloc_p2m(pfn, false);
 }
 
 unsigned long __init set_phys_range_identity(unsigned long pfn_s,

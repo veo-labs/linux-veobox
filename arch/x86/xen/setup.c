@@ -123,6 +123,42 @@ static void __init xen_del_extra_mem(phys_addr_t start, phys_addr_t size)
 }
 
 /*
+ * Called during boot before the p2m list can take entries beyond the
+ * hypervisor supplied p2m list. Entries in extra mem are to be regarded as
+ * invalid.
+ */
+unsigned long __ref xen_chk_extra_mem(unsigned long pfn)
+{
+	int i;
+	unsigned long addr = PFN_PHYS(pfn);
+
+	for (i = 0; i < XEN_EXTRA_MEM_MAX_REGIONS; i++) {
+		if (addr >= xen_extra_mem[i].start &&
+		    addr < xen_extra_mem[i].start + xen_extra_mem[i].size)
+			return INVALID_P2M_ENTRY;
+	}
+
+	return IDENTITY_FRAME(pfn);
+}
+
+/*
+ * Mark all pfns of extra mem as invalid in p2m list.
+ */
+void __init xen_inv_extra_mem(void)
+{
+	unsigned long pfn, pfn_s, pfn_e;
+	int i;
+
+	for (i = 0; i < XEN_EXTRA_MEM_MAX_REGIONS; i++) {
+		pfn_s = PFN_DOWN(xen_extra_mem[i].start);
+		pfn_e = PFN_UP(xen_extra_mem[i].start + xen_extra_mem[i].size);
+		for (pfn = pfn_s; pfn < pfn_e; pfn++)
+			set_phys_to_machine(pfn, INVALID_P2M_ENTRY);
+	}
+	memblock_free(start, size);
+}
+
+/*
  * Finds the next RAM pfn available in the E820 map after min_pfn.
  * This function updates min_pfn with the pfn found and returns
  * the size of that range or zero if not found.
@@ -279,9 +315,6 @@ static void __init xen_do_set_identity_and_remap_chunk(
 
 	BUG_ON(xen_feature(XENFEAT_auto_translated_physmap));
 
-	/* Don't use memory until remapped */
-	memblock_reserve(PFN_PHYS(remap_pfn), PFN_PHYS(size));
-
 	mfn_save = virt_to_mfn(buf);
 
 	for (ident_pfn_iter = start_pfn, remap_pfn_iter = remap_pfn;
@@ -325,7 +358,7 @@ static void __init xen_do_set_identity_and_remap_chunk(
  * pages. In the case of an error the underlying memory is simply released back
  * to Xen and not remapped.
  */
-static unsigned long __init xen_set_identity_and_remap_chunk(
+static unsigned long xen_set_identity_and_remap_chunk(
         const struct e820entry *list, size_t map_size, unsigned long start_pfn,
 	unsigned long end_pfn, unsigned long nr_pages, unsigned long remap_pfn,
 	unsigned long *identity, unsigned long *released)
@@ -483,60 +516,6 @@ void __init xen_remap_memory(void)
 	pr_info("Remapped %ld page(s)\n", remapped);
 }
 
-/*
- * Remap the memory prepared in xen_do_set_identity_and_remap_chunk().
- * The remap information (which mfn remap to which pfn) is contained in the
- * to be remapped memory itself in a linked list anchored at xen_remap_mfn.
- * This scheme allows to remap the different chunks in arbitrary order while
- * the resulting mapping will be independant from the order.
- */
-void __init xen_remap_memory(void)
-{
-	unsigned long buf = (unsigned long)&xen_remap_buf;
-	unsigned long mfn_save, mfn, pfn;
-	unsigned long remapped = 0;
-	unsigned int i;
-	unsigned long pfn_s = ~0UL;
-	unsigned long len = 0;
-
-	mfn_save = virt_to_mfn(buf);
-
-	while (xen_remap_mfn != INVALID_P2M_ENTRY) {
-		/* Map the remap information */
-		set_pte_mfn(buf, xen_remap_mfn, PAGE_KERNEL);
-
-		BUG_ON(xen_remap_mfn != xen_remap_buf.mfns[0]);
-
-		pfn = xen_remap_buf.target_pfn;
-		for (i = 0; i < xen_remap_buf.size; i++) {
-			mfn = xen_remap_buf.mfns[i];
-			xen_update_mem_tables(pfn, mfn);
-			remapped++;
-			pfn++;
-		}
-		if (pfn_s == ~0UL || pfn == pfn_s) {
-			pfn_s = xen_remap_buf.target_pfn;
-			len += xen_remap_buf.size;
-		} else if (pfn_s + len == xen_remap_buf.target_pfn) {
-			len += xen_remap_buf.size;
-		} else {
-			memblock_free(PFN_PHYS(pfn_s), PFN_PHYS(len));
-			pfn_s = xen_remap_buf.target_pfn;
-			len = xen_remap_buf.size;
-		}
-
-		mfn = xen_remap_mfn;
-		xen_remap_mfn = xen_remap_buf.next_area_mfn;
-	}
-
-	if (pfn_s != ~0UL && len)
-		memblock_free(PFN_PHYS(pfn_s), PFN_PHYS(len));
-
-	set_pte_mfn(buf, mfn_save, PAGE_KERNEL);
-
-	pr_info("Remapped %ld page(s)\n", remapped);
-}
-
 static unsigned long __init xen_get_max_pages(void)
 {
 	unsigned long max_pages = MAX_DOMAIN_PAGES;
@@ -649,7 +628,7 @@ char * __init xen_memory_setup(void)
 	 * underlying RAM.
 	 */
 	xen_set_identity_and_remap(map, memmap.nr_entries, max_pfn,
-				   &xen_released_pages, &remapped_pages);
+				   &xen_released_pages);
 
 	extra_pages += xen_released_pages;
 	extra_pages += remapped_pages;
