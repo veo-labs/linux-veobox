@@ -50,7 +50,7 @@
  */
 #undef START_IN_KERNEL_MODE
 
-#define DRV_VER "0.7.0"
+#define DRV_VER "0.5.29"
 
 /*
  * According to the Atom N270 datasheet,
@@ -199,33 +199,17 @@ static const struct bios_settings bios_tbl[] = {
 	{"Acer", "Aspire 1810T",  "v1.3310", 0x55, 0x58, {0x9e, 0x00}, 0},
 	{"Acer", "Aspire 1810TZ", "v1.3314", 0x55, 0x58, {0x9e, 0x00}, 0},
 	{"Acer", "Aspire 1810T",  "v1.3314", 0x55, 0x58, {0x9e, 0x00}, 0},
-	/* Acer 5755G */
-	{"Acer", "Aspire 5755G",  "V1.20",   0xab, 0xb4, {0x00, 0x08}, 0},
-	{"Acer", "Aspire 5755G",  "V1.21",   0xab, 0xb3, {0x00, 0x08}, 0},
-	/* Acer 521 */
-	{"Acer", "AO521", "V1.11", 0x55, 0x58, {0x1f, 0x00}, 0},
 	/* Acer 531 */
 	{"Acer", "AO531h", "v0.3104", 0x55, 0x58, {0x20, 0x00}, 0},
 	{"Acer", "AO531h", "v0.3201", 0x55, 0x58, {0x20, 0x00}, 0},
 	{"Acer", "AO531h", "v0.3304", 0x55, 0x58, {0x20, 0x00}, 0},
 	/* Acer 751 */
-	{"Acer", "AO751h", "V0.3206", 0x55, 0x58, {0x21, 0x00}, 0},
 	{"Acer", "AO751h", "V0.3212", 0x55, 0x58, {0x21, 0x00}, 0},
-	/* Acer 753 */
-	{"Acer", "Aspire One 753", "V1.24", 0x93, 0xac, {0x14, 0x04}, 1},
 	/* Acer 1825 */
 	{"Acer", "Aspire 1825PTZ", "V1.3118", 0x55, 0x58, {0x9e, 0x00}, 0},
 	{"Acer", "Aspire 1825PTZ", "V1.3127", 0x55, 0x58, {0x9e, 0x00}, 0},
-	/* Acer Extensa 5420 */
-	{"Acer", "Extensa 5420", "V1.17", 0x93, 0xac, {0x14, 0x04}, 1},
-	/* Acer Aspire 5315 */
-	{"Acer", "Aspire 5315", "V1.19", 0x93, 0xac, {0x14, 0x04}, 1},
-	/* Acer Aspire 5739 */
-	{"Acer", "Aspire 5739G", "V1.3311", 0x55, 0x58, {0x20, 0x00}, 0},
 	/* Acer TravelMate 7730 */
 	{"Acer", "TravelMate 7730G", "v0.3509", 0x55, 0x58, {0xaf, 0x00}, 0},
-	/* Acer TravelMate TM8573T */
-	{"Acer", "TM8573T", "V1.13", 0x93, 0xa8, {0x14, 0x04}, 1},
 	/* Gateway */
 	{"Gateway", "AOA110", "v0.3103",  0x55, 0x58, {0x21, 0x00}, 0},
 	{"Gateway", "AOA150", "v0.3103",  0x55, 0x58, {0x20, 0x00}, 0},
