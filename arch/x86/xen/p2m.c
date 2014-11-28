@@ -91,22 +91,15 @@ EXPORT_SYMBOL_GPL(xen_p2m_size);
 unsigned long xen_max_p2m_pfn __read_mostly;
 EXPORT_SYMBOL_GPL(xen_max_p2m_pfn);
 
+static DEFINE_SPINLOCK(p2m_update_lock);
+
 static unsigned long *p2m_mid_missing_mfn;
 static unsigned long *p2m_top_mfn;
 static unsigned long **p2m_top_mfn_p;
-
-/* Placeholders for holes in the address space */
-static RESERVE_BRK_ARRAY(unsigned long, p2m_missing, P2M_PER_PAGE);
-static RESERVE_BRK_ARRAY(unsigned long *, p2m_mid_missing, P2M_MID_PER_PAGE);
-
-static RESERVE_BRK_ARRAY(unsigned long **, p2m_top, P2M_TOP_PER_PAGE);
-
-static RESERVE_BRK_ARRAY(unsigned long, p2m_identity, P2M_PER_PAGE);
-static RESERVE_BRK_ARRAY(unsigned long *, p2m_mid_identity, P2M_MID_PER_PAGE);
-
-RESERVE_BRK(p2m_mid, PAGE_SIZE * (MAX_DOMAIN_PAGES / (P2M_PER_PAGE * P2M_MID_PER_PAGE)));
-
-static int use_brk = 1;
+static unsigned long *p2m_missing;
+static unsigned long *p2m_identity;
+static pte_t *p2m_missing_pte;
+static pte_t *p2m_identity_pte;
 
 static inline unsigned p2m_top_index(unsigned long pfn)
 {
@@ -166,27 +159,6 @@ static void p2m_init_identity(unsigned long *p2m, unsigned long pfn)
 
 static void * __ref alloc_p2m_page(void)
 {
-	if (unlikely(!slab_is_available()))
-		return alloc_bootmem_align(PAGE_SIZE, PAGE_SIZE);
-
-	return (void *)__get_free_page(GFP_KERNEL | __GFP_REPEAT);
-}
-
-static void __ref free_p2m_page(void *p)
-{
-	if (unlikely(!slab_is_available())) {
-		free_bootmem((unsigned long)p, PAGE_SIZE);
-		return;
-	}
-
-	free_page((unsigned long)p);
-}
-
-static void * __ref alloc_p2m_page(void)
-{
-	if (unlikely(use_brk))
-		return extend_brk(PAGE_SIZE, PAGE_SIZE);
-
 	if (unlikely(!slab_is_available()))
 		return alloc_bootmem_align(PAGE_SIZE, PAGE_SIZE);
 
@@ -260,11 +232,6 @@ void __ref xen_build_mfn_list_list(void)
 		}
 
 		if (mid_mfn_p == p2m_mid_missing_mfn) {
-			/*
-			 * XXX boot-time only!  We should never find
-			 * missing parts of the mfn tree after
-			 * runtime.
-			 */
 			mid_mfn_p = alloc_p2m_page();
 			p2m_mid_mfn_init(mid_mfn_p, p2m_missing);
 
@@ -297,63 +264,45 @@ void __init xen_build_dynamic_phys_to_machine(void)
 		return;
 
 	xen_p2m_addr = (unsigned long *)xen_start_info->mfn_list;
-	mfn_list = (unsigned long *)xen_start_info->mfn_list;
-	max_pfn = min(MAX_DOMAIN_PAGES, xen_start_info->nr_pages);
-	xen_max_p2m_pfn = max_pfn;
-	xen_p2m_size = max_pfn;
+	xen_p2m_size = ALIGN(xen_start_info->nr_pages, P2M_PER_PAGE);
 
-	p2m_missing = alloc_p2m_page();
-	p2m_init(p2m_missing);
-	p2m_identity = alloc_p2m_page();
-	p2m_init(p2m_identity);
+	for (pfn = xen_start_info->nr_pages; pfn < xen_p2m_size; pfn++)
+		xen_p2m_addr[pfn] = INVALID_P2M_ENTRY;
 
-	p2m_mid_missing = alloc_p2m_page();
-	p2m_mid_init(p2m_mid_missing, p2m_missing);
-	p2m_mid_identity = alloc_p2m_page();
-	p2m_mid_init(p2m_mid_identity, p2m_identity);
+	xen_max_p2m_pfn = xen_p2m_size;
+}
 
-	p2m_top = alloc_p2m_page();
-	p2m_top_init(p2m_top);
+#define P2M_TYPE_IDENTITY	0
+#define P2M_TYPE_MISSING	1
+#define P2M_TYPE_PFN		2
+#define P2M_TYPE_UNKNOWN	3
 
 static int xen_p2m_elem_type(unsigned long pfn)
 {
 	unsigned long mfn;
 
-		if (p2m_top[topidx] == p2m_mid_missing) {
-			unsigned long **mid = alloc_p2m_page();
-			p2m_mid_init(mid, p2m_missing);
+	if (pfn >= xen_p2m_size)
+		return P2M_TYPE_IDENTITY;
 
 	mfn = xen_p2m_addr[pfn];
 
 	if (mfn == INVALID_P2M_ENTRY)
 		return P2M_TYPE_MISSING;
 
-			p2midx = max_pfn % P2M_PER_PAGE;
-			for ( ; p2midx < P2M_PER_PAGE; p2midx++)
-				mfn_list[pfn + p2midx] = INVALID_P2M_ENTRY;
-		}
-		p2m_top[topidx][mididx] = &mfn_list[pfn];
-	}
+	if (mfn & IDENTITY_FRAME_BIT)
+		return P2M_TYPE_IDENTITY;
+
+	return P2M_TYPE_PFN;
 }
 
 static void __init xen_rebuild_p2m_list(unsigned long *p2m)
 {
 	unsigned int i, chunk;
 	unsigned long pfn;
-	unsigned long pfn_free = 0;
-	unsigned long *mfn_list = NULL;
-	unsigned long size;
-
-	use_brk = 0;
-	va_start = xen_start_info->mfn_list;
-	/*We copy in increments of P2M_PER_PAGE * sizeof(unsigned long),
-	 * so make sure it is rounded up to that */
-	size = PAGE_ALIGN(xen_start_info->nr_pages * sizeof(unsigned long));
-	va_end = va_start + size;
-
-	/* If we were revectored already, don't do it again. */
-	if (va_start <= __START_KERNEL_map && va_start >= __PAGE_OFFSET)
-		return 0;
+	unsigned long *mfns;
+	pte_t *ptep;
+	pmd_t *pmdp;
+	int type;
 
 	p2m_missing = alloc_p2m_page();
 	p2m_init(p2m_missing);
@@ -366,9 +315,9 @@ static void __init xen_rebuild_p2m_list(unsigned long *p2m)
 	paravirt_alloc_pte(&init_mm, __pa(p2m_identity_pte) >> PAGE_SHIFT);
 	for (i = 0; i < PTRS_PER_PTE; i++) {
 		set_pte(p2m_missing_pte + i,
-			pfn_pte(PFN_DOWN(__pa(p2m_missing)), PAGE_KERNEL_RO));
+			pfn_pte(PFN_DOWN(__pa(p2m_missing)), PAGE_KERNEL));
 		set_pte(p2m_identity_pte + i,
-			pfn_pte(PFN_DOWN(__pa(p2m_identity)), PAGE_KERNEL_RO));
+			pfn_pte(PFN_DOWN(__pa(p2m_identity)), PAGE_KERNEL));
 	}
 
 	for (pfn = 0; pfn < xen_max_p2m_pfn; pfn += chunk) {
@@ -415,7 +364,7 @@ static void __init xen_rebuild_p2m_list(unsigned long *p2m)
 				p2m_missing : p2m_identity;
 			ptep = populate_extra_pte((unsigned long)(p2m + pfn));
 			set_pte(ptep,
-				pfn_pte(PFN_DOWN(__pa(mfns)), PAGE_KERNEL_RO));
+				pfn_pte(PFN_DOWN(__pa(mfns)), PAGE_KERNEL));
 			continue;
 		}
 
@@ -424,7 +373,7 @@ static void __init xen_rebuild_p2m_list(unsigned long *p2m)
 			p2m_missing_pte : p2m_identity_pte;
 		for (i = 0; i < PMDS_PER_MID_PAGE; i++) {
 			pmdp = populate_extra_pmd(
-				(unsigned long)(p2m + pfn) + i * PMD_SIZE);
+				(unsigned long)(p2m + pfn + i * PTRS_PER_PTE));
 			set_pmd(pmdp, __pmd(__pa(ptep) | _KERNPG_TABLE));
 		}
 	}
@@ -447,36 +396,15 @@ void __init xen_vmalloc_p2m_tree(void)
 	xen_p2m_addr = vm.addr;
 	xen_p2m_size = xen_max_p2m_pfn;
 
-		}
-		/* This should be the leafs allocated for identity from _brk. */
-	}
-
-	xen_p2m_size = xen_max_p2m_pfn;
-	xen_p2m_addr = mfn_list;
-
 	xen_inv_extra_mem();
 
 	m2p_override_init();
-	return (unsigned long)mfn_list;
 }
-#else
-unsigned long __init xen_revector_p2m_tree(void)
-{
-	use_brk = 0;
-	xen_p2m_size = xen_max_p2m_pfn;
-	xen_inv_extra_mem();
-	m2p_override_init();
-	return 0;
-}
-#endif
+
 unsigned long get_phys_to_machine(unsigned long pfn)
 {
 	pte_t *ptep;
 	unsigned int level;
-
-	if (unlikely(pfn >= xen_p2m_size)) {
-		if (pfn < xen_max_p2m_pfn)
-			return xen_chk_extra_mem(pfn);
 
 	if (unlikely(pfn >= xen_p2m_size)) {
 		if (pfn < xen_max_p2m_pfn)
@@ -499,6 +427,67 @@ unsigned long get_phys_to_machine(unsigned long pfn)
 	return xen_p2m_addr[pfn];
 }
 EXPORT_SYMBOL_GPL(get_phys_to_machine);
+
+/*
+ * Allocate new pmd(s). It is checked whether the old pmd is still in place.
+ * If not, nothing is changed. This is okay as the only reason for allocating
+ * a new pmd is to replace p2m_missing_pte or p2m_identity_pte by a individual
+ * pmd. In case of PAE/x86-32 there are multiple pmds to allocate!
+ */
+static pte_t *alloc_p2m_pmd(unsigned long addr, pte_t *ptep, pte_t *pte_pg)
+{
+	pte_t *ptechk;
+	pte_t *pteret = ptep;
+	pte_t *pte_newpg[PMDS_PER_MID_PAGE];
+	pmd_t *pmdp;
+	unsigned int level;
+	unsigned long flags;
+	unsigned long vaddr;
+	int i;
+
+	/* Do all allocations first to bail out in error case. */
+	for (i = 0; i < PMDS_PER_MID_PAGE; i++) {
+		pte_newpg[i] = alloc_p2m_page();
+		if (!pte_newpg[i]) {
+			for (i--; i >= 0; i--)
+				free_p2m_page(pte_newpg[i]);
+
+			return NULL;
+		}
+	}
+
+	vaddr = addr & ~(PMD_SIZE * PMDS_PER_MID_PAGE - 1);
+
+	for (i = 0; i < PMDS_PER_MID_PAGE; i++) {
+		copy_page(pte_newpg[i], pte_pg);
+		paravirt_alloc_pte(&init_mm, __pa(pte_newpg[i]) >> PAGE_SHIFT);
+
+		pmdp = lookup_pmd_address(vaddr);
+		BUG_ON(!pmdp);
+
+		spin_lock_irqsave(&p2m_update_lock, flags);
+
+		ptechk = lookup_address(vaddr, &level);
+		if (ptechk == pte_pg) {
+			set_pmd(pmdp,
+				__pmd(__pa(pte_newpg[i]) | _KERNPG_TABLE));
+			if (vaddr == (addr & ~(PMD_SIZE - 1)))
+				pteret = pte_offset_kernel(pmdp, addr);
+			pte_newpg[i] = NULL;
+		}
+
+		spin_unlock_irqrestore(&p2m_update_lock, flags);
+
+		if (pte_newpg[i]) {
+			paravirt_release_pte(__pa(pte_newpg[i]) >> PAGE_SHIFT);
+			free_p2m_page(pte_newpg[i]);
+		}
+
+		vaddr += PMD_SIZE;
+	}
+
+	return pteret;
+}
 
 /*
  * Fully allocate the p2m structure for a given pfn.  We need to check
@@ -526,7 +515,7 @@ static bool alloc_p2m(unsigned long pfn)
 
 	if (pte_pg == p2m_missing_pte || pte_pg == p2m_identity_pte) {
 		/* PMD level is missing, allocate a new one */
-		ptep = alloc_p2m_pmd(addr, pte_pg);
+		ptep = alloc_p2m_pmd(addr, ptep, pte_pg);
 		if (!ptep)
 			return false;
 	}
@@ -576,7 +565,22 @@ static bool alloc_p2m(unsigned long pfn)
 		if (p2m_pfn == PFN_DOWN(__pa(p2m_missing)))
 			p2m_init(p2m);
 		else
-			mid_mfn[mididx] = virt_to_mfn(p2m);
+			p2m_init_identity(p2m, pfn);
+
+		spin_lock_irqsave(&p2m_update_lock, flags);
+
+		if (pte_pfn(*ptep) == p2m_pfn) {
+			set_pte(ptep,
+				pfn_pte(PFN_DOWN(__pa(p2m)), PAGE_KERNEL));
+			if (mid_mfn)
+				mid_mfn[mididx] = virt_to_mfn(p2m);
+			p2m = NULL;
+		}
+
+		spin_unlock_irqrestore(&p2m_update_lock, flags);
+
+		if (p2m)
+			free_p2m_page(p2m);
 	}
 
 	return true;
@@ -619,9 +623,6 @@ bool __set_phys_to_machine(unsigned long pfn, unsigned long mfn)
 		return true;
 	}
 
-	if (likely(!xen_safe_write_ulong(xen_p2m_addr + pfn, mfn)))
-		return true;
-
 	ptep = lookup_address((unsigned long)(xen_p2m_addr + pfn), &level);
 	BUG_ON(!ptep || level != PG_LEVEL_4K);
 
@@ -630,6 +631,8 @@ bool __set_phys_to_machine(unsigned long pfn, unsigned long mfn)
 
 	if (pte_pfn(*ptep) == PFN_DOWN(__pa(p2m_identity)))
 		return mfn == IDENTITY_FRAME(pfn);
+
+	xen_p2m_addr[pfn] = mfn;
 
 	return false;
 }

@@ -1171,9 +1171,7 @@ static void __init xen_pagetable_p2m_setup(void)
 	xen_vmalloc_p2m_tree();
 
 #ifdef CONFIG_X86_64
-	xen_pagetable_p2m_copy();
-#else
-	xen_revector_p2m_tree();
+	xen_pagetable_p2m_free();
 #endif
 	/* And revector! Bye bye old array */
 	xen_start_info->mfn_list = (unsigned long)xen_p2m_addr;
@@ -1182,7 +1180,6 @@ static void __init xen_pagetable_p2m_setup(void)
 static void __init xen_pagetable_init(void)
 {
 	paging_init();
-	xen_post_allocator_init();
 
 	xen_pagetable_p2m_setup();
 
