@@ -266,14 +266,6 @@ static struct thermal_zone_params acerhdf_zone_params = {
 	.governor_name = "bang_bang",
 };
 
-/*
- * this struct is used to instruct thermal layer to use bang_bang instead of
- * default governor for acerhdf
- */
-static struct thermal_zone_params acerhdf_zone_params = {
-	.governor_name = "bang_bang",
-};
-
 static int acerhdf_get_temp(int *temp)
 {
 	u8 read_temp;
