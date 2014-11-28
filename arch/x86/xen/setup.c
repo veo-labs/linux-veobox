@@ -123,43 +123,6 @@ static void __init xen_del_extra_mem(phys_addr_t start, phys_addr_t size)
 }
 
 /*
- * Called during boot before the p2m list can take entries beyond the
- * hypervisor supplied p2m list. Entries in extra mem are to be regarded as
- * invalid.
- */
-unsigned long __ref xen_chk_extra_mem(unsigned long pfn)
-{
-	int i;
-	phys_addr_t addr = PFN_PHYS(pfn);
-
-	for (i = 0; i < XEN_EXTRA_MEM_MAX_REGIONS; i++) {
-		if (addr >= xen_extra_mem[i].start &&
-		    addr < xen_extra_mem[i].start + xen_extra_mem[i].size)
-			return INVALID_P2M_ENTRY;
-	}
-
-	return IDENTITY_FRAME(pfn);
-}
-
-/*
- * Mark all pfns of extra mem as invalid in p2m list.
- */
-void __init xen_inv_extra_mem(void)
-{
-	unsigned long pfn, pfn_s, pfn_e;
-	int i;
-
-	for (i = 0; i < XEN_EXTRA_MEM_MAX_REGIONS; i++) {
-		if (!xen_extra_mem[i].size)
-			continue;
-		pfn_s = PFN_DOWN(xen_extra_mem[i].start);
-		pfn_e = PFN_UP(xen_extra_mem[i].start + xen_extra_mem[i].size);
-		for (pfn = pfn_s; pfn < pfn_e; pfn++)
-			set_phys_to_machine(pfn, INVALID_P2M_ENTRY);
-	}
-}
-
-/*
  * Finds the next RAM pfn available in the E820 map after min_pfn.
  * This function updates min_pfn with the pfn found and returns
  * the size of that range or zero if not found.
@@ -223,12 +186,12 @@ static int __init xen_free_mfn(unsigned long mfn)
 static void __init xen_set_identity_and_release_chunk(unsigned long start_pfn,
 	unsigned long end_pfn, unsigned long nr_pages, unsigned long *released)
 {
+	unsigned long len = 0;
 	unsigned long pfn, end;
 	int ret;
 
 	WARN_ON(start_pfn > end_pfn);
 
-	/* Release pages first. */
 	end = min(end_pfn, nr_pages);
 	for (pfn = start_pfn; pfn < end; pfn++) {
 		unsigned long mfn = pfn_to_mfn(pfn);
@@ -241,14 +204,16 @@ static void __init xen_set_identity_and_release_chunk(unsigned long start_pfn,
 		WARN(ret != 1, "Failed to release pfn %lx err=%d\n", pfn, ret);
 
 		if (ret == 1) {
-			(*released)++;
 			if (!__set_phys_to_machine(pfn, INVALID_P2M_ENTRY))
 				break;
+			len++;
 		} else
 			break;
 	}
 
-	set_phys_range_identity(start_pfn, end_pfn);
+	/* Need to release pages first */
+	*released += len;
+	*identity += set_phys_range_identity(start_pfn, end_pfn);
 }
 
 /*
@@ -276,7 +241,7 @@ static void __init xen_update_mem_tables(unsigned long pfn, unsigned long mfn)
 	}
 
 	/* Update kernel mapping, but not for highmem. */
-	if (pfn >= PFN_UP(__pa(high_memory - 1)))
+	if ((pfn << PAGE_SHIFT) >= __pa(high_memory))
 		return;
 
 	if (HYPERVISOR_update_va_mapping((unsigned long)__va(pfn << PAGE_SHIFT),
@@ -307,11 +272,15 @@ static void __init xen_do_set_identity_and_remap_chunk(
 	unsigned long ident_pfn_iter, remap_pfn_iter;
 	unsigned long ident_end_pfn = start_pfn + size;
 	unsigned long left = size;
+	unsigned long ident_cnt = 0;
 	unsigned int i, chunk;
 
 	WARN_ON(size == 0);
 
 	BUG_ON(xen_feature(XENFEAT_auto_translated_physmap));
+
+	/* Don't use memory until remapped */
+	memblock_reserve(PFN_PHYS(remap_pfn), PFN_PHYS(size));
 
 	mfn_save = virt_to_mfn(buf);
 
@@ -335,7 +304,8 @@ static void __init xen_do_set_identity_and_remap_chunk(
 		xen_remap_mfn = mfn;
 
 		/* Set identity map */
-		set_phys_range_identity(ident_pfn_iter, ident_pfn_iter + chunk);
+		ident_cnt += set_phys_range_identity(ident_pfn_iter,
+			ident_pfn_iter + chunk);
 
 		left -= chunk;
 	}
@@ -358,7 +328,7 @@ static void __init xen_do_set_identity_and_remap_chunk(
 static unsigned long __init xen_set_identity_and_remap_chunk(
         const struct e820entry *list, size_t map_size, unsigned long start_pfn,
 	unsigned long end_pfn, unsigned long nr_pages, unsigned long remap_pfn,
-	unsigned long *released, unsigned long *remapped)
+	unsigned long *identity, unsigned long *released)
 {
 	unsigned long pfn;
 	unsigned long i = 0;
@@ -396,7 +366,7 @@ static unsigned long __init xen_set_identity_and_remap_chunk(
 		/* Update variables to reflect new mappings. */
 		i += size;
 		remap_pfn += size;
-		*remapped += size;
+		*identity += size;
 	}
 
 	/*
@@ -416,6 +386,7 @@ static void __init xen_set_identity_and_remap(
 	unsigned long *released, unsigned long *remapped)
 {
 	phys_addr_t start = 0;
+	unsigned long identity = 0;
 	unsigned long last_pfn = nr_pages;
 	const struct e820entry *entry;
 	unsigned long num_released = 0;
@@ -446,7 +417,7 @@ static void __init xen_set_identity_and_remap(
 				last_pfn = xen_set_identity_and_remap_chunk(
 						list, map_size, start_pfn,
 						end_pfn, nr_pages, last_pfn,
-						&num_released, &num_remapped);
+						&identity, &num_released);
 			start = end;
 		}
 	}
@@ -454,6 +425,7 @@ static void __init xen_set_identity_and_remap(
 	*released = num_released;
 	*remapped = num_remapped;
 
+	pr_info("Set %ld page(s) to 1-1 mapping\n", identity);
 	pr_info("Released %ld page(s)\n", num_released);
 }
 
@@ -505,6 +477,60 @@ void __init xen_remap_memory(void)
 
 	if (pfn_s != ~0UL && len)
 		xen_del_extra_mem(PFN_PHYS(pfn_s), PFN_PHYS(len));
+
+	set_pte_mfn(buf, mfn_save, PAGE_KERNEL);
+
+	pr_info("Remapped %ld page(s)\n", remapped);
+}
+
+/*
+ * Remap the memory prepared in xen_do_set_identity_and_remap_chunk().
+ * The remap information (which mfn remap to which pfn) is contained in the
+ * to be remapped memory itself in a linked list anchored at xen_remap_mfn.
+ * This scheme allows to remap the different chunks in arbitrary order while
+ * the resulting mapping will be independant from the order.
+ */
+void __init xen_remap_memory(void)
+{
+	unsigned long buf = (unsigned long)&xen_remap_buf;
+	unsigned long mfn_save, mfn, pfn;
+	unsigned long remapped = 0;
+	unsigned int i;
+	unsigned long pfn_s = ~0UL;
+	unsigned long len = 0;
+
+	mfn_save = virt_to_mfn(buf);
+
+	while (xen_remap_mfn != INVALID_P2M_ENTRY) {
+		/* Map the remap information */
+		set_pte_mfn(buf, xen_remap_mfn, PAGE_KERNEL);
+
+		BUG_ON(xen_remap_mfn != xen_remap_buf.mfns[0]);
+
+		pfn = xen_remap_buf.target_pfn;
+		for (i = 0; i < xen_remap_buf.size; i++) {
+			mfn = xen_remap_buf.mfns[i];
+			xen_update_mem_tables(pfn, mfn);
+			remapped++;
+			pfn++;
+		}
+		if (pfn_s == ~0UL || pfn == pfn_s) {
+			pfn_s = xen_remap_buf.target_pfn;
+			len += xen_remap_buf.size;
+		} else if (pfn_s + len == xen_remap_buf.target_pfn) {
+			len += xen_remap_buf.size;
+		} else {
+			memblock_free(PFN_PHYS(pfn_s), PFN_PHYS(len));
+			pfn_s = xen_remap_buf.target_pfn;
+			len = xen_remap_buf.size;
+		}
+
+		mfn = xen_remap_mfn;
+		xen_remap_mfn = xen_remap_buf.next_area_mfn;
+	}
+
+	if (pfn_s != ~0UL && len)
+		memblock_free(PFN_PHYS(pfn_s), PFN_PHYS(len));
 
 	set_pte_mfn(buf, mfn_save, PAGE_KERNEL);
 

@@ -39,8 +39,6 @@ void xen_reserve_top(void);
 void xen_mm_pin_all(void);
 void xen_mm_unpin_all(void);
 
-unsigned long __ref xen_chk_extra_mem(unsigned long pfn);
-void __init xen_inv_extra_mem(void);
 void __init xen_remap_memory(void);
 char * __init xen_memory_setup(void);
 char * xen_auto_xlated_memory_setup(void);

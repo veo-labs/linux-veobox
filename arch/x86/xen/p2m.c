@@ -587,50 +587,21 @@ static bool __init early_alloc_p2m_middle(unsigned long pfn)
 	return true;
 }
 
-/*
- * Skim over the P2M tree looking at pages that are either filled with
- * INVALID_P2M_ENTRY or with 1:1 PFNs. If found, re-use that page and
- * replace the P2M leaf with a p2m_missing or p2m_identity.
- * Stick the old page in the new P2M tree location.
- */
-static bool __init early_can_reuse_p2m_middle(unsigned long set_pfn)
+static void __init early_split_p2m(unsigned long pfn)
 {
-	unsigned topidx;
-	unsigned mididx;
-	unsigned ident_pfns;
-	unsigned inv_pfns;
-	unsigned long *p2m;
-	unsigned idx;
-	unsigned long pfn;
+	unsigned long mididx, idx;
 
-	/* We only look when this entails a P2M middle layer */
-	if (p2m_index(set_pfn))
-		return false;
+	mididx = p2m_mid_index(pfn);
+	idx = p2m_index(pfn);
 
-	for (pfn = 0; pfn < MAX_DOMAIN_PAGES; pfn += P2M_PER_PAGE) {
-		topidx = p2m_top_index(pfn);
-
-		if (!p2m_top[topidx])
-			continue;
-
-		if (p2m_top[topidx] == p2m_mid_missing)
-			continue;
-
-		if (pte_pfn(*ptep) == p2m_pfn) {
-			set_pte(ptep,
-				pfn_pte(PFN_DOWN(__pa(p2m)), PAGE_KERNEL));
-			if (mid_mfn)
-				mid_mfn[mididx] = virt_to_mfn(p2m);
-			p2m = NULL;
-		}
-
-		spin_unlock_irqrestore(&p2m_update_lock, flags);
-
-		if (p2m)
-			free_p2m_page(p2m);
-	}
-
-	return true;
+	/*
+	 * Allocate new middle and leaf pages if this pfn lies in the
+	 * middle of one.
+	 */
+	if (mididx || idx)
+		early_alloc_p2m_middle(pfn);
+	if (idx)
+		early_alloc_p2m(pfn, false);
 }
 
 unsigned long __init set_phys_range_identity(unsigned long pfn_s,
