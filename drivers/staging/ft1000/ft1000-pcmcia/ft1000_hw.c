@@ -2033,6 +2033,7 @@ static void ft1000_get_drvinfo(struct net_device *dev,
 static u32 ft1000_get_link(struct net_device *dev)
 {
 	struct ft1000_info *info;
+
 	info = netdev_priv(dev);
 	return info->mediastate;
 }
