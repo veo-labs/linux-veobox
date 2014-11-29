@@ -903,8 +903,6 @@ void MACvGetLongRetryLimit(void __iomem *dwIoBase,
 
 void MACvSetLoopbackMode(void __iomem *dwIoBase, unsigned char byLoopbackMode);
 
-void MACvSetPacketFilter(void __iomem *dwIoBase, unsigned short wFilterType);
-
 void MACvSaveContext(void __iomem *dwIoBase, unsigned char *pbyCxtBuf);
 void MACvRestoreContext(void __iomem *dwIoBase, unsigned char *pbyCxtBuf);
 
