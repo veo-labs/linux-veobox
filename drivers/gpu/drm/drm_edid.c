@@ -1015,19 +1015,6 @@ module_param_named(edid_fixup, edid_fixup, int, 0400);
 MODULE_PARM_DESC(edid_fixup,
 		 "Minimum number of valid EDID header bytes (0-8, default 6)");
 
-static void drm_get_displayid(struct drm_connector *connector,
-			      struct edid *edid);
-
-static int drm_edid_block_checksum(const u8 *raw_edid)
-{
-	int i;
-	u8 csum = 0;
-	for (i = 0; i < EDID_LENGTH; i++)
-		csum += raw_edid[i];
-
-	return csum;
-}
-
 static bool drm_edid_is_zero(const u8 *in_edid, int length)
 {
 	if (memchr_inv(in_edid, 0, length))
@@ -1198,14 +1185,6 @@ drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
 	} while (ret != xfers && --retries);
 
 	return ret == xfers ? 0 : -1;
-}
-
-static bool drm_edid_is_zero(u8 *in_edid, int length)
-{
-	if (memchr_inv(in_edid, 0, length))
-		return false;
-
-	return true;
 }
 
 /**
