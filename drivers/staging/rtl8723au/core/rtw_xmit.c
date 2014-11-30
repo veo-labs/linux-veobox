@@ -1889,7 +1889,7 @@ int rtw_xmit23a(struct rtw_adapter *padapter, struct sk_buff *skb)
 	}
 	pxmitframe->pkt = skb;
 
-	do_queue_select(padapter, &pxmitframe->attrib);
+	pxmitframe->attrib.qsel = pxmitframe->attrib.priority;
 
 #ifdef CONFIG_8723AU_AP_MODE
 	spin_lock_bh(&pxmitpriv->lock);
