@@ -78,19 +78,7 @@ bool rtl8723au_chip_configure(struct rtw_adapter *padapter)
 			return false;
 	}
 
-	result = Hal_MappingOutPipe23a(pAdapter, NumOutPipe);
-
-	return result;
-}
-
-void rtl8723au_chip_configure(struct rtw_adapter *padapter)
-{
-	struct hal_data_8723a *pHalData = GET_HAL_DATA(padapter);
-	struct dvobj_priv *pdvobjpriv = adapter_to_dvobj(padapter);
-
-	rtl8723au_set_queue_pipe_mapping(padapter,
-					 pdvobjpriv->RtNumInPipes,
-					 pdvobjpriv->RtNumOutPipes);
+	return Hal_MappingOutPipe23a(padapter, NumOutPipe);
 }
 
 static int _InitPowerOn(struct rtw_adapter *padapter)
