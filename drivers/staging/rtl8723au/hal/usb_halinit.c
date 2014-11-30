@@ -26,7 +26,8 @@
 #include <usb_ops.h>
 
 static void phy_SsPwrSwitch92CU(struct rtw_adapter *Adapter,
-				enum rt_rf_power_state eRFPowerState);
+				enum rt_rf_power_state eRFPowerState,
+				int bRegSSPwrLvl);
 
 static void
 _ConfigChipOutEP(struct rtw_adapter *pAdapter, u8 NumOutPipe)
@@ -513,7 +514,9 @@ int rtl8723au_hal_init(struct rtw_adapter *Adapter)
 	Adapter->hw_init_completed = false;
 
 	if (Adapter->pwrctrlpriv.bkeepfwalive) {
-		phy_SsPwrSwitch92CU(Adapter, rf_on);
+		/* here call with bRegSSPwrLvl 1, bRegSSPwrLvl 2
+		   needs to be verified */
+		phy_SsPwrSwitch92CU(Adapter, rf_on, 1);
 
 		if (pHalData->bIQKInitialized) {
 			rtl8723a_phy_iq_calibrate(Adapter, true);
@@ -1030,7 +1033,8 @@ static void phy_SsPwrSwitch92CU(struct rtw_adapter *Adapter,
 	default:
 		break;
 	}
-}
+
+}	/*  phy_PowerSwitch92CU */
 
 static void CardDisableRTL8723U(struct rtw_adapter *Adapter)
 {
