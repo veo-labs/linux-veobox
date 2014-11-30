@@ -1253,7 +1253,7 @@ c.	APSD_CTRL 0x600[7:0] = 0x40
 d.	SYS_FUNC_EN 0x02[7:0] = 0x16		reset BB state machine
 e.	SYS_FUNC_EN 0x02[7:0] = 0x14		reset BB state machine
 ***************************************/
-	u8 value8;
+	u8 value8 = 0;
 
 	rtl8723au_write8(padapter, REG_TXPAUSE, 0xFF);
 
