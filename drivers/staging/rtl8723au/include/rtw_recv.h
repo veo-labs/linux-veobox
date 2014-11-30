@@ -200,6 +200,7 @@ struct recv_priv {
 	u8 *precv_buf;
 
 	/* For display the phy informatiom */
+	s8 rssi;
 	s8 rxpwdb;
 	u8 signal_strength;
 	u8 signal_qual;
