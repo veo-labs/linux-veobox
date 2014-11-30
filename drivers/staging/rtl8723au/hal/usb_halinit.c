@@ -425,10 +425,6 @@ static void _InitEDCA(struct rtw_adapter *Adapter)
 	rtl8723au_write32(Adapter, REG_EDCA_VO_PARAM, 0x002FA226);
 }
 
-static void _InitHWLed(struct rtw_adapter *Adapter)
-{
-}
-
 static void _InitRDGSetting(struct rtw_adapter *Adapter)
 {
 	rtl8723au_write8(Adapter, REG_RD_CTRL, 0xFF);
