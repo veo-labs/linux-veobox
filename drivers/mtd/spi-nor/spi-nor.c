@@ -995,7 +995,11 @@ int spi_nor_scan(struct spi_nor *nor, const char *name, enum read_mode mode)
 
 	info = (void *)id->driver_data;
 
-	if (info->id_len) {
+	/*
+	 * If caller has specified name of flash model that can normally be
+	 * detected using JEDEC, let's verify it.
+	 */
+	if (name && info->id_len) {
 		const struct spi_device_id *jid;
 
 		jid = spi_nor_read_id(nor);
