@@ -3253,7 +3253,7 @@ static void isert_release_work(struct work_struct *work)
 						     struct isert_conn,
 						     release_work);
 
-	isert_info("Starting release conn %p\n", isert_conn);
+	pr_info("Starting release conn %p\n", isert_conn);
 
 	wait_for_completion(&isert_conn->conn_wait);
 
@@ -3261,51 +3261,8 @@ static void isert_release_work(struct work_struct *work)
 	isert_conn->state = ISER_CONN_DOWN;
 	mutex_unlock(&isert_conn->conn_mutex);
 
-	isert_info("Destroying conn %p\n", isert_conn);
+	pr_info("Destroying conn %p\n", isert_conn);
 	isert_put_conn(isert_conn);
-}
-
-static void
-isert_wait4logout(struct isert_conn *isert_conn)
-{
-	struct iscsi_conn *conn = isert_conn->conn;
-
-	isert_info("conn %p\n", isert_conn);
-
-	if (isert_conn->logout_posted) {
-		isert_info("conn %p wait for conn_logout_comp\n", isert_conn);
-		wait_for_completion_timeout(&conn->conn_logout_comp,
-					    SECONDS_FOR_LOGOUT_COMP * HZ);
-	}
-}
-
-static void
-isert_wait4cmds(struct iscsi_conn *conn)
-{
-	isert_info("iscsi_conn %p\n", conn);
-
-	if (conn->sess) {
-		target_sess_cmd_list_set_waiting(conn->sess->se_sess);
-		target_wait_for_sess_cmds(conn->sess->se_sess);
-	}
-}
-
-static void
-isert_wait4flush(struct isert_conn *isert_conn)
-{
-	struct ib_recv_wr *bad_wr;
-
-	isert_info("conn %p\n", isert_conn);
-
-	init_completion(&isert_conn->conn_wait_comp_err);
-	isert_conn->beacon.wr_id = ISER_BEACON_WRID;
-	/* post an indication that all flush errors were consumed */
-	if (ib_post_recv(isert_conn->conn_qp, &isert_conn->beacon, &bad_wr)) {
-		isert_err("conn %p failed to post beacon", isert_conn);
-		return;
-	}
-
-	wait_for_completion(&isert_conn->conn_wait_comp_err);
 }
 
 static void isert_wait_conn(struct iscsi_conn *conn)
@@ -3327,14 +3284,9 @@ static void isert_wait_conn(struct iscsi_conn *conn)
 	mutex_unlock(&isert_conn->conn_mutex);
 
 	wait_for_completion(&isert_conn->conn_wait_comp_err);
-	wait_for_completion(&isert_conn->conn_wait);
 
-	mutex_lock(&isert_conn->conn_mutex);
-	isert_conn->state = ISER_CONN_DOWN;
-	mutex_unlock(&isert_conn->conn_mutex);
-
-	pr_info("Destroying conn %p\n", isert_conn);
-	isert_put_conn(isert_conn);
+	INIT_WORK(&isert_conn->release_work, isert_release_work);
+	queue_work(isert_release_wq, &isert_conn->release_work);
 }
 
 static void isert_free_conn(struct iscsi_conn *conn)
@@ -3385,14 +3337,23 @@ static int __init isert_init(void)
 		goto destroy_comp_wq;
 	}
 
+	isert_release_wq = alloc_workqueue("isert_release_wq", WQ_UNBOUND,
+					WQ_UNBOUND_MAX_ACTIVE);
+	if (!isert_release_wq) {
+		pr_err("Unable to allocate isert_release_wq\n");
+		ret = -ENOMEM;
+		goto destroy_comp_wq;
+	}
+
 	iscsit_register_transport(&iser_target_transport);
-	isert_info("iSER_TARGET[0] - Loaded iser_target_transport\n");
+	pr_info("iSER_TARGET[0] - Loaded iser_target_transport\n");
 
 	return 0;
 
 destroy_comp_wq:
 	destroy_workqueue(isert_comp_wq);
-
+destroy_rx_wq:
+	destroy_workqueue(isert_rx_wq);
 	return ret;
 }
 
