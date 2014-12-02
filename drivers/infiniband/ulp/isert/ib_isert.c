@@ -2005,7 +2005,11 @@ isert_handle_wc(struct ib_wc *wc)
 {
 	struct isert_conn *isert_conn;
 	struct iser_tx_desc *tx_desc;
-	struct iser_rx_desc *rx_desc;
+	struct ib_wc wc;
+
+	while (ib_poll_cq(tx_cq, 1, &wc) == 1) {
+		tx_desc = (struct iser_tx_desc *)(uintptr_t)wc.wr_id;
+		isert_conn = wc.qp->qp_context;
 
 	isert_conn = wc->qp->qp_context;
 	if (likely(wc->status == IB_WC_SUCCESS)) {
@@ -2041,9 +2045,9 @@ isert_cq_work(struct work_struct *work)
 	struct ib_wc *const wcs = comp->wcs;
 	int i, n, completed = 0;
 
-	while ((n = ib_poll_cq(comp->cq, ARRAY_SIZE(comp->wcs), wcs)) > 0) {
-		for (i = 0; i < n; i++)
-			isert_handle_wc(&wcs[i]);
+	while (ib_poll_cq(rx_cq, 1, &wc) == 1) {
+		rx_desc = (struct iser_rx_desc *)(uintptr_t)wc.wr_id;
+		isert_conn = wc.qp->qp_context;
 
 		if (wc.status == IB_WC_SUCCESS) {
 			xfer_len = (unsigned long)wc.byte_len;
