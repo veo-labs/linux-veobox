@@ -68,7 +68,7 @@ struct rdma_cm_id *isert_setup_id(struct isert_np *isert_np);
 static inline bool
 isert_prot_cmd(struct isert_conn *conn, struct se_cmd *cmd)
 {
-	return (conn->conn_device->pi_capable &&
+	return (conn->pi_support &&
 		cmd->prot_op != TARGET_PROT_NORMAL);
 }
 
@@ -2186,13 +2186,13 @@ isert_get_sup_prot_ops(struct iscsi_conn *conn)
 
 	if (conn->tpg->tpg_attrib.t10_pi) {
 		if (device->pi_capable) {
-			isert_info("conn %p PI offload enabled\n", isert_conn);
+			pr_info("conn %p PI offload enabled\n", isert_conn);
 			isert_conn->pi_support = true;
 			return TARGET_PROT_ALL;
 		}
 	}
 
-	isert_info("conn %p PI offload disabled\n", isert_conn);
+	pr_info("conn %p PI offload disabled\n", isert_conn);
 	isert_conn->pi_support = false;
 
 	return TARGET_PROT_NORMAL;
