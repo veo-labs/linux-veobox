@@ -1944,37 +1944,9 @@ static int i915_dump_lrc(struct seq_file *m, void *unused)
 
 	list_for_each_entry(ctx, &dev_priv->context_list, link) {
 		for_each_ring(ring, dev_priv, i) {
-			struct drm_i915_gem_object *ctx_obj = ctx->engine[i].state;
-
-			if (ring->default_context == ctx)
-				continue;
-
-			if (ctx_obj) {
-				struct page *page;
-				uint32_t *reg_state;
-				int j;
-
-				i915_gem_obj_ggtt_pin(ctx_obj,
-						GEN8_LR_CONTEXT_ALIGN, 0);
-
-				page = i915_gem_object_get_page(ctx_obj, 1);
-				reg_state = kmap_atomic(page);
-
-				seq_printf(m, "CONTEXT: %s %u\n", ring->name,
-						intel_execlists_ctx_id(ctx_obj));
-
-				for (j = 0; j < 0x600 / sizeof(u32) / 4; j += 4) {
-					seq_printf(m, "\t[0x%08lx] 0x%08x 0x%08x 0x%08x 0x%08x\n",
-					i915_gem_obj_ggtt_offset(ctx_obj) + 4096 + (j * 4),
-					reg_state[j], reg_state[j + 1],
-					reg_state[j + 2], reg_state[j + 3]);
-				}
-				kunmap_atomic(reg_state);
-
-				i915_gem_object_ggtt_unpin(ctx_obj);
-
-				seq_putc(m, '\n');
-			}
+			if (ring->default_context != ctx)
+				i915_dump_lrc_obj(m, ring,
+						  ctx->engine[i].state);
 		}
 	}
 
