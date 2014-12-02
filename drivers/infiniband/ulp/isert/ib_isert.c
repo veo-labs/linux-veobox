@@ -3232,11 +3232,11 @@ isert_free_np(struct iscsi_np *np)
 	 */
 	mutex_lock(&isert_np->np_accept_mutex);
 	if (!list_empty(&isert_np->np_accept_list)) {
-		isert_info("Still have isert connections, cleaning up...\n");
+		pr_info("Still have isert connections, cleaning up...\n");
 		list_for_each_entry_safe(isert_conn, n,
 					 &isert_np->np_accept_list,
 					 conn_accept_node) {
-			isert_info("cleaning isert_conn %p state (%d)\n",
+			pr_info("cleaning isert_conn %p state (%d)\n",
 				   isert_conn, isert_conn->state);
 			isert_connect_release(isert_conn);
 		}
