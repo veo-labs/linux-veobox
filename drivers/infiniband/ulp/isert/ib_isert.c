@@ -65,6 +65,14 @@ static int
 isert_rdma_accept(struct isert_conn *isert_conn);
 struct rdma_cm_id *isert_setup_id(struct isert_np *isert_np);
 
+static inline bool
+isert_prot_cmd(struct isert_conn *conn, struct se_cmd *cmd)
+{
+	return (conn->conn_device->pi_capable &&
+		cmd->prot_op != TARGET_PROT_NORMAL);
+}
+
+
 static void
 isert_qp_event_callback(struct ib_event *e, void *context)
 {
@@ -2801,7 +2809,7 @@ isert_reg_rdma(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 	if (ret)
 		goto unmap_cmd;
 
-	if (se_cmd->prot_op != TARGET_PROT_NORMAL) {
+	if (isert_prot_cmd(isert_conn, se_cmd)) {
 		ret = isert_handle_prot_cmd(isert_conn, isert_cmd, wr);
 		if (ret)
 			goto unmap_cmd;
@@ -2889,7 +2897,7 @@ isert_put_datain(struct iscsi_conn *conn, struct iscsi_cmd *cmd)
 		isert_warn("ib_post_send() failed for IB_WR_RDMA_WRITE\n");
 
 	if (!isert_prot_cmd(isert_conn, se_cmd))
-		isert_dbg("Cmd: %p posted RDMA_WRITE + Response for iSER Data "
+		pr_debug("Cmd: %p posted RDMA_WRITE + Response for iSER Data "
 			 "READ\n", isert_cmd);
 	else
 		isert_dbg("Cmd: %p posted RDMA_WRITE for iSER Data READ\n",
