@@ -432,14 +432,14 @@ isert_create_pi_ctx(struct fast_reg_descriptor *desc,
 
 	pi_ctx = kzalloc(sizeof(*desc->pi_ctx), GFP_KERNEL);
 	if (!pi_ctx) {
-		isert_err("Failed to allocate pi context\n");
+		pr_err("Failed to allocate pi context\n");
 		return -ENOMEM;
 	}
 
 	pi_ctx->prot_frpl = ib_alloc_fast_reg_page_list(device,
 					    ISCSI_ISER_SG_TABLESIZE);
 	if (IS_ERR(pi_ctx->prot_frpl)) {
-		isert_err("Failed to allocate prot frpl err=%ld\n",
+		pr_err("Failed to allocate prot frpl err=%ld\n",
 			  PTR_ERR(pi_ctx->prot_frpl));
 		ret = PTR_ERR(pi_ctx->prot_frpl);
 		goto err_pi_ctx;
@@ -447,7 +447,7 @@ isert_create_pi_ctx(struct fast_reg_descriptor *desc,
 
 	pi_ctx->prot_mr = ib_alloc_fast_reg_mr(pd, ISCSI_ISER_SG_TABLESIZE);
 	if (IS_ERR(pi_ctx->prot_mr)) {
-		isert_err("Failed to allocate prot frmr err=%ld\n",
+		pr_err("Failed to allocate prot frmr err=%ld\n",
 			  PTR_ERR(pi_ctx->prot_mr));
 		ret = PTR_ERR(pi_ctx->prot_mr);
 		goto err_prot_frpl;
@@ -459,7 +459,7 @@ isert_create_pi_ctx(struct fast_reg_descriptor *desc,
 	mr_init_attr.flags |= IB_MR_SIGNATURE_EN;
 	pi_ctx->sig_mr = ib_create_mr(pd, &mr_init_attr);
 	if (IS_ERR(pi_ctx->sig_mr)) {
-		isert_err("Failed to allocate signature enabled mr err=%ld\n",
+		pr_err("Failed to allocate signature enabled mr err=%ld\n",
 			  PTR_ERR(pi_ctx->sig_mr));
 		ret = PTR_ERR(pi_ctx->sig_mr);
 		goto err_prot_mr;
@@ -504,7 +504,7 @@ isert_create_fr_desc(struct ib_device *ib_device, struct ib_pd *pd,
 	}
 	fr_desc->ind |= ISERT_DATA_KEY_VALID;
 
-	isert_dbg("Created fr_desc %p\n", fr_desc);
+	pr_debug("Created fr_desc %p\n", fr_desc);
 
 	return 0;
 
@@ -669,14 +669,6 @@ isert_connect_request(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 	}
 
 	ret = isert_conn_setup_qp(isert_conn, cma_id);
-	if (ret)
-		goto out_conn_dev;
-
-	ret = isert_rdma_post_recvl(isert_conn);
-	if (ret)
-		goto out_conn_dev;
-
-	ret = isert_rdma_accept(isert_conn);
 	if (ret)
 		goto out_conn_dev;
 
@@ -2706,7 +2698,7 @@ isert_reg_sig_mr(struct isert_conn *isert_conn,
 		 */
 		rdma_wr->ib_sg[SIG].length += se_cmd->prot_length;
 
-	isert_dbg("sig_sge: addr: 0x%llx  length: %u lkey: %x\n",
+	pr_debug("sig_sge: addr: 0x%llx  length: %u lkey: %x\n",
 		  rdma_wr->ib_sg[SIG].addr, rdma_wr->ib_sg[SIG].length,
 		  rdma_wr->ib_sg[SIG].lkey);
 err:
@@ -2727,7 +2719,7 @@ isert_handle_prot_cmd(struct isert_conn *isert_conn,
 					  device->ib_device,
 					  isert_conn->conn_pd);
 		if (ret) {
-			isert_err("conn %p failed to allocate pi_ctx\n",
+			pr_err("conn %p failed to allocate pi_ctx\n",
 				  isert_conn);
 			return ret;
 		}
@@ -2740,7 +2732,7 @@ isert_handle_prot_cmd(struct isert_conn *isert_conn,
 					 se_cmd->prot_length,
 					 0, wr->iser_ib_op, &wr->prot);
 		if (ret) {
-			isert_err("conn %p failed to map protection buffer\n",
+			pr_err("conn %p failed to map protection buffer\n",
 				  isert_conn);
 			return ret;
 		}
@@ -2749,7 +2741,7 @@ isert_handle_prot_cmd(struct isert_conn *isert_conn,
 		ret = isert_fast_reg_mr(isert_conn, wr->fr_desc, &wr->prot,
 					ISERT_PROT_KEY_VALID, &wr->ib_sg[PROT]);
 		if (ret) {
-			isert_err("conn %p failed to fast reg mr\n",
+			pr_err("conn %p failed to fast reg mr\n",
 				  isert_conn);
 			goto unmap_prot_cmd;
 		}
@@ -2757,7 +2749,7 @@ isert_handle_prot_cmd(struct isert_conn *isert_conn,
 
 	ret = isert_reg_sig_mr(isert_conn, se_cmd, wr, wr->fr_desc);
 	if (ret) {
-		isert_err("conn %p failed to fast reg mr\n",
+		pr_err("conn %p failed to fast reg mr\n",
 			  isert_conn);
 		goto unmap_prot_cmd;
 	}
@@ -2809,7 +2801,7 @@ isert_reg_rdma(struct iscsi_conn *conn, struct iscsi_cmd *cmd,
 	if (ret)
 		goto unmap_cmd;
 
-	if (isert_prot_cmd(isert_conn, se_cmd)) {
+	if (se_cmd->prot_op != TARGET_PROT_NORMAL) {
 		ret = isert_handle_prot_cmd(isert_conn, isert_cmd, wr);
 		if (ret)
 			goto unmap_cmd;
