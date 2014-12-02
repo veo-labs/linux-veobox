@@ -1044,22 +1044,6 @@ isert_init_send_wr(struct isert_conn *isert_conn, struct isert_cmd *isert_cmd,
 	send_wr->opcode = IB_WR_SEND;
 	send_wr->sg_list = &tx_desc->tx_sg[0];
 	send_wr->num_sge = isert_cmd->tx_desc.num_sge;
-	/*
-	 * Coalesce send completion interrupts by only setting IB_SEND_SIGNALED
-	 * bit for every ISERT_COMP_BATCH_COUNT number of ib_post_send() calls.
-	 */
-	mutex_lock(&isert_conn->conn_mutex);
-	if (coalesce && isert_conn->state == ISER_CONN_FULL_FEATURE &&
-	    ++isert_conn->conn_comp_batch < ISERT_COMP_BATCH_COUNT) {
-		tx_desc->llnode_active = true;
-		llist_add(&tx_desc->comp_llnode, &isert_conn->conn_comp_llist);
-		mutex_unlock(&isert_conn->conn_mutex);
-		return;
-	}
-	isert_conn->conn_comp_batch = 0;
-	tx_desc->comp_llnode_batch = llist_del_all(&isert_conn->conn_comp_llist);
-	mutex_unlock(&isert_conn->conn_mutex);
-
 	send_wr->send_flags = IB_SEND_SIGNALED;
 }
 
@@ -1981,51 +1965,29 @@ isert_send_completion(struct iser_tx_desc *tx_desc,
 	}
 }
 
-/**
- * is_isert_tx_desc() - Indicate if the completion wr_id
- *     is a TX descriptor or not.
- * @isert_conn: iser connection
- * @wr_id: completion WR identifier
- *
- * Since we cannot rely on wc opcode in FLUSH errors
- * we must work around it by checking if the wr_id address
- * falls in the iser connection rx_descs buffer. If so
- * it is an RX descriptor, otherwize it is a TX.
- */
-static inline bool
-is_isert_tx_desc(struct isert_conn *isert_conn, void *wr_id)
+static void
+isert_cq_tx_comp_err(struct iser_tx_desc *tx_desc, struct isert_conn *isert_conn)
 {
-	void *start = isert_conn->conn_rx_descs;
-	int len = ISERT_QP_MAX_RECV_DTOS * sizeof(*isert_conn->conn_rx_descs);
+	struct ib_device *ib_dev = isert_conn->conn_cm_id->device;
+	struct isert_cmd *isert_cmd = tx_desc->isert_cmd;
 
-	if (wr_id >= start && wr_id < start + len)
-		return false;
-
-	return true;
+	if (!isert_cmd)
+		isert_unmap_tx_desc(tx_desc, ib_dev);
+	else
+		isert_completion_put(tx_desc, isert_cmd, ib_dev, true);
 }
 
 static void
-isert_cq_comp_err(struct isert_conn *isert_conn, struct ib_wc *wc)
+isert_cq_rx_comp_err(struct isert_conn *isert_conn)
 {
-	if (wc->wr_id == ISER_BEACON_WRID) {
-		isert_info("conn %p completing conn_wait_comp_err\n",
-			   isert_conn);
-		complete(&isert_conn->conn_wait_comp_err);
-	} else if (is_isert_tx_desc(isert_conn, (void *)(uintptr_t)wc->wr_id)) {
-		struct ib_device *ib_dev = isert_conn->conn_cm_id->device;
-		struct isert_cmd *isert_cmd;
-		struct iser_tx_desc *desc;
+	struct iscsi_conn *conn = isert_conn->conn;
 
-		desc = (struct iser_tx_desc *)(uintptr_t)wc->wr_id;
-		isert_cmd = desc->isert_cmd;
-		if (!isert_cmd)
-			isert_unmap_tx_desc(desc, ib_dev);
-		else
-			isert_completion_put(desc, isert_cmd, ib_dev, true);
-	} else {
-		isert_conn->post_recv_buf_count--;
-		if (!isert_conn->post_recv_buf_count)
-			iscsit_cause_connection_reinstatement(isert_conn->conn, 0);
+	if (isert_conn->post_recv_buf_count)
+		return;
+
+	if (conn->sess) {
+		target_sess_cmd_list_set_waiting(conn->sess->se_sess);
+		target_wait_for_sess_cmds(conn->sess->se_sess);
 	}
 
 	while (atomic_read(&isert_conn->post_send_buf_count))
@@ -2053,8 +2015,14 @@ isert_handle_wc(struct ib_wc *wc)
 			rx_desc = (struct iser_rx_desc *)(uintptr_t)wc->wr_id;
 			isert_rx_completion(rx_desc, isert_conn, wc->byte_len);
 		} else {
-			tx_desc = (struct iser_tx_desc *)(uintptr_t)wc->wr_id;
-			isert_send_completion(tx_desc, isert_conn);
+			pr_debug("TX wc.status != IB_WC_SUCCESS >>>>>>>>>>>>>>\n");
+			pr_debug("TX wc.status: 0x%08x\n", wc.status);
+			pr_debug("TX wc.vendor_err: 0x%08x\n", wc.vendor_err);
+
+			if (wc.wr_id != ISER_FASTREG_LI_WRID) {
+				atomic_dec(&isert_conn->post_send_buf_count);
+				isert_cq_tx_comp_err(tx_desc, isert_conn);
+			}
 		}
 	} else {
 		if (wc->status != IB_WC_WR_FLUSH_ERR)
