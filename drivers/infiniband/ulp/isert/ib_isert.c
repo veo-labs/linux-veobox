@@ -35,12 +35,7 @@
 #define	ISERT_MAX_CONN		8
 #define ISER_MAX_RX_CQ_LEN	(ISERT_QP_MAX_RECV_DTOS * ISERT_MAX_CONN)
 #define ISER_MAX_TX_CQ_LEN	(ISERT_QP_MAX_REQ_DTOS  * ISERT_MAX_CONN)
-#define ISER_MAX_CQ_LEN		(ISER_MAX_RX_CQ_LEN + ISER_MAX_TX_CQ_LEN + \
-				 ISERT_MAX_CONN)
-
-static int isert_debug_level;
-module_param_named(debug_level, isert_debug_level, int, 0644);
-MODULE_PARM_DESC(debug_level, "Enable debug tracing if > 0 (default:0)");
+#define ISER_MAX_CQ_LEN		(ISER_MAX_RX_CQ_LEN + ISER_MAX_TX_CQ_LEN)
 
 static DEFINE_MUTEX(device_list_mutex);
 static LIST_HEAD(device_list);
@@ -129,8 +124,8 @@ isert_conn_setup_qp(struct isert_conn *isert_conn, struct rdma_cm_id *cma_id)
 	memset(&attr, 0, sizeof(struct ib_qp_init_attr));
 	attr.event_handler = isert_qp_event_callback;
 	attr.qp_context = isert_conn;
-	attr.send_cq = comp->tx_cq;
-	attr.recv_cq = comp->rx_cq;
+	attr.send_cq = comp->cq;
+	attr.recv_cq = comp->cq;
 	attr.cap.max_send_wr = ISERT_QP_MAX_REQ_DTOS;
 	attr.cap.max_recv_wr = ISERT_QP_MAX_RECV_DTOS + 1;
 	/*
@@ -248,7 +243,7 @@ isert_create_device_ib_res(struct isert_device *device)
 	struct ib_device *ib_dev = device->ib_device;
 	struct ib_device_attr *dev_attr;
 	int ret = 0, i;
-	int max_rx_cqe, max_tx_cqe;
+	int max_cqe;
 
 	dev_attr = &device->dev_attr;
 	ret = isert_query_device(ib_dev, dev_attr);
@@ -292,36 +287,19 @@ isert_create_device_ib_res(struct isert_device *device)
 		struct isert_comp *comp = &device->comps[i];
 
 		comp->device = device;
-		INIT_WORK(&comp->rx_work, isert_cq_rx_work);
-		comp->rx_cq = ib_create_cq(device->ib_device,
-					   isert_cq_rx_callback,
-					   isert_cq_event_callback,
-					   (void *)comp,
-					   max_rx_cqe, i);
-		if (IS_ERR(comp->rx_cq)) {
-			ret = PTR_ERR(comp->rx_cq);
-			comp->rx_cq = NULL;
+		INIT_WORK(&comp->work, isert_cq_work);
+		comp->cq = ib_create_cq(device->ib_device,
+					isert_cq_callback,
+					isert_cq_event_callback,
+					(void *)comp,
+					max_cqe, i);
+		if (IS_ERR(comp->cq)) {
+			ret = PTR_ERR(comp->cq);
+			comp->cq = NULL;
 			goto out_cq;
 		}
 
-		INIT_WORK(&comp->tx_work, isert_cq_tx_work);
-		comp->tx_cq = ib_create_cq(device->ib_device,
-					   isert_cq_tx_callback,
-					   isert_cq_event_callback,
-					   (void *)comp,
-					   max_tx_cqe, i);
-		if (IS_ERR(comp->tx_cq)) {
-			ret = PTR_ERR(comp->tx_cq);
-			comp->tx_cq = NULL;
-			goto out_cq;
-		}
-
-		ret = ib_req_notify_cq(comp->rx_cq, IB_CQ_NEXT_COMP);
-		if (ret)
-			goto out_cq;
-		}
-
-		ret = ib_req_notify_cq(comp->tx_cq, IB_CQ_NEXT_COMP);
+		ret = ib_req_notify_cq(comp->cq, IB_CQ_NEXT_COMP);
 		if (ret)
 			goto out_cq;
 	}
@@ -332,13 +310,9 @@ out_cq:
 	for (i = 0; i < device->comps_used; i++) {
 		struct isert_comp *comp = &device->comps[i];
 
-		if (comp->rx_cq) {
-			cancel_work_sync(&comp->rx_work);
-			ib_destroy_cq(comp->rx_cq);
-		}
-		if (comp->tx_cq) {
-			cancel_work_sync(&comp->tx_work);
-			ib_destroy_cq(comp->tx_cq);
+		if (comp->cq) {
+			cancel_work_sync(&comp->work);
+			ib_destroy_cq(comp->cq);
 		}
 	}
 	kfree(device->comps);
@@ -356,12 +330,9 @@ isert_free_device_ib_res(struct isert_device *device)
 	for (i = 0; i < device->comps_used; i++) {
 		struct isert_comp *comp = &device->comps[i];
 
-		cancel_work_sync(&comp->rx_work);
-		cancel_work_sync(&comp->tx_work);
-		ib_destroy_cq(comp->rx_cq);
-		ib_destroy_cq(comp->tx_cq);
-		comp->rx_cq = NULL;
-		comp->tx_cq = NULL;
+		cancel_work_sync(&comp->work);
+		ib_destroy_cq(comp->cq);
+		comp->cq = NULL;
 	}
 	kfree(device->comps);
 }
@@ -1989,14 +1960,39 @@ isert_send_completion(struct iser_tx_desc *tx_desc,
 	}
 }
 
-static void
-isert_cq_comp_err(void *desc, struct isert_conn *isert_conn, bool tx)
+/**
+ * is_isert_tx_desc() - Indicate if the completion wr_id
+ *     is a TX descriptor or not.
+ * @isert_conn: iser connection
+ * @wr_id: completion WR identifier
+ *
+ * Since we cannot rely on wc opcode in FLUSH errors
+ * we must work around it by checking if the wr_id address
+ * falls in the iser connection rx_descs buffer. If so
+ * it is an RX descriptor, otherwize it is a TX.
+ */
+static inline bool
+is_isert_tx_desc(struct isert_conn *isert_conn, void *wr_id)
 {
-	if (tx) {
+	void *start = isert_conn->conn_rx_descs;
+	int len = ISERT_QP_MAX_RECV_DTOS * sizeof(*isert_conn->conn_rx_descs);
+
+	if (wr_id >= start && wr_id < start + len)
+		return false;
+
+	return true;
+}
+
+static void
+isert_cq_comp_err(struct isert_conn *isert_conn, struct ib_wc *wc)
+{
+	if (is_isert_tx_desc(isert_conn, (void *)wc->wr_id)) {
 		struct ib_device *ib_dev = isert_conn->conn_cm_id->device;
 		struct isert_cmd *isert_cmd;
+		struct iser_tx_desc *desc;
 
-		isert_cmd = ((struct iser_tx_desc *)desc)->isert_cmd;
+		desc = (struct iser_tx_desc *)(uintptr_t)wc->wr_id;
+		isert_cmd = desc->isert_cmd;
 		if (!isert_cmd)
 			isert_unmap_tx_desc(desc, ib_dev);
 		else
@@ -2027,16 +2023,9 @@ isert_cq_comp_err(void *desc, struct isert_conn *isert_conn, bool tx)
 static void
 isert_handle_wc(struct ib_wc *wc)
 {
-	struct isert_comp *comp = container_of(work, struct isert_comp,
-					       tx_work);
-	struct ib_cq *cq = comp->tx_cq;
 	struct isert_conn *isert_conn;
 	struct iser_tx_desc *tx_desc;
-	struct ib_wc wc;
-
-	while (ib_poll_cq(cq, 1, &wc) == 1) {
-		isert_conn = wc.qp->qp_context;
-		tx_desc = (struct iser_tx_desc *)(uintptr_t)wc.wr_id;
+	struct iser_rx_desc *rx_desc;
 
 	isert_conn = wc->qp->qp_context;
 	if (likely(wc->status == IB_WC_SUCCESS)) {
@@ -2044,56 +2033,32 @@ isert_handle_wc(struct ib_wc *wc)
 			rx_desc = (struct iser_rx_desc *)(uintptr_t)wc->wr_id;
 			isert_rx_completion(rx_desc, isert_conn, wc->byte_len);
 		} else {
-			pr_debug("TX wc.status != IB_WC_SUCCESS >>>>>>>>>>>>>>\n");
-			pr_debug("TX wc.status: 0x%08x\n", wc.status);
-			pr_debug("TX wc.vendor_err: 0x%08x\n", wc.vendor_err);
-
-			if (wc.wr_id != ISER_FASTREG_LI_WRID)
-				isert_cq_comp_err(tx_desc, isert_conn, true);
+			tx_desc = (struct iser_tx_desc *)(uintptr_t)wc->wr_id;
+			isert_send_completion(tx_desc, isert_conn);
 		}
+	} else {
+		if (wc->status != IB_WC_WR_FLUSH_ERR)
+			pr_err("wr id %llx status %d vend_err %x\n",
+				  wc->wr_id, wc->status, wc->vendor_err);
+		else
+			pr_debug("flush error: wr id %llx\n", wc->wr_id);
+
+		if (wc->wr_id != ISER_FASTREG_LI_WRID)
+			isert_cq_comp_err(isert_conn, wc);
 	}
-
-	ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
-}
-
-static void
-isert_cq_tx_callback(struct ib_cq *cq, void *context)
-{
-	struct isert_comp *comp = context;
-
-	queue_work(isert_comp_wq, &comp->tx_work);
 }
 
 static void
 isert_cq_work(struct work_struct *work)
 {
 	struct isert_comp *comp = container_of(work, struct isert_comp,
-					       rx_work);
-	struct ib_cq *cq = comp->rx_cq;
-	struct isert_conn *isert_conn;
-	struct iser_rx_desc *rx_desc;
+					       work);
 	struct ib_wc wc;
-	u32 xfer_len;
 
-	while (ib_poll_cq(cq, 1, &wc) == 1) {
-		isert_conn = wc.qp->qp_context;
-		rx_desc = (struct iser_rx_desc *)(uintptr_t)wc.wr_id;
+	while (ib_poll_cq(comp->cq, 1, &wc) == 1)
+		isert_handle_wc(&wc);
 
-		if (wc.status == IB_WC_SUCCESS) {
-			xfer_len = wc.byte_len;
-			isert_rx_completion(rx_desc, isert_conn, xfer_len);
-		} else {
-			pr_debug("RX wc.status != IB_WC_SUCCESS >>>>>>>>>>>>>>\n");
-			if (wc.status != IB_WC_WR_FLUSH_ERR) {
-				pr_debug("RX wc.status: 0x%08x\n", wc.status);
-				pr_debug("RX wc.vendor_err: 0x%08x\n",
-					 wc.vendor_err);
-			}
-			isert_cq_comp_err(rx_desc, isert_conn, false);
-		}
-	}
-
-	ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
+	ib_req_notify_cq(comp->cq, IB_CQ_NEXT_COMP);
 }
 
 static void
@@ -2101,7 +2066,7 @@ isert_cq_callback(struct ib_cq *cq, void *context)
 {
 	struct isert_comp *comp = context;
 
-	queue_work(isert_rx_wq, &comp->rx_work);
+	queue_work(isert_comp_wq, &comp->work);
 }
 
 static int
@@ -3331,17 +3296,9 @@ static int __init isert_init(void)
 	isert_comp_wq = alloc_workqueue("isert_comp_wq",
 					WQ_UNBOUND | WQ_HIGHPRI, 0);
 	if (!isert_comp_wq) {
-		isert_err("Unable to allocate isert_comp_wq\n");
+		pr_err("Unable to allocate isert_comp_wq\n");
 		ret = -ENOMEM;
 		return -ENOMEM;
-	}
-
-	isert_release_wq = alloc_workqueue("isert_release_wq", WQ_UNBOUND,
-					WQ_UNBOUND_MAX_ACTIVE);
-	if (!isert_release_wq) {
-		isert_err("Unable to allocate isert_release_wq\n");
-		ret = -ENOMEM;
-		goto destroy_comp_wq;
 	}
 
 	isert_release_wq = alloc_workqueue("isert_release_wq", WQ_UNBOUND,
@@ -3359,8 +3316,7 @@ static int __init isert_init(void)
 
 destroy_comp_wq:
 	destroy_workqueue(isert_comp_wq);
-destroy_rx_wq:
-	destroy_workqueue(isert_rx_wq);
+
 	return ret;
 }
 
