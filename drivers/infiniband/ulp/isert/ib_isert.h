@@ -181,9 +181,9 @@ struct isert_conn {
 	int			conn_fr_pool_size;
 	/* lock to protect fastreg pool */
 	spinlock_t		conn_lock;
-	struct work_struct	release_work;
-	struct ib_recv_wr       beacon;
-	bool                    logout_posted;
+#define ISERT_COMP_BATCH_COUNT	8
+	int			conn_comp_batch;
+	struct llist_head	conn_comp_llist;
 };
 
 #define ISERT_MAX_CQ 64
