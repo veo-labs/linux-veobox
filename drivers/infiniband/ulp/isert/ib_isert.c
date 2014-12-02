@@ -63,6 +63,7 @@ static int
 isert_rdma_post_recvl(struct isert_conn *isert_conn);
 static int
 isert_rdma_accept(struct isert_conn *isert_conn);
+struct rdma_cm_id *isert_setup_id(struct isert_np *isert_np);
 
 static void
 isert_qp_event_callback(struct ib_event *e, void *context)
@@ -836,16 +837,40 @@ isert_conn_terminate(struct isert_conn *isert_conn)
 }
 
 static int
-isert_disconnected_handler(struct rdma_cm_id *cma_id)
+isert_np_cma_handler(struct isert_np *isert_np,
+		     enum rdma_cm_event_type event)
 {
-	struct iscsi_np *np = cma_id->context;
-	struct isert_np *isert_np = np->np_context;
+	pr_debug("isert np %p, handling event %d\n", isert_np, event);
+
+	switch (event) {
+	case RDMA_CM_EVENT_DEVICE_REMOVAL:
+		isert_np->np_cm_id = NULL;
+		break;
+	case RDMA_CM_EVENT_ADDR_CHANGE:
+		isert_np->np_cm_id = isert_setup_id(isert_np);
+		if (IS_ERR(isert_np->np_cm_id)) {
+			pr_err("isert np %p setup id failed: %ld\n",
+				 isert_np, PTR_ERR(isert_np->np_cm_id));
+			isert_np->np_cm_id = NULL;
+		}
+		break;
+	default:
+		pr_err("isert np %p Unexpected event %d\n",
+			  isert_np, event);
+	}
+
+	return -1;
+}
+
+static int
+isert_disconnected_handler(struct rdma_cm_id *cma_id,
+			   enum rdma_cm_event_type event)
+{
+	struct isert_np *isert_np = cma_id->context;
 	struct isert_conn *isert_conn;
 
-	if (isert_np->np_cm_id == cma_id) {
-		isert_np->np_cm_id = NULL;
-		return -1;
-	}
+	if (isert_np->np_cm_id == cma_id)
+		return isert_np_cma_handler(cma_id->context, event);
 
 	isert_conn = cma_id->qp->qp_context;
 
@@ -888,7 +913,7 @@ isert_cma_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *event)
 	case RDMA_CM_EVENT_DISCONNECTED:   /* FALLTHRU */
 	case RDMA_CM_EVENT_DEVICE_REMOVAL: /* FALLTHRU */
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:  /* FALLTHRU */
-		ret = isert_disconnected_handler(cma_id);
+		ret = isert_disconnected_handler(cma_id, event->event);
 		break;
 	case RDMA_CM_EVENT_REJECTED:       /* FALLTHRU */
 	case RDMA_CM_EVENT_UNREACHABLE:    /* FALLTHRU */
@@ -2978,26 +3003,26 @@ isert_setup_id(struct isert_np *isert_np)
 	int ret;
 
 	sa = (struct sockaddr *)&np->np_sockaddr;
-	isert_dbg("ksockaddr: %p, sa: %p\n", &np->np_sockaddr, sa);
+	pr_debug("ksockaddr: %p, sa: %p\n", &np->np_sockaddr, sa);
 
 	id = rdma_create_id(isert_cma_handler, isert_np,
 			    RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(id)) {
-		isert_err("rdma_create_id() failed: %ld\n", PTR_ERR(id));
+		pr_err("rdma_create_id() failed: %ld\n", PTR_ERR(id));
 		ret = PTR_ERR(id);
 		goto out;
 	}
-	isert_dbg("id %p context %p\n", id, id->context);
+	pr_debug("id %p context %p\n", id, id->context);
 
 	ret = rdma_bind_addr(id, sa);
 	if (ret) {
-		isert_err("rdma_bind_addr() failed: %d\n", ret);
+		pr_err("rdma_bind_addr() failed: %d\n", ret);
 		goto out_id;
 	}
 
 	ret = rdma_listen(id, ISERT_RDMA_LISTEN_BACKLOG);
 	if (ret) {
-		isert_err("rdma_listen() failed: %d\n", ret);
+		pr_err("rdma_listen() failed: %d\n", ret);
 		goto out_id;
 	}
 
