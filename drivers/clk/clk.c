@@ -1601,7 +1601,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *clk,
 						    max_rate,
 						    &best_parent_rate,
 						    &parent_hw);
-		parent = parent_hw ? parent_hw->core : NULL;
+		parent = parent_hw->clk;
 	} else if (clk->ops->round_rate) {
 		new_rate = clk->ops->round_rate(clk->hw, rate,
 						&best_parent_rate);
