@@ -326,7 +326,7 @@ static double do_memcpy_gettimeofday(const struct routine *r, size_t len,
 
 	free(src);
 	free(dst);
-	return (double)((double)len / timeval2double(&tv_diff));
+	return (double)(((double)len * iterations) / timeval2double(&tv_diff));
 }
 
 int bench_mem_memcpy(int argc, const char **argv,
@@ -391,7 +391,7 @@ static double do_memset_gettimeofday(const struct routine *r, size_t len,
 	timersub(&tv_end, &tv_start, &tv_diff);
 
 	free(dst);
-	return (double)((double)len / timeval2double(&tv_diff));
+	return (double)(((double)len * iterations) / timeval2double(&tv_diff));
 }
 
 static const char * const bench_mem_memset_usage[] = {
