@@ -142,7 +142,7 @@ isert_conn_setup_qp(struct isert_conn *isert_conn, struct rdma_cm_id *cma_id)
 
 	ret = rdma_create_qp(cma_id, isert_conn->conn_pd, &attr);
 	if (ret) {
-		isert_err("rdma_create_qp failed for cma_id %d\n", ret);
+		pr_err("rdma_create_qp failed for cma_id %d\n", ret);
 		goto err;
 	}
 	isert_conn->conn_qp = cma_id->qp;
@@ -150,7 +150,7 @@ isert_conn_setup_qp(struct isert_conn *isert_conn, struct rdma_cm_id *cma_id)
 	return 0;
 err:
 	mutex_lock(&device_list_mutex);
-	comp->active_qps--;
+	device->cq_active_qps[min_index]--;
 	mutex_unlock(&device_list_mutex);
 
 	return ret;
@@ -730,11 +730,11 @@ isert_connect_release(struct isert_conn *isert_conn)
 	rdma_destroy_id(isert_conn->conn_cm_id);
 
 	if (isert_conn->conn_qp) {
-		struct isert_comp *comp = isert_conn->conn_qp->recv_cq->cq_context;
-
-		isert_dbg("dec completion context %p active_qps\n", comp);
+		cq_index = ((struct isert_cq_desc *)
+			isert_conn->conn_qp->recv_cq->cq_context)->cq_index;
+		pr_debug("isert_connect_release: cq_index: %d\n", cq_index);
 		mutex_lock(&device_list_mutex);
-		comp->active_qps--;
+		isert_conn->conn_device->cq_active_qps[cq_index]--;
 		mutex_unlock(&device_list_mutex);
 
 		ib_destroy_qp(isert_conn->conn_qp);
@@ -761,8 +761,6 @@ static void
 isert_connected_handler(struct rdma_cm_id *cma_id)
 {
 	struct isert_conn *isert_conn = cma_id->qp->qp_context;
-
-	isert_info("conn %p\n", isert_conn);
 
 	pr_info("conn %p\n", isert_conn);
 
@@ -840,17 +838,16 @@ isert_conn_terminate(struct isert_conn *isert_conn)
 static int
 isert_disconnected_handler(struct rdma_cm_id *cma_id)
 {
-	struct isert_np *isert_np = cma_id->context;
+	struct iscsi_np *np = cma_id->context;
+	struct isert_np *isert_np = np->np_context;
 	struct isert_conn *isert_conn;
 
-	if (isert_np->np_cm_id == cma_id)
-		return isert_np_cma_handler(cma_id->context, event);
+	if (isert_np->np_cm_id == cma_id) {
+		isert_np->np_cm_id = NULL;
+		return -1;
+	}
 
 	isert_conn = cma_id->qp->qp_context;
-
-	mutex_lock(&isert_conn->conn_mutex);
-	isert_conn_terminate(isert_conn);
-	mutex_unlock(&isert_conn->conn_mutex);
 
 	mutex_lock(&isert_conn->conn_mutex);
 	isert_conn_terminate(isert_conn);
@@ -865,7 +862,7 @@ isert_disconnected_handler(struct rdma_cm_id *cma_id)
 static void
 isert_connect_error(struct rdma_cm_id *cma_id)
 {
-	struct isert_conn *isert_conn = (struct isert_conn *)cma_id->context;
+	struct isert_conn *isert_conn = cma_id->qp->qp_context;
 
 	isert_put_conn(isert_conn);
 }
