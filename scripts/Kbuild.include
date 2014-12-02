@@ -183,10 +183,10 @@ modbuiltin := -f $(srctree)/scripts/Makefile.modbuiltin obj
 clean := -f $(srctree)/scripts/Makefile.clean obj
 
 ###
-# Shorthand for $(Q)$(MAKE) -rR -f scripts/Makefile.headersinst obj=
+# Shorthand for $(Q)$(MAKE) -f scripts/Makefile.headersinst obj=
 # Usage:
 # $(Q)$(MAKE) $(hdr-inst)=dir
-hdr-inst := -rR -f $(srctree)/scripts/Makefile.headersinst obj
+hdr-inst := -f $(srctree)/scripts/Makefile.headersinst obj
 
 ###
 # Shorthand for $(Q)$(MAKE) -f scripts/Makefile.clean obj=
