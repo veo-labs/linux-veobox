@@ -477,9 +477,14 @@ static inline int __do_cpuid_ent(struct kvm_cpuid_entry2 *entry, u32 function,
 				goto out;
 
 			do_cpuid_1_ent(&entry[i], function, idx);
-			if (idx == 1)
+			if (idx == 1) {
 				entry[i].eax &= kvm_supported_word10_x86_features;
-			else if (entry[i].eax == 0 || !(supported & mask))
+				entry[i].ebx = 0;
+				if (entry[i].eax & (F(XSAVES)|F(XSAVEC)))
+					entry[i].ebx =
+						xstate_required_size(supported,
+								     true);
+			} else if (entry[i].eax == 0 || !(supported & mask))
 				continue;
 			entry[i].flags |=
 			       KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
