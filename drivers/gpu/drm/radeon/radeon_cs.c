@@ -88,10 +88,6 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 	p->dma_reloc_idx = 0;
 	/* FIXME: we assume that each relocs use 4 dwords */
 	p->nrelocs = chunk->length_dw / 4;
-	p->relocs_ptr = kcalloc(p->nrelocs, sizeof(void *), GFP_KERNEL);
-	if (p->relocs_ptr == NULL) {
-		return -ENOMEM;
-	}
 	p->relocs = kcalloc(p->nrelocs, sizeof(struct radeon_bo_list), GFP_KERNEL);
 	if (p->relocs == NULL) {
 		return -ENOMEM;
@@ -105,26 +101,12 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 		unsigned priority;
 
 		r = (struct drm_radeon_cs_reloc *)&chunk->kdata[i*4];
-		for (j = 0; j < i; j++) {
-			struct drm_radeon_cs_reloc *other;
-			other = (void *)&chunk->kdata[j*4];
-			if (r->handle == other->handle) {
-				p->relocs_ptr[i] = &p->relocs[j];
-				duplicate = true;
-				break;
-			}
-		}
-		if (duplicate) {
-			continue;
-		}
-
 		gobj = drm_gem_object_lookup(ddev, p->filp, r->handle);
 		if (gobj == NULL) {
 			DRM_ERROR("gem object lookup failed 0x%x\n",
 				  r->handle);
 			return -ENOENT;
 		}
-		p->relocs_ptr[i] = &p->relocs[i];
 		p->relocs[i].robj = gem_to_radeon_bo(gobj);
 
 		/* The userspace buffer priorities are from 0 to 15. A higher
