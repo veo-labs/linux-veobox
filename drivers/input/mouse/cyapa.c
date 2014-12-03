@@ -1303,7 +1303,7 @@ static int __maybe_unused cyapa_suspend(struct device *dev)
 	}
 
 	if (device_may_wakeup(dev))
-		cyapa->irq_wake = (enable_irq_wake(cyapa->irq) == 0);
+		cyapa->irq_wake = (enable_irq_wake(client->irq) == 0);
 
 	mutex_unlock(&cyapa->state_sync_lock);
 	return 0;
@@ -1328,14 +1328,6 @@ static int __maybe_unused cyapa_resume(struct device *dev)
 		dev_warn(dev, "failed to reinitialize TP device: %d\n", error);
 
 	enable_irq(client->irq);
-
-	power_mode = input->users ? PWR_MODE_FULL_ACTIVE : PWR_MODE_OFF;
-	error = cyapa_set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE);
-	if (error)
-		dev_warn(dev, "resume: set power mode to %d failed: %d\n",
-			 power_mode, error);
-
-	enable_irq(cyapa->irq);
 
 	mutex_unlock(&input->mutex);
 
