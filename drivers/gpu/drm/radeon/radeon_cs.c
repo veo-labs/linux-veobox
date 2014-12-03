@@ -265,10 +265,10 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	p->idx = 0;
 	p->ib.sa_bo = NULL;
 	p->const_ib.sa_bo = NULL;
-	p->chunk_ib_idx = -1;
-	p->chunk_relocs_idx = -1;
-	p->chunk_flags_idx = -1;
-	p->chunk_const_ib_idx = -1;
+	p->chunk_ib = NULL;
+	p->chunk_relocs = NULL;
+	p->chunk_flags = NULL;
+	p->chunk_const_ib = NULL;
 	p->chunks_array = kcalloc(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
 	if (p->chunks_array == NULL) {
 		return -ENOMEM;
