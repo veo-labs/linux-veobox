@@ -428,19 +428,12 @@ __cpufreq_cooling_register(struct device_node *np,
 	if (!cpufreq_dev)
 		return ERR_PTR(-ENOMEM);
 
-	/* Find max levels */
-	cpufreq_for_each_valid_entry(pos, table)
-		cpufreq_dev->max_level++;
-
-	cpufreq_dev->freq_table = kmalloc(sizeof(*cpufreq_dev->freq_table) *
-					  cpufreq_dev->max_level, GFP_KERNEL);
-	if (!cpufreq_dev->freq_table) {
-		cool_dev = ERR_PTR(-ENOMEM);
+	cpufreq_dev->cpufreq_val = get_cpu_frequency(cpumask_any(clip_cpus), 0);
+	if (!cpufreq_dev->cpufreq_val) {
+		pr_err("%s: Failed to get frequency", __func__);
+		cool_dev = ERR_PTR(-EINVAL);
 		goto free_cdev;
 	}
-
-	/* max_level is an index, not a counter */
-	cpufreq_dev->max_level--;
 
 	cpumask_copy(&cpufreq_dev->allowed_cpus, clip_cpus);
 
