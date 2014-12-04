@@ -460,7 +460,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	if (cyapa->btn_capability == CAPABILITY_LEFT_BTN_MASK)
 		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
 
-	/* handle pointer emulation and unused slots in core */
+	/* Handle pointer emulation and unused slots in core */
 	error = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS,
 				    INPUT_MT_POINTER | INPUT_MT_DROP_UNUSED);
 	if (error) {
@@ -1244,7 +1244,7 @@ static int cyapa_probe(struct i2c_client *client,
 					  IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					  "cyapa", cyapa);
 	if (error) {
-		dev_err(dev, "IRQ request failed: %d\n, ", error);
+		dev_err(dev, "failed to request threaded irq: %d\n", error);
 		return error;
 	}
 
