@@ -374,9 +374,8 @@ __cpufreq_cooling_register(struct device_node *np,
 	struct cpufreq_cooling_device *cpufreq_dev;
 	unsigned int min = 0, max = 0;
 	char dev_name[THERMAL_NAME_LENGTH];
-	struct cpufreq_frequency_table *pos, *table;
-	unsigned int freq, i;
-	int ret;
+	int ret, i;
+	struct cpufreq_policy policy;
 
 	if (!cpufreq_frequency_get_table(cpumask_first(clip_cpus))) {
 		pr_debug("%s: CPUFreq table not found\n", __func__);
