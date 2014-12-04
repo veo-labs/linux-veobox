@@ -197,16 +197,71 @@ static int get_property(unsigned int cpu, unsigned long input,
  */
 unsigned long cpufreq_cooling_get_level(unsigned int cpu, unsigned int freq)
 {
-	struct cpufreq_cooling_device *cpufreq_dev;
+	unsigned int val;
 
-	mutex_lock(&cooling_cpufreq_lock);
-	list_for_each_entry(cpufreq_dev, &cpufreq_dev_list, node) {
-		if (cpumask_test_cpu(cpu, &cpufreq_dev->allowed_cpus)) {
-			mutex_unlock(&cooling_cpufreq_lock);
-			return get_level(cpufreq_dev, freq);
-		}
-	}
-	mutex_unlock(&cooling_cpufreq_lock);
+	if (get_property(cpu, (unsigned long)freq, &val, GET_LEVEL))
+		return THERMAL_CSTATE_INVALID;
+
+	return (unsigned long)val;
+}
+EXPORT_SYMBOL_GPL(cpufreq_cooling_get_level);
+
+/**
+ * get_cpu_frequency - get the absolute value of frequency from level.
+ * @cpu: cpu for which frequency is fetched.
+ * @level: cooling level
+ *
+ * This function matches cooling level with frequency. Based on a cooling level
+ * of frequency, equals cooling state of cpu cooling device, it will return
+ * the corresponding frequency.
+ *	e.g level=0 --> 1st MAX FREQ, level=1 ---> 2nd MAX FREQ, .... etc
+ *
+ * Return: 0 on error, the corresponding frequency otherwise.
+ */
+static unsigned int get_cpu_frequency(unsigned int cpu, unsigned long level)
+{
+	int ret = 0;
+	unsigned int freq;
+
+	ret = get_property(cpu, level, &freq, GET_FREQ);
+	if (ret)
+		return 0;
+
+	return freq;
+}
+
+/**
+ * cpufreq_apply_cooling - function to apply frequency clipping.
+ * @cpufreq_device: cpufreq_cooling_device pointer containing frequency
+ *	clipping data.
+ * @cooling_state: value of the cooling state.
+ *
+ * Function used to make sure the cpufreq layer is aware of current thermal
+ * limits. The limits are applied by updating the cpufreq policy.
+ *
+ * Return: 0 on success, an error code otherwise (-EINVAL in case wrong
+ * cooling state).
+ */
+static int cpufreq_apply_cooling(struct cpufreq_cooling_device *cpufreq_device,
+				 unsigned long cooling_state)
+{
+	unsigned int clip_freq;
+	struct cpumask *mask = &cpufreq_device->allowed_cpus;
+	unsigned int cpu = cpumask_any(mask);
+
+	/* Check if the old cooling action is same as new cooling action */
+	if (cpufreq_device->cpufreq_state == cooling_state)
+		return 0;
+
+	clip_freq = get_cpu_frequency(cpu, cooling_state);
+	if (!clip_freq)
+		return -EINVAL;
+
+	cpufreq_device->cpufreq_state = cooling_state;
+	cpufreq_device->cpufreq_val = clip_freq;
+
+	if (is_cpufreq_valid(cpu))
+		cpufreq_update_policy(cpu);
 
 	pr_err("%s: cpu:%d not part of any cooling device\n", __func__, cpu);
 	return THERMAL_CSTATE_INVALID;
