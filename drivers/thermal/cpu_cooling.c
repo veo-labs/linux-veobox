@@ -68,6 +68,7 @@ struct cpufreq_cooling_device {
 	unsigned int cpufreq_state;
 	unsigned int cpufreq_val;
 	unsigned int max_level;
+	unsigned int *freq_table;	/* In descending order */
 	struct cpumask allowed_cpus;
 	struct list_head node;
 };
@@ -391,6 +392,7 @@ __cpufreq_cooling_register(struct device_node *np,
 	struct cpufreq_cooling_device *cpufreq_dev;
 	char dev_name[THERMAL_NAME_LENGTH];
 	struct cpufreq_frequency_table *pos, *table;
+	unsigned int freq, i;
 	int ret;
 
 	table = cpufreq_frequency_get_table(cpumask_first(clip_cpus));
@@ -414,6 +416,14 @@ __cpufreq_cooling_register(struct device_node *np,
 	cpufreq_for_each_valid_entry(pos, table)
 		cpufreq_dev->max_level++;
 
+	cpufreq_dev->freq_table = kmalloc(sizeof(*cpufreq_dev->freq_table) *
+					  cpufreq_dev->max_level, GFP_KERNEL);
+	if (!cpufreq_dev->freq_table) {
+		return ERR_PTR(-ENOMEM);
+		cool_dev = ERR_PTR(-ENOMEM);
+		goto free_cdev;
+	}
+
 	/* max_level is an index, not a counter */
 	cpufreq_dev->max_level--;
 
@@ -422,7 +432,7 @@ __cpufreq_cooling_register(struct device_node *np,
 	ret = get_idr(&cpufreq_idr, &cpufreq_dev->id);
 	if (ret) {
 		cool_dev = ERR_PTR(ret);
-		goto free_cdev;
+		goto free_table;
 	}
 
 	snprintf(dev_name, sizeof(dev_name), "thermal-cpufreq-%d",
@@ -432,6 +442,18 @@ __cpufreq_cooling_register(struct device_node *np,
 						      &cpufreq_cooling_ops);
 	if (IS_ERR(cool_dev))
 		goto remove_idr;
+
+	/* Fill freq-table in descending order of frequencies */
+	for (i = 0, freq = -1; i <= cpufreq_dev->max_level; i++) {
+		freq = find_next_max(table, freq);
+		cpufreq_dev->freq_table[i] = freq;
+
+		/* Warn for duplicate entries */
+		if (!freq)
+			pr_warn("%s: table has duplicate entries\n", __func__);
+		else
+			pr_debug("%s: freq:%u KHz\n", __func__, freq);
+	}
 
 	cpufreq_dev->cool_dev = cool_dev;
 
@@ -449,6 +471,8 @@ __cpufreq_cooling_register(struct device_node *np,
 
 remove_idr:
 	release_idr(&cpufreq_idr, cpufreq_dev->id);
+free_table:
+	kfree(cpufreq_dev->freq_table);
 free_cdev:
 	kfree(cpufreq_dev);
 
