@@ -372,6 +372,7 @@ __cpufreq_cooling_register(struct device_node *np,
 {
 	struct thermal_cooling_device *cool_dev;
 	struct cpufreq_cooling_device *cpufreq_dev;
+	unsigned int min = 0, max = 0;
 	char dev_name[THERMAL_NAME_LENGTH];
 	struct cpufreq_frequency_table *pos, *table;
 	unsigned int freq, i;
