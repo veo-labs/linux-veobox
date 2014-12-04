@@ -446,8 +446,8 @@ __cpufreq_cooling_register(struct device_node *np,
 
 	ret = get_idr(&cpufreq_idr, &cpufreq_dev->id);
 	if (ret) {
-		kfree(cpufreq_dev);
-		return ERR_PTR(ret);
+		cool_dev = ERR_PTR(ret);
+		goto free_cdev;
 	}
 
 	snprintf(dev_name, sizeof(dev_name), "thermal-cpufreq-%d",
@@ -458,19 +458,6 @@ __cpufreq_cooling_register(struct device_node *np,
 	if (IS_ERR(cool_dev))
 		goto remove_idr;
 
-	/* Fill freq-table in descending order of frequencies */
-	for (i = 0, freq = -1; i <= cpufreq_dev->max_level; i++) {
-		freq = find_next_max(table, freq);
-		cpufreq_dev->freq_table[i] = freq;
-
-		/* Warn for duplicate entries */
-		if (!freq)
-			pr_warn("%s: table has duplicate entries\n", __func__);
-		else
-			pr_debug("%s: freq:%u KHz\n", __func__, freq);
-	}
-
-	cpufreq_dev->cpufreq_val = cpufreq_dev->freq_table[0];
 	cpufreq_dev->cool_dev = cool_dev;
 
 	mutex_lock(&cooling_cpufreq_lock);
@@ -487,8 +474,6 @@ __cpufreq_cooling_register(struct device_node *np,
 
 remove_idr:
 	release_idr(&cpufreq_idr, cpufreq_dev->id);
-free_table:
-	kfree(cpufreq_dev->freq_table);
 free_cdev:
 	kfree(cpufreq_dev);
 
