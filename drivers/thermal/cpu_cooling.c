@@ -331,10 +331,24 @@ __cpufreq_cooling_register(struct device_node *np,
 	unsigned int freq, i;
 	int ret;
 
-	table = cpufreq_frequency_get_table(cpumask_first(clip_cpus));
-	if (!table) {
+	if (!cpufreq_frequency_get_table(cpumask_first(clip_cpus))) {
 		pr_debug("%s: CPUFreq table not found\n", __func__);
 		return ERR_PTR(-EPROBE_DEFER);
+	}
+
+	/* Verify that all the clip cpus have same freq_min, freq_max limit */
+	for_each_cpu(i, clip_cpus) {
+		/* continue if cpufreq policy not found and not return error */
+		if (!cpufreq_get_policy(&policy, i))
+			continue;
+		if (min == 0 && max == 0) {
+			min = policy.cpuinfo.min_freq;
+			max = policy.cpuinfo.max_freq;
+		} else {
+			if (min != policy.cpuinfo.min_freq ||
+			    max != policy.cpuinfo.max_freq)
+				return ERR_PTR(-EINVAL);
+		}
 	}
 
 	cpufreq_dev = kzalloc(sizeof(*cpufreq_dev), GFP_KERNEL);
