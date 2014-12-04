@@ -115,21 +115,11 @@ static void release_idr(struct idr *idr, int id)
 
 /* Below code defines functions to be used for cpufreq as cooling device */
 
-/**
- * get_level: Find the level for a particular frequency
- * @cpufreq_dev: cpufreq_dev for which the property is required
- * @freq: Frequency
- *
- * Return: level on success, THERMAL_CSTATE_INVALID on error.
- */
-static unsigned long get_level(struct cpufreq_cooling_device *cpufreq_dev,
-			       unsigned int freq)
-{
-	unsigned long level;
-
-	for (level = 0; level <= cpufreq_dev->max_level; level++) {
-		if (freq == cpufreq_dev->freq_table[level])
-			return level;
+enum cpufreq_cooling_property {
+	GET_LEVEL,
+	GET_FREQ,
+	GET_MAXL,
+};
 
 /**
  * get_property - fetch a property of interest for a given cpu.
@@ -260,8 +250,7 @@ static int cpufreq_apply_cooling(struct cpufreq_cooling_device *cpufreq_device,
 	cpufreq_device->cpufreq_state = cooling_state;
 	cpufreq_device->cpufreq_val = clip_freq;
 
-	if (is_cpufreq_valid(cpu))
-		cpufreq_update_policy(cpu);
+	cpufreq_update_policy(cpu);
 
 	pr_err("%s: cpu:%d not part of any cooling device\n", __func__, cpu);
 	return THERMAL_CSTATE_INVALID;
