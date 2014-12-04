@@ -2855,6 +2855,13 @@ static int mx6cam_probe(struct platform_device *pdev)
 	 */
 	vfd->lock = &dev->mutex;
 	dev->v4l2_dev.notify = mx6cam_subdev_notification;
+	video_set_drvdata(vfd, dev);
+	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
+		goto unreg_vdev;
+	}
+
 
 	dev->pad.flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_init(&vfd->entity, 1, &dev->pad, 0);
