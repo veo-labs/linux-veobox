@@ -122,7 +122,7 @@ struct mx6cam_ctx;
 
 struct mx6cam_dev {
 	struct v4l2_device	v4l2_dev;
-	struct video_device	*vfd;
+	struct video_device	vfd;
 	struct device           *dev;
 	struct media_device media_dev;
 	struct media_pad pad;
