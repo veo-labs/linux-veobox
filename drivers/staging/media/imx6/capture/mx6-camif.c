@@ -936,7 +936,7 @@ static int mx6cam_init_controls(struct mx6cam_dev *dev)
 	}
 
 	dev->v4l2_dev.ctrl_handler = hdlr;
-	dev->vfd->ctrl_handler = hdlr;
+	dev->vfd.ctrl_handler = hdlr;
 
 	v4l2_ctrl_handler_setup(hdlr);
 
@@ -1427,7 +1427,7 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 		}*/
 	}
 
-	dev->vfd->tvnorms = 0;
+	dev->vfd.tvnorms = 0;
 /*
  * TODO: Make it dynamic
  *	if (epinput->caps[sensor_input] != V4L2_IN_CAP_DV_TIMINGS)
@@ -2104,15 +2104,6 @@ static const struct v4l2_file_operations mx6cam_fops = {
 	.mmap		= vb2_fop_mmap,
 };
 
-static struct video_device mx6cam_videodev = {
-	.name		= DEVICE_NAME,
-	.fops		= &mx6cam_fops,
-	.ioctl_ops	= &mx6cam_ioctl_ops,
-	.minor		= -1,
-	.release	= video_device_release,
-	.vfl_dir	= VFL_DIR_RX,
-};
-
 /*
  * Handle notifications from the subdevs.
  */
@@ -2673,7 +2664,7 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 		if (remote == camdev->dev->of_node) {
 			entity->node = remote;
 			entity->subdev = NULL;
-			entity->entity = &camdev->vfd->entity;
+			entity->entity = &camdev->vfd.entity;
 			list_add_tail(&entity->list, &camdev->entities);
 			dev_dbg(camdev->dev, "add root node in entities : %s\n",
 				remote->full_name);
@@ -2846,17 +2837,28 @@ static int mx6cam_probe(struct platform_device *pdev)
 		goto unreg_dev;
 	}
 
-	vfd = video_device_alloc();
-	if (!vfd) {
-		v4l2_err(&dev->v4l2_dev, "Failed to allocate video device\n");
-		ret = -ENOMEM;
-		goto unreg_dev;
+	/* Create device node */
+	vfd = &dev->vfd;
+	strlcpy(vfd->name, "mx6-camera", sizeof(vfd->name));
+	vfd->fops = &mx6cam_fops;
+	vfd->ioctl_ops = &mx6cam_ioctl_ops;
+	vfd->release = video_device_release_empty;
+	vfd->v4l2_dev = &dev->v4l2_dev;
+	vfd->queue = &dev->buffer_queue;
+
+	/*
+	 * Provide a mutex to v4l2 core. It will be used to protect
+	 * all fops and v4l2 ioctls.
+	 */
+	vfd->lock = &dev->mutex;
+	dev->v4l2_dev.notify = mx6cam_subdev_notification;
+	video_set_drvdata(vfd, dev);
+	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
+		goto unreg_vdev;
 	}
 
-	*vfd = mx6cam_videodev;
-	vfd->lock = &dev->mutex;
-	vfd->v4l2_dev = &dev->v4l2_dev;
-	dev->v4l2_dev.notify = mx6cam_subdev_notification;
 
 	dev->pad.flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_init(&vfd->entity, 1, &dev->pad, 0);
@@ -2864,18 +2866,9 @@ static int mx6cam_probe(struct platform_device *pdev)
 		v4l2_err(&dev->v4l2_dev, "media entity failed with error %d\n", ret);
 		goto unreg_dev;
 	}
-
 	snprintf(vfd->name, sizeof(vfd->name), "%s", dev->dev->of_node->name);
 
-	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
-	if (ret) {
-		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
-		goto unreg_vdev;
-	}
-
 	v4l2_info(&dev->v4l2_dev, "Media entity: %s\n", vfd->entity.name);
-	video_set_drvdata(vfd, dev);
-	dev->vfd = vfd;
 
 	/* Get any pins needed */
 	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
@@ -2988,8 +2981,8 @@ static int mx6cam_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 
 	v4l2_info(&dev->v4l2_dev,
-		  "Device registered as /dev/video%d, on ipu%d\n",
-		  vfd->num, ipu_get_num(dev->ipu));
+		  "Device registered as %s, on ipu%d\n",
+		  video_device_node_name(vfd), ipu_get_num(dev->ipu));
 
 	return 0;
 
@@ -3001,7 +2994,7 @@ cleanup_ctx:
 	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
 		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 unreg_vdev:
-	video_unregister_device(dev->vfd);
+	video_unregister_device(&dev->vfd);
 unreg_dev:
 	v4l2_device_unregister(&dev->v4l2_dev);
 	return ret;
@@ -3014,7 +3007,7 @@ static int mx6cam_remove(struct platform_device *pdev)
 
 	v4l2_info(&dev->v4l2_dev, "Removing " DEVICE_NAME "\n");
 	v4l2_ctrl_handler_free(&dev->ctrl_hdlr);
-	video_unregister_device(dev->vfd);
+	video_unregister_device(&dev->vfd);
 	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
 		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 	mx6cam_unregister_subdevs(dev);
