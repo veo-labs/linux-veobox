@@ -131,8 +131,54 @@ static unsigned long get_level(struct cpufreq_cooling_device *cpufreq_dev,
 		if (freq == cpufreq_dev->freq_table[level])
 			return level;
 
-		if (freq > cpufreq_dev->freq_table[level])
-			break;
+/**
+ * get_property - fetch a property of interest for a given cpu.
+ * @cpu: cpu for which the property is required
+ * @input: query parameter
+ * @output: query return
+ * @property: type of query (frequency, level, max level)
+ *
+ * This is the common function to
+ * 1. get maximum cpu cooling states
+ * 2. translate frequency to cooling state
+ * 3. translate cooling state to frequency
+ *
+ * Note that the code may be not in good shape
+ * but it is written in this way in order to:
+ * a) reduce duplicate code as most of the code can be shared.
+ * b) make sure the logic is consistent when translating between
+ *    cooling states and frequencies.
+ *
+ * Return: 0 on success, -EINVAL when invalid parameters are passed.
+ */
+static int get_property(unsigned int cpu, unsigned long input,
+			unsigned int *output,
+			enum cpufreq_cooling_property property)
+{
+	int i;
+	unsigned long max_level = 0, level = 0;
+	unsigned int freq = CPUFREQ_ENTRY_INVALID;
+	int descend = -1;
+	struct cpufreq_frequency_table *pos, *table =
+					cpufreq_frequency_get_table(cpu);
+
+	if (!output)
+		return -EINVAL;
+
+	if (!table)
+		return -EINVAL;
+
+	cpufreq_for_each_valid_entry(pos, table) {
+		/* ignore duplicate entry */
+		if (freq == pos->frequency)
+			continue;
+
+		/* get the frequency order */
+		if (freq != CPUFREQ_ENTRY_INVALID && descend == -1)
+			descend = freq > pos->frequency;
+
+		freq = pos->frequency;
+		max_level++;
 	}
 
 	return THERMAL_CSTATE_INVALID;
