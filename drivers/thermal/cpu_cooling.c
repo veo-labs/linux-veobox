@@ -68,7 +68,6 @@ struct cpufreq_cooling_device {
 	unsigned int cpufreq_state;
 	unsigned int cpufreq_val;
 	unsigned int max_level;
-	unsigned int *freq_table;	/* In descending order */
 	struct cpumask allowed_cpus;
 	struct list_head node;
 };
@@ -356,9 +355,11 @@ __cpufreq_cooling_register(struct device_node *np,
 	struct thermal_cooling_device *cool_dev;
 	struct cpufreq_cooling_device *cpufreq_dev;
 	char dev_name[THERMAL_NAME_LENGTH];
+	struct cpufreq_frequency_table *pos, *table;
 	int ret;
 
-	if (!cpufreq_frequency_get_table(cpumask_first(clip_cpus))) {
+	table = cpufreq_frequency_get_table(cpumask_first(clip_cpus));
+	if (!table) {
 		pr_debug("%s: CPUFreq table not found\n", __func__);
 		return ERR_PTR(-EPROBE_DEFER);
 	}
@@ -374,6 +375,13 @@ __cpufreq_cooling_register(struct device_node *np,
 		cool_dev = ERR_PTR(ret);
 		goto free_cdev;
 	}
+
+	/* Find max levels */
+	cpufreq_for_each_valid_entry(pos, table)
+		cpufreq_dev->max_level++;
+
+	/* max_level is an index, not a counter */
+	cpufreq_dev->max_level--;
 
 	cpumask_copy(&cpufreq_dev->allowed_cpus, clip_cpus);
 
