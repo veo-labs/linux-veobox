@@ -2764,18 +2764,10 @@ error:
 static void toshiba_acpi_notify(struct acpi_device *acpi_dev, u32 event)
 {
 	struct toshiba_acpi_dev *dev = acpi_driver_data(acpi_dev);
-	int ret;
 
 	switch (event) {
 	case 0x80: /* Hotkeys and some system events */
 		toshiba_acpi_process_hotkeys(dev);
-		break;
-	case 0x92: /* Keyboard backlight mode changed */
-		/* Update sysfs entries */
-		ret = sysfs_update_group(&acpi_dev->dev.kobj,
-					 &toshiba_attr_group);
-		if (ret)
-			pr_err("Unable to update sysfs entries\n");
 		break;
 	case 0x81: /* Unknown */
 	case 0x82: /* Unknown */
