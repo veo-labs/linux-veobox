@@ -107,6 +107,11 @@ static int iser_create_device_ib_res(struct iser_device *device)
 	device->comps_used = min_t(int, num_online_cpus(),
 				 device->ib_device->num_comp_vectors);
 
+	device->comps = kcalloc(device->comps_used, sizeof(*device->comps),
+				GFP_KERNEL);
+	if (!device->comps)
+		goto comps_err;
+
 	max_cqe = min(ISER_MAX_CQ_LEN, dev_attr->max_cqe);
 
 	iser_info("using %d CQs, device %s supports %d vectors max_cqe %d\n",
