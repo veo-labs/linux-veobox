@@ -3246,6 +3246,18 @@ static void isert_release_work(struct work_struct *work)
 }
 
 static void
+isert_wait4logout(struct isert_conn *isert_conn)
+{
+	struct iscsi_conn *conn = isert_conn->conn;
+
+	if (isert_conn->logout_posted) {
+		pr_info("conn %p wait for conn_logout_comp\n", isert_conn);
+		wait_for_completion_timeout(&conn->conn_logout_comp,
+					    SECONDS_FOR_LOGOUT_COMP * HZ);
+	}
+}
+
+static void
 isert_wait4cmds(struct iscsi_conn *conn)
 {
 	if (conn->sess) {
@@ -3290,6 +3302,7 @@ static void isert_wait_conn(struct iscsi_conn *conn)
 
 	isert_wait4cmds(conn);
 	isert_wait4flush(isert_conn);
+	isert_wait4logout(isert_conn);
 
 	INIT_WORK(&isert_conn->release_work, isert_release_work);
 	queue_work(isert_release_wq, &isert_conn->release_work);
