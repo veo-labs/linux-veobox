@@ -517,6 +517,20 @@ iser_inv_rkey(struct ib_send_wr *inv_wr, struct ib_mr *mr)
 	ib_update_fast_reg_key(mr, rkey);
 }
 
+static void
+iser_inv_rkey(struct ib_send_wr *inv_wr, struct ib_mr *mr)
+{
+	u32 rkey;
+
+	memset(inv_wr, 0, sizeof(*inv_wr));
+	inv_wr->opcode = IB_WR_LOCAL_INV;
+	inv_wr->wr_id = ISER_FASTREG_LI_WRID;
+	inv_wr->ex.invalidate_rkey = mr->rkey;
+
+	rkey = ib_inc_rkey(mr->rkey);
+	ib_update_fast_reg_key(mr, rkey);
+}
+
 static int
 iser_reg_sig_mr(struct iscsi_iser_task *iser_task,
 		struct fast_reg_descriptor *desc, struct ib_sge *data_sge,
