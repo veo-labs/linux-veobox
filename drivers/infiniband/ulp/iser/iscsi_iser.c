@@ -622,6 +622,15 @@ iscsi_iser_session_create(struct iscsi_endpoint *ep,
 	if (ep) {
 		iser_conn = ep->dd_data;
 		max_cmds = iser_conn->max_cmds;
+
+		mutex_lock(&iser_conn->state_mutex);
+		if (iser_conn->state != ISER_CONN_UP) {
+			iser_err("iser conn %p already started teardown\n",
+				 iser_conn);
+			mutex_unlock(&iser_conn->state_mutex);
+			goto free_host;
+		}
+
 		ib_conn = &iser_conn->ib_conn;
 		if (ib_conn->pi_support) {
 			u32 sig_caps = ib_conn->device->dev_attr.sig_prot_cap;
@@ -630,9 +639,6 @@ iscsi_iser_session_create(struct iscsi_endpoint *ep,
 			scsi_host_set_guard(shost, SHOST_DIX_GUARD_IP |
 						   SHOST_DIX_GUARD_CRC);
 		}
-	} else {
-		max_cmds = ISER_DEF_XMIT_CMDS_MAX;
-	}
 
 		if (iscsi_host_add(shost,
 				   ib_conn->device->ib_device->dma_device)) {
