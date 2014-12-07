@@ -1880,22 +1880,14 @@ isert_do_control_comp(struct work_struct *work)
 	switch (cmd->i_state) {
 	case ISTATE_SEND_TASKMGTRSP:
 		iscsit_tmr_post_handler(cmd, cmd->conn);
-		cmd->i_state = ISTATE_SENT_STATUS;
-		isert_completion_put(&isert_cmd->tx_desc, isert_cmd,
-				     ib_dev, false);
-		break;
-	case ISTATE_SEND_REJECT:
+	case ISTATE_SEND_REJECT:   /* FALLTHRU */
+	case ISTATE_SEND_TEXTRSP:  /* FALLTHRU */
 		cmd->i_state = ISTATE_SENT_STATUS;
 		isert_completion_put(&isert_cmd->tx_desc, isert_cmd,
 				     ib_dev, false);
 		break;
 	case ISTATE_SEND_LOGOUTRSP:
 		iscsit_logout_post_handler(cmd, cmd->conn);
-		break;
-	case ISTATE_SEND_TEXTRSP:
-		cmd->i_state = ISTATE_SENT_STATUS;
-		isert_completion_put(&isert_cmd->tx_desc, isert_cmd,
-				     ib_dev, false);
 		break;
 	default:
 		isert_err("Unknown i_state %d\n", cmd->i_state);
