@@ -6507,13 +6507,16 @@ static unsigned long __i915_chipset_val(struct drm_i915_private *dev_priv)
 
 	total_count = count1 + count2 + count3;
 
-	/* FIXME: handle per-counter overflow */
-	if (total_count < dev_priv->ips.last_count1) {
-		diff = ~0UL - dev_priv->ips.last_count1;
-		diff += total_count;
-	} else {
-		diff = total_count - dev_priv->ips.last_count1;
-	}
+	/*
+	 * BSpec recoomends 8x4 when MSAA is used,
+	 * however in practice 16x4 seems fastest.
+	 *
+	 * Note that PS/WM thread counts depend on the WIZ hashing
+	 * disable bit, which we don't touch here, but it's good
+	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
+	 */
+	I915_WRITE(GEN6_GT_MODE,
+		   _MASKED_FIELD(GEN6_WIZ_HASHING_MASK, GEN6_WIZ_HASHING_16x4));
 
 	for (i = 0; i < ARRAY_SIZE(cparams); i++) {
 		if (cparams[i].i == dev_priv->ips.c_m &&
@@ -6651,8 +6654,16 @@ void i915_update_gfx_val(struct drm_i915_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
 
-	if (INTEL_INFO(dev)->gen != 5)
-		return;
+	/*
+	 * BSpec recommends 8x4 when MSAA is used,
+	 * however in practice 16x4 seems fastest.
+	 *
+	 * Note that PS/WM thread counts depend on the WIZ hashing
+	 * disable bit, which we don't touch here, but it's good
+	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
+	 */
+	I915_WRITE(GEN7_GT_MODE,
+		   _MASKED_FIELD(GEN6_WIZ_HASHING_MASK, GEN6_WIZ_HASHING_16x4));
 
 	spin_lock_irq(&mchdev_lock);
 
@@ -6717,7 +6728,16 @@ unsigned long i915_gfx_val(struct drm_i915_private *dev_priv)
 	if (INTEL_INFO(dev)->gen != 5)
 		return 0;
 
-	spin_lock_irq(&mchdev_lock);
+	/*
+	 * BSpec recommends 8x4 when MSAA is used,
+	 * however in practice 16x4 seems fastest.
+	 *
+	 * Note that PS/WM thread counts depend on the WIZ hashing
+	 * disable bit, which we don't touch here, but it's good
+	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
+	 */
+	I915_WRITE(GEN7_GT_MODE,
+		   _MASKED_FIELD(GEN6_WIZ_HASHING_MASK, GEN6_WIZ_HASHING_16x4));
 
 	val = __i915_gfx_val(dev_priv);
 
