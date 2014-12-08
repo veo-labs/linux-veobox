@@ -685,6 +685,19 @@ static int rmi_populate_f11(struct hid_device *hdev)
 		query_offset += 2; /* query 7 and 8 are present */
 	}
 
+	/*
+	 * At least 4 queries are guaranteed to be present in F11
+	 * +1 for query 5 which is present since absolute events are
+	 * reported and +1 for query 12.
+	 */
+	query_offset = 6;
+
+	if (has_rel)
+		++query_offset; /* query 6 is present */
+
+	if (has_gestures)
+		query_offset += 2; /* query 7 and 8 are present */
+
 	if (has_query9)
 		++query_offset;
 
