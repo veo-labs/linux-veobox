@@ -24,7 +24,7 @@
  * stiH407 compositor properties
  */
 struct sti_compositor_data stih407_compositor_data = {
-	.nb_subdev = 8,
+	.nb_subdev = 7,
 	.subdev_desc = {
 			{STI_CURSOR_SUBDEV, (int)STI_CURSOR, 0x000},
 			{STI_GPD_SUBDEV, (int)STI_GDP_0, 0x100},
@@ -127,7 +127,7 @@ static int sti_compositor_bind(struct device *dev, struct device *master,
 			}
 
 			/* The first planes are reserved for primary planes*/
-			if (crtc < compo->nb_mixers && primary) {
+			if (crtc < compo->nb_mixers) {
 				sti_drm_crtc_init(drm_dev, compo->mixer[crtc],
 						primary, cursor);
 				crtc++;
