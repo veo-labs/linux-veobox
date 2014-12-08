@@ -217,17 +217,6 @@ void cxl_context_detach_all(struct cxl_afu *afu)
 		 * created and torn down after the IDR removed
 		 */
 		__detach_context(ctx);
-
-		/*
-		 * We are force detaching - remove any active PSA mappings so
-		 * userspace cannot interfere with the card if it comes back.
-		 * Easiest way to exercise this is to unbind and rebind the
-		 * driver via sysfs while it is in use.
-		 */
-		mutex_lock(&ctx->mapping_lock);
-		if (ctx->mapping)
-			unmap_mapping_range(ctx->mapping, 0, 0, 1);
-		mutex_unlock(&ctx->mapping_lock);
 	}
 	mutex_unlock(&afu->contexts_lock);
 }
