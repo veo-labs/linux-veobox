@@ -209,8 +209,10 @@ static int powernv_add_idle_states(void)
 			powernv_states[nr_idle_states].flags = 0;
 			powernv_states[nr_idle_states].target_residency = 100;
 			powernv_states[nr_idle_states].enter = &nap_loop;
-		} else if (flags[i] & OPAL_PM_SLEEP_ENABLED ||
-			flags[i] & OPAL_PM_SLEEP_ENABLED_ER1) {
+			nr_idle_states++;
+		}
+
+		if (flags & OPAL_PM_SLEEP_ENABLED) {
 			/* Add FASTSLEEP state */
 			strcpy(powernv_states[nr_idle_states].name, "FastSleep");
 			strcpy(powernv_states[nr_idle_states].desc, "FastSleep");
