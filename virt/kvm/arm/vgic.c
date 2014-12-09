@@ -1335,7 +1335,7 @@ int kvm_vgic_inject_irq(struct kvm *kvm, int cpuid, unsigned int irq_num,
 {
 	int vcpu_id;
 
-	if (likely(vgic_initialized(kvm))) {
+	if (likely(vgic_ready(kvm))) {
 		vcpu_id = vgic_update_irq_pending(kvm, cpuid, irq_num, level);
 		if (vcpu_id >= 0)
 			/* kick the specified vcpu */
