@@ -4388,38 +4388,21 @@ bool drm_property_change_valid_get(struct drm_property *property,
 		/* a zero value for an object property translates to null: */
 		if (value == 0)
 			return true;
-
-		/* handle refcnt'd objects specially: */
-		if (property->values[0] == DRM_MODE_OBJECT_FB) {
-			struct drm_framebuffer *fb;
-			fb = drm_framebuffer_lookup(property->dev, value);
-			if (fb) {
-				*ref = &fb->base;
-				return true;
-			} else {
-				return false;
-			}
-		} else {
-			return _object_find(property->dev, value, property->values[0]) != NULL;
-		}
+		/*
+		 * NOTE: use _object_find() directly to bypass restriction on
+		 * looking up refcnt'd objects (ie. fb's).  For a refcnt'd
+		 * object this could race against object finalization, so it
+		 * simply tells us that the object *was* valid.  Which is good
+		 * enough.
+		 */
+		obj = _object_find(property->dev, value, property->values[0]);
+		return obj != NULL;
 	}
 
 	for (i = 0; i < property->num_values; i++)
 		if (property->values[i] == value)
 			return true;
 	return false;
-}
-
-void drm_property_change_valid_put(struct drm_property *property,
-		struct drm_mode_object *ref)
-{
-	if (!ref)
-		return;
-
-	if (drm_property_type_is(property, DRM_MODE_PROP_OBJECT)) {
-		if (property->values[0] == DRM_MODE_OBJECT_FB)
-			drm_framebuffer_unreference(obj_to_fb(ref));
-	}
 }
 
 /**
