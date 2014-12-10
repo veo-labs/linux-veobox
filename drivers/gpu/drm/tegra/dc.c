@@ -1145,15 +1145,6 @@ static void tegra_crtc_atomic_begin(struct drm_crtc *crtc)
 	tegra_dc_commit(dc);
 }
 
-static void tegra_crtc_atomic_flush(struct drm_crtc *crtc)
-{
-	struct tegra_dc_state *state = to_dc_state(crtc->state);
-	struct tegra_dc *dc = to_tegra_dc(crtc);
-
-	tegra_dc_writel(dc, state->planes << 8, DC_CMD_STATE_CONTROL);
-	tegra_dc_writel(dc, state->planes, DC_CMD_STATE_CONTROL);
-}
-
 static const struct drm_crtc_helper_funcs tegra_crtc_helper_funcs = {
 	.disable = tegra_crtc_disable,
 	.mode_fixup = tegra_crtc_mode_fixup,
@@ -1162,9 +1153,6 @@ static const struct drm_crtc_helper_funcs tegra_crtc_helper_funcs = {
 	.mode_set_base = drm_helper_crtc_mode_set_base,
 	.prepare = tegra_crtc_prepare,
 	.commit = tegra_crtc_commit,
-	.atomic_check = tegra_crtc_atomic_check,
-	.atomic_begin = tegra_crtc_atomic_begin,
-	.atomic_flush = tegra_crtc_atomic_flush,
 };
 
 static irqreturn_t tegra_dc_irq(int irq, void *data)
