@@ -2122,6 +2122,8 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 		goto out;
 	}
 
+	props_count = connector->properties.count;
+
 	for (i = 0; i < DRM_CONNECTOR_MAX_ENCODER; i++)
 		if (connector->encoder_ids[i] != 0)
 			encoders_count++;
