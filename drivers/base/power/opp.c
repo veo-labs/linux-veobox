@@ -491,9 +491,8 @@ static int _opp_add_dynamic(struct device *dev, unsigned long freq,
 	if (IS_ERR(dev_opp)) {
 		dev_opp = _add_device_opp(dev);
 		if (!dev_opp) {
-			mutex_unlock(&dev_opp_list_lock);
-			kfree(new_opp);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_opp;
 		}
 
 		head = &dev_opp->opp_list;
