@@ -4381,6 +4381,8 @@ bool drm_property_change_valid_get(struct drm_property *property,
 		/* Only the driver knows */
 		return true;
 	} else if (drm_property_type_is(property, DRM_MODE_PROP_OBJECT)) {
+		struct drm_mode_object *obj;
+
 		/* a zero value for an object property translates to null: */
 		if (value == 0)
 			return true;
