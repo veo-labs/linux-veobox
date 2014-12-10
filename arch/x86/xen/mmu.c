@@ -1180,6 +1180,7 @@ static void __init xen_pagetable_p2m_setup(void)
 static void __init xen_pagetable_init(void)
 {
 	paging_init();
+	xen_post_allocator_init();
 
 	xen_pagetable_p2m_setup();
 
