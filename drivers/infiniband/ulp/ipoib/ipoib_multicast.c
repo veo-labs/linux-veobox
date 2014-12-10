@@ -416,7 +416,6 @@ static int ipoib_mcast_join_complete(int status,
 		if (test_bit(IPOIB_MCAST_RUN, &priv->flags))
 			queue_delayed_work(ipoib_workqueue,
 					   &priv->mcast_task, 0);
-		mutex_unlock(&mcast_mutex);
 
 		/*
 		 * Defer carrier on work to ipoib_workqueue to avoid a
@@ -424,6 +423,16 @@ static int ipoib_mcast_join_complete(int status,
 		 */
 		if (mcast == priv->broadcast)
 			queue_work(ipoib_workqueue, &priv->carrier_on_task);
+	} else {
+		if (mcast->logcount++ < 20) {
+			if (status == -ETIMEDOUT || status == -EAGAIN) {
+				ipoib_dbg_mcast(priv, "multicast join failed for %pI6, status %d\n",
+						mcast->mcmember.mgid.raw, status);
+			} else {
+				ipoib_warn(priv, "multicast join failed for %pI6, status %d\n",
+					   mcast->mcmember.mgid.raw, status);
+			}
+		}
 
 		status = 0;
 		goto out;
@@ -448,7 +457,13 @@ static int ipoib_mcast_join_complete(int status,
 
 	mutex_lock(&mcast_mutex);
 	spin_lock_irq(&priv->lock);
-	if (test_bit(IPOIB_MCAST_RUN, &priv->flags))
+	clear_bit(IPOIB_MCAST_FLAG_BUSY, &mcast->flags);
+	if (status)
+		mcast->mc = NULL;
+	complete(&mcast->done);
+	if (status == -ENETRESET)
+		status = 0;
+	if (status && test_bit(IPOIB_MCAST_RUN, &priv->flags))
 		queue_delayed_work(ipoib_workqueue, &priv->mcast_task,
 				   mcast->backoff * HZ);
 	spin_unlock_irq(&priv->lock);
@@ -701,6 +716,8 @@ void ipoib_mcast_send(struct net_device *dev, u8 *daddr, struct sk_buff *skb)
 		memcpy(mcast->mcmember.mgid.raw, mgid, sizeof (union ib_gid));
 		__ipoib_mcast_add(dev, mcast);
 		list_add_tail(&mcast->list, &priv->multicast_list);
+		if (!test_and_set_bit(IPOIB_MCAST_RUN, &priv->flags))
+			queue_delayed_work(ipoib_workqueue, &priv->mcast_task, 0);
 	}
 
 	if (!mcast->ah) {
