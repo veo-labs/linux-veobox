@@ -371,6 +371,8 @@ void ipoib_mcast_carrier_on_task(struct work_struct *work)
 	}
 
 	rtnl_lock();
+	if (!ipoib_cm_admin_enabled(priv->dev))
+		dev_set_mtu(priv->dev, min(priv->mcast_mtu, priv->admin_mtu));
 	netif_carrier_on(priv->dev);
 	rtnl_unlock();
 }
