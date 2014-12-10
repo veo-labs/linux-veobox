@@ -377,7 +377,7 @@ void ipoib_mcast_carrier_on_task(struct work_struct *work)
 	 * the workqueue while holding the rtnl lock, so loop
 	 * on trylock until either we get the lock or we see
 	 * FLAG_ADMIN_UP go away as that signals that we are bailing
-	 * and can safely ignore the carrier on work
+	 * and can safely ignore the carrier on work.
 	 */
 	while (!rtnl_trylock()) {
 		if (!test_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags))
@@ -414,15 +414,14 @@ static int ipoib_mcast_join_complete(int status,
 		mcast->backoff = 1;
 		mutex_lock(&mcast_mutex);
 		if (test_bit(IPOIB_MCAST_RUN, &priv->flags))
-			queue_delayed_work(ipoib_workqueue,
-					   &priv->mcast_task, 0);
+			queue_delayed_work(priv->wq, &priv->mcast_task, 0);
 
 		/*
 		 * Defer carrier on work to ipoib_workqueue to avoid a
 		 * deadlock on rtnl_lock here.
 		 */
 		if (mcast == priv->broadcast)
-			queue_work(ipoib_workqueue, &priv->carrier_on_task);
+			queue_work(priv->wq, &priv->carrier_on_task);
 	} else {
 		if (mcast->logcount++ < 20) {
 			if (status == -ETIMEDOUT || status == -EAGAIN) {
@@ -464,7 +463,7 @@ static int ipoib_mcast_join_complete(int status,
 	if (status == -ENETRESET)
 		status = 0;
 	if (status && test_bit(IPOIB_MCAST_RUN, &priv->flags))
-		queue_delayed_work(ipoib_workqueue, &priv->mcast_task,
+		queue_delayed_work(priv->wq, &priv->mcast_task,
 				   mcast->backoff * HZ);
 	spin_unlock_irq(&priv->lock);
 	mutex_unlock(&mcast_mutex);
@@ -653,7 +652,7 @@ int ipoib_mcast_stop_thread(struct net_device *dev, int flush)
 	mutex_unlock(&mcast_mutex);
 
 	if (flush)
-		flush_workqueue(ipoib_workqueue);
+		flush_workqueue(priv->wq);
 
 	return 0;
 }
@@ -717,7 +716,7 @@ void ipoib_mcast_send(struct net_device *dev, u8 *daddr, struct sk_buff *skb)
 		__ipoib_mcast_add(dev, mcast);
 		list_add_tail(&mcast->list, &priv->multicast_list);
 		if (!test_and_set_bit(IPOIB_MCAST_RUN, &priv->flags))
-			queue_delayed_work(ipoib_workqueue, &priv->mcast_task, 0);
+			queue_delayed_work(priv->wq, &priv->mcast_task, 0);
 	}
 
 	if (!mcast->ah) {
@@ -931,7 +930,7 @@ void ipoib_mcast_restart_task(struct work_struct *work)
 	 * completes.  So do like the carrier on task and attempt to
 	 * take the rtnl lock, but if we can't before the ADMIN_UP flag
 	 * goes away, then just return and know that the remove list will
-	 * get flushed later by mcast_dev_flush.
+	 * get flushed later by mcast_stop_thread.
 	 */
 	while (!rtnl_trylock()) {
 		if (!test_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags))

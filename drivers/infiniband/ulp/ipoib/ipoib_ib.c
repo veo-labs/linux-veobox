@@ -881,7 +881,7 @@ timeout:
 	set_bit(IPOIB_STOP_REAPER, &priv->flags);
 	cancel_delayed_work(&priv->ah_reap_task);
 	if (flush)
-		flush_workqueue(ipoib_workqueue);
+		flush_workqueue(priv->wq);
 
 	begin = jiffies;
 

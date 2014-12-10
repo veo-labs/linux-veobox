@@ -1288,7 +1288,7 @@ int ipoib_dev_init(struct net_device *dev, struct ib_device *ca, int port)
 	return 0;
 
 out_dev_uninit:
-	ipoib_ib_dev_cleanup();
+	ipoib_ib_dev_cleanup(dev);
 
 out_tx_ring_cleanup:
 	vfree(priv->tx_ring);
