@@ -759,9 +759,8 @@ static struct mlx5_ib_mr *reg_umr(struct ib_pd *pd, struct ib_umem *umem,
 	struct ib_send_wr wr, *bad;
 	struct mlx5_ib_mr *mr;
 	struct ib_sge sg;
-	int size;
+	int size = sizeof(u64) * npages;
 	__be64 *mr_pas;
-	__be64 *pas;
 	dma_addr_t dma;
 	int err = 0;
 	int i;
@@ -781,22 +780,17 @@ static struct mlx5_ib_mr *reg_umr(struct ib_pd *pd, struct ib_umem *umem,
 	if (!mr)
 		return ERR_PTR(-EAGAIN);
 
-	/* UMR copies MTTs in units of MLX5_UMR_MTT_ALIGNMENT bytes.
-	 * To avoid copying garbage after the pas array, we allocate
-	 * a little more. */
-	size = ALIGN(sizeof(u64) * npages, MLX5_UMR_MTT_ALIGNMENT);
 	mr_pas = kmalloc(size + MLX5_UMR_ALIGN - 1, GFP_KERNEL);
 	if (!mr_pas) {
 		err = -ENOMEM;
 		goto free_mr;
 	}
 
-	pas = PTR_ALIGN(mr_pas, MLX5_UMR_ALIGN);
-	mlx5_ib_populate_pas(dev, umem, page_shift, pas, MLX5_IB_MTT_PRESENT);
-	/* Clear padding after the actual pages. */
-	memset(pas + npages, 0, size - npages * sizeof(u64));
+	mlx5_ib_populate_pas(dev, umem, page_shift,
+			     mr_align(mr_pas, MLX5_UMR_ALIGN), 1);
 
-	dma = dma_map_single(ddev, pas, size, DMA_TO_DEVICE);
+	dma = dma_map_single(ddev, mr_align(mr_pas, MLX5_UMR_ALIGN), size,
+			     DMA_TO_DEVICE);
 	if (dma_mapping_error(ddev, dma)) {
 		err = -ENOMEM;
 		goto free_pas;
