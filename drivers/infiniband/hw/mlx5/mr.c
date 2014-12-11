@@ -52,8 +52,6 @@ static __be64 mlx5_ib_update_mtt_emergency_buffer[
 static DEFINE_MUTEX(mlx5_ib_update_mtt_emergency_buffer_mutex);
 #endif
 
-static int clean_mr(struct mlx5_ib_mr *mr);
-
 static int order2idx(struct mlx5_ib_dev *dev, int order)
 {
 	struct mlx5_mr_cache *cache = &dev->cache;
