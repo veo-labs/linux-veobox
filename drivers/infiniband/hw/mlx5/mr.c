@@ -37,7 +37,6 @@
 #include <linux/export.h>
 #include <linux/delay.h>
 #include <rdma/ib_umem.h>
-#include <rdma/ib_umem_odp.h>
 #include <rdma/ib_verbs.h>
 #include "mlx5_ib.h"
 
