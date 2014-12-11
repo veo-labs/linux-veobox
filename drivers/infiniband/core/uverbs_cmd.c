@@ -3331,6 +3331,19 @@ int ib_uverbs_ex_query_device(struct ib_uverbs_file *file,
 	copy_query_dev_fields(file, &resp.base, &attr);
 	resp.comp_mask = 0;
 
+#ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
+	if (cmd.comp_mask & IB_USER_VERBS_EX_QUERY_DEVICE_ODP) {
+		resp.odp_caps.general_caps = attr.odp_caps.general_caps;
+		resp.odp_caps.per_transport_caps.rc_odp_caps =
+			attr.odp_caps.per_transport_caps.rc_odp_caps;
+		resp.odp_caps.per_transport_caps.uc_odp_caps =
+			attr.odp_caps.per_transport_caps.uc_odp_caps;
+		resp.odp_caps.per_transport_caps.ud_odp_caps =
+			attr.odp_caps.per_transport_caps.ud_odp_caps;
+		resp.comp_mask |= IB_USER_VERBS_EX_QUERY_DEVICE_ODP;
+	}
+#endif
+
 	err = ib_copy_to_udata(ucore, &resp, sizeof(resp));
 	if (err)
 		return err;
