@@ -437,6 +437,11 @@ struct mlx5_ib_dev {
 	int				fill_delay;
 #ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
 	struct ib_odp_caps	odp_caps;
+	/*
+	 * Sleepable RCU that prevents destruction of MRs while they are still
+	 * being used by a page fault handler.
+	 */
+	struct srcu_struct      mr_srcu;
 #endif
 };
 
@@ -613,12 +618,33 @@ int mlx5_ib_check_mr_status(struct ib_mr *ibmr, u32 check_mask,
 			    struct ib_mr_status *mr_status);
 
 #ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
+extern struct workqueue_struct *mlx5_ib_page_fault_wq;
+
 int mlx5_ib_internal_query_odp_caps(struct mlx5_ib_dev *dev);
-#else
+void mlx5_ib_mr_pfault_handler(struct mlx5_ib_qp *qp,
+			       struct mlx5_ib_pfault *pfault);
+void mlx5_ib_odp_create_qp(struct mlx5_ib_qp *qp);
+int mlx5_ib_odp_init_one(struct mlx5_ib_dev *ibdev);
+void mlx5_ib_odp_remove_one(struct mlx5_ib_dev *ibdev);
+int __init mlx5_ib_odp_init(void);
+void mlx5_ib_odp_cleanup(void);
+void mlx5_ib_qp_disable_pagefaults(struct mlx5_ib_qp *qp);
+void mlx5_ib_qp_enable_pagefaults(struct mlx5_ib_qp *qp);
+
+#else /* CONFIG_INFINIBAND_ON_DEMAND_PAGING */
 static inline int mlx5_ib_internal_query_odp_caps(struct mlx5_ib_dev *dev)
 {
 	return 0;
 }
+
+static inline void mlx5_ib_odp_create_qp(struct mlx5_ib_qp *qp)		{}
+static inline int mlx5_ib_odp_init_one(struct mlx5_ib_dev *ibdev) { return 0; }
+static inline void mlx5_ib_odp_remove_one(struct mlx5_ib_dev *ibdev)	{}
+static inline int mlx5_ib_odp_init(void) { return 0; }
+static inline void mlx5_ib_odp_cleanup(void)				{}
+static inline void mlx5_ib_qp_disable_pagefaults(struct mlx5_ib_qp *qp) {}
+static inline void mlx5_ib_qp_enable_pagefaults(struct mlx5_ib_qp *qp)  {}
+
 #endif /* CONFIG_INFINIBAND_ON_DEMAND_PAGING */
 
 static inline void init_query_mad(struct ib_smp *mad)
