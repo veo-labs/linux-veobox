@@ -58,7 +58,7 @@ config X86_ACPI_CPUFREQ_CPB
 	  entry in addition to the new boost ones, for compatibility reasons.
 
 config X86_SFI_CPUFREQ
-	tristate "SFI Performance-States driver"
+	tristate "SFI P-States driver"
 	depends on X86_INTEL_MID && SFI
 	help
 	  This adds a CPUFreq driver for some Silvermont based Intel Atom
