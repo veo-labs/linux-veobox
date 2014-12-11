@@ -3120,7 +3120,6 @@ static int pairing_complete(struct pending_cmd *cmd, u8 status)
 	conn->disconn_cfm_cb = NULL;
 
 	hci_conn_drop(conn);
-	mgmt_pending_remove(cmd);
 
 	/* The device is paired so there is no need to remove
 	 * its connection parameters anymore.
