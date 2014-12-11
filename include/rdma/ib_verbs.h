@@ -1156,22 +1156,6 @@ struct ib_ucontext {
 	int			closing;
 
 	struct pid             *tgid;
-#ifdef CONFIG_INFINIBAND_ON_DEMAND_PAGING
-	struct rb_root      umem_tree;
-	/*
-	 * Protects .umem_rbroot and tree, as well as odp_mrs_count and
-	 * mmu notifiers registration.
-	 */
-	struct rw_semaphore	umem_rwsem;
-	void (*invalidate_range)(struct ib_umem *umem,
-				 unsigned long start, unsigned long end);
-
-	struct mmu_notifier	mn;
-	atomic_t		notifier_count;
-	/* A list of umems that don't have private mmu notifier counters yet. */
-	struct list_head	no_private_counters;
-	int                     odp_mrs_count;
-#endif
 };
 
 struct ib_uobject {

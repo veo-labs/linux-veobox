@@ -72,7 +72,7 @@ static void __ib_umem_release(struct ib_device *dev, struct ib_umem *umem, int d
  * ib_umem_get - Pin and DMA map userspace memory.
  *
  * If access flags indicate ODP memory, avoid pinning. Instead, stores
- * the mm for future page fault handling in conjunction with MMU notifiers.
+ * the mm for future page fault handling.
  *
  * @context: userspace context to pin memory for
  * @addr: userspace virtual address to start at
@@ -121,6 +121,17 @@ struct ib_umem *ib_umem_get(struct ib_ucontext *context, unsigned long addr,
 	umem->writable  = !!(access &
 		(IB_ACCESS_LOCAL_WRITE   | IB_ACCESS_REMOTE_WRITE |
 		 IB_ACCESS_REMOTE_ATOMIC | IB_ACCESS_MW_BIND));
+
+	if (access & IB_ACCESS_ON_DEMAND) {
+		ret = ib_umem_odp_get(context, umem);
+		if (ret) {
+			kfree(umem);
+			return ERR_PTR(ret);
+		}
+		return umem;
+	}
+
+	umem->odp_data = NULL;
 
 	/* We assume the memory is from hugetlb until proved otherwise */
 	umem->hugetlb   = 1;
