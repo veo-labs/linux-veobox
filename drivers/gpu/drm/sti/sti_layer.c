@@ -58,9 +58,6 @@ struct sti_layer *sti_layer_create(struct device *dev, int desc,
 	case STI_CUR:
 		layer = sti_cursor_create(dev);
 		break;
-	case STI_VDP:
-		layer = sti_hqvdp_create(dev);
-		break;
 	}
 
 	if (!layer) {
