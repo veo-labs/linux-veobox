@@ -152,6 +152,32 @@ static int ovl_cache_entry_add_rb(struct ovl_readdir_data *rdd,
 	if (p == NULL)
 		return -ENOMEM;
 
+	if (d_type == DT_CHR) {
+		struct dentry *dentry;
+		const struct cred *old_cred;
+		struct cred *override_cred;
+
+		override_cred = prepare_creds();
+		if (!override_cred) {
+			kfree(p);
+			return -ENOMEM;
+		}
+
+		/*
+		 * CAP_DAC_OVERRIDE for lookup
+		 */
+		cap_raise(override_cred->cap_effective, CAP_DAC_OVERRIDE);
+		old_cred = override_creds(override_cred);
+
+		dentry = lookup_one_len(name, rdd->dir, len);
+		if (!IS_ERR(dentry)) {
+			p->is_whiteout = ovl_is_whiteout(dentry);
+			dput(dentry);
+		}
+		revert_creds(old_cred);
+		put_cred(override_cred);
+	}
+
 	list_add_tail(&p->l_node, rdd->list);
 	rb_link_node(&p->node, parent, newp);
 	rb_insert_color(&p->node, &rdd->root);
@@ -275,20 +301,11 @@ static int ovl_dir_read_merged(struct dentry *dentry, struct list_head *list)
 	for (idx = 0; idx != -1; idx = next) {
 		next = ovl_path_next(idx, dentry, &realpath);
 
-		if (next != -1) {
-			err = ovl_dir_read(&realpath, &rdd);
-			if (err)
-				break;
-		} else {
-			/*
-			 * Insert lowest layer entries before upper ones, this
-			 * allows offsets to be reasonably constant
-			 */
-			list_add(&rdd.middle, rdd.list);
-			rdd.is_merge = true;
-			err = ovl_dir_read(&realpath, &rdd);
-			list_del(&rdd.middle);
-		}
+	if (upperpath.dentry) {
+		rdd.dir = upperpath.dentry;
+		err = ovl_dir_read(&upperpath, &rdd);
+		if (err)
+			goto out;
 	}
 	return err;
 }
