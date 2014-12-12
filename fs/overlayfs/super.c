@@ -75,7 +75,7 @@ enum ovl_path_type ovl_path_type(struct dentry *dentry)
 	if (oe->__upperdentry) {
 		type = __OVL_PATH_UPPER;
 
-		if (oe->lowerdentry) {
+		if (oe->numlower) {
 			if (S_ISDIR(dentry->d_inode->i_mode))
 				type |= __OVL_PATH_MERGE;
 		} else if (!oe->opaque) {
@@ -329,40 +329,46 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 			  unsigned int flags)
 {
 	struct ovl_entry *oe;
-	struct ovl_entry *poe = dentry->d_parent->d_fsdata;
-	struct path *stack = NULL;
-	struct dentry *upperdir, *upperdentry = NULL;
-	unsigned int ctr = 0;
+	struct dentry *upperdir;
+	struct path lowerdir;
+	struct dentry *upperdentry = NULL;
+	struct dentry *lowerdentry = NULL;
 	struct inode *inode = NULL;
 	bool upperopaque = false;
 	struct dentry *this, *prev = NULL;
 	unsigned int i;
 	int err;
 
-	upperdir = ovl_upperdentry_dereference(poe);
-	if (upperdir) {
-		this = ovl_lookup_real(upperdir, &dentry->d_name);
-		err = PTR_ERR(this);
-		if (IS_ERR(this))
-			goto out;
+	err = -ENOMEM;
+	oe = ovl_alloc_entry(1);
+	if (!oe)
+		goto out;
 
-		if (this) {
-			if (ovl_is_whiteout(this)) {
-				dput(this);
-				this = NULL;
-				upperopaque = true;
-			} else if (poe->numlower && ovl_is_opaquedir(this)) {
-				upperopaque = true;
+	upperdir = ovl_dentry_upper(dentry->d_parent);
+	ovl_path_lower(dentry->d_parent, &lowerdir);
+
+	if (upperdir) {
+		upperdentry = ovl_lookup_real(upperdir, &dentry->d_name);
+		err = PTR_ERR(upperdentry);
+		if (IS_ERR(upperdentry))
+			goto out_put_dir;
+
+		if (lowerdir.dentry && upperdentry) {
+			if (ovl_is_whiteout(upperdentry)) {
+				dput(upperdentry);
+				upperdentry = NULL;
+				oe->opaque = true;
+			} else if (ovl_is_opaquedir(upperdentry)) {
+				oe->opaque = true;
 			}
 		}
 		upperdentry = prev = this;
 	}
-
-	if (!upperopaque && poe->numlower) {
-		err = -ENOMEM;
-		stack = kcalloc(poe->numlower, sizeof(struct path), GFP_KERNEL);
-		if (!stack)
-			goto out_put_upper;
+	if (lowerdir.dentry && !oe->opaque) {
+		lowerdentry = ovl_lookup_real(lowerdir.dentry, &dentry->d_name);
+		err = PTR_ERR(lowerdentry);
+		if (IS_ERR(lowerdentry))
+			goto out_dput_upper;
 	}
 
 	for (i = 0; !upperopaque && i < poe->numlower; i++) {
@@ -437,8 +443,12 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 
 	oe->opaque = upperopaque;
 	oe->__upperdentry = upperdentry;
-	memcpy(oe->lowerstack, stack, sizeof(struct path) * ctr);
-	kfree(stack);
+	if (lowerdentry) {
+		oe->lowerstack[0].dentry = lowerdentry;
+		oe->lowerstack[0].mnt = lowerdir.mnt;
+	} else {
+		oe->numlower = 0;
+	}
 	dentry->d_fsdata = oe;
 	d_add(dentry, inode);
 
@@ -809,11 +819,8 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	struct dentry *root_dentry;
 	struct ovl_entry *oe;
 	struct ovl_fs *ufs;
-	struct path *stack = NULL;
-	char *lowertmp;
-	char *lower;
-	unsigned int numlower;
-	unsigned int stacklen = 0;
+	struct kstatfs statfs;
+	struct vfsmount *mnt;
 	unsigned int i;
 	int err;
 
@@ -832,13 +839,18 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_free_config;
 	}
 
-	sb->s_stack_depth = 0;
-	if (ufs->config.upperdir) {
-		/* FIXME: workdir is not needed for a R/O mount */
-		if (!ufs->config.workdir) {
-			pr_err("overlayfs: missing 'workdir'\n");
-			goto out_free_config;
-		}
+	err = -ENOMEM;
+	oe = ovl_alloc_entry(1);
+	if (oe == NULL)
+		goto out_free_config;
+
+	err = ovl_mount_dir(ufs->config.upperdir, &upperpath);
+	if (err)
+		goto out_free_oe;
+
+	err = ovl_mount_dir(ufs->config.lowerdir, &lowerpath);
+	if (err)
+		goto out_put_upperpath;
 
 		err = ovl_mount_dir(ufs->config.upperdir, &upperpath);
 		if (err)
@@ -898,14 +910,24 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 			goto out_put_lowerpath;
 		}
 
-		ufs->workdir = ovl_workdir_create(ufs->upper_mnt, workpath.dentry);
-		err = PTR_ERR(ufs->workdir);
-		if (IS_ERR(ufs->workdir)) {
-			pr_err("overlayfs: failed to create directory %s/%s\n",
-			       ufs->config.workdir, OVL_WORKDIR_NAME);
-			goto out_put_upper_mnt;
-		}
+	ufs->lower_mnt = kcalloc(1, sizeof(struct vfsmount *), GFP_KERNEL);
+	if (ufs->lower_mnt == NULL)
+		goto out_put_upper_mnt;
+
+	mnt = clone_private_mount(&lowerpath);
+	err = PTR_ERR(mnt);
+	if (IS_ERR(mnt)) {
+		pr_err("overlayfs: failed to clone lowerpath\n");
+		goto out_put_lower_mnt;
 	}
+	/*
+	 * Make lower_mnt R/O.  That way fchmod/fchown on lower file
+	 * will fail instead of modifying lower fs.
+	 */
+	mnt->mnt_flags |= MNT_READONLY;
+
+	ufs->lower_mnt[0] = mnt;
+	ufs->numlower = 1;
 
 	err = -ENOMEM;
 	ufs->lower_mnt = kcalloc(numlower, sizeof(struct vfsmount *), GFP_KERNEL);
@@ -914,23 +936,8 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	for (i = 0; i < numlower; i++) {
 		struct vfsmount *mnt = clone_private_mount(&stack[i]);
 
-		err = PTR_ERR(mnt);
-		if (IS_ERR(mnt)) {
-			pr_err("overlayfs: failed to clone lowerpath\n");
-			goto out_put_lower_mnt;
-		}
-		/*
-		 * Make lower_mnt R/O.  That way fchmod/fchown on lower file
-		 * will fail instead of modifying lower fs.
-		 */
-		mnt->mnt_flags |= MNT_READONLY;
-
-		ufs->lower_mnt[ufs->numlower] = mnt;
-		ufs->numlower++;
-	}
-
-	/* If the upper fs is r/o or nonexistent, we mark overlayfs r/o too */
-	if (!ufs->upper_mnt || (ufs->upper_mnt->mnt_sb->s_flags & MS_RDONLY))
+	/* If the upper fs is r/o, we mark overlayfs r/o too */
+	if (ufs->upper_mnt->mnt_sb->s_flags & MS_RDONLY)
 		sb->s_flags |= MS_RDONLY;
 
 	sb->s_d_op = &ovl_dentry_operations;
@@ -951,10 +958,8 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	kfree(lowertmp);
 
 	oe->__upperdentry = upperpath.dentry;
-	for (i = 0; i < numlower; i++) {
-		oe->lowerstack[i].dentry = stack[i].dentry;
-		oe->lowerstack[i].mnt = ufs->lower_mnt[i];
-	}
+	oe->lowerstack[0].dentry = lowerpath.dentry;
+	oe->lowerstack[0].mnt = ufs->lower_mnt[0];
 
 	root_dentry->d_fsdata = oe;
 
@@ -973,6 +978,10 @@ out_put_lower_mnt:
 	kfree(ufs->lower_mnt);
 out_put_workdir:
 	dput(ufs->workdir);
+out_put_lower_mnt:
+	for (i = 0; i < ufs->numlower; i++)
+		mntput(ufs->lower_mnt[i]);
+	kfree(ufs->lower_mnt);
 out_put_upper_mnt:
 	mntput(ufs->upper_mnt);
 out_put_lowerpath:
