@@ -522,17 +522,6 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	return 0;
 }
 
-static int ovl_remount(struct super_block *sb, int *flags, char *data)
-{
-	struct ovl_fs *ufs = sb->s_fs_info;
-
-	if (!(*flags & MS_RDONLY) &&
-	    (!ufs->upper_mnt || (ufs->upper_mnt->mnt_sb->s_flags & MS_RDONLY)))
-		return -EROFS;
-
-	return 0;
-}
-
 static const struct super_operations ovl_super_operations = {
 	.put_super	= ovl_put_super,
 	.statfs		= ovl_statfs,
@@ -801,8 +790,8 @@ static unsigned int ovl_split_lowerdirs(char *str)
 static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct path lowerpath;
-	struct path upperpath;
-	struct path workpath;
+	struct path upperpath = { NULL, NULL };
+	struct path workpath = { NULL, NULL };
 	struct dentry *root_dentry;
 	struct ovl_entry *oe;
 	struct ovl_fs *ufs;
@@ -825,23 +814,32 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_free_config;
 	}
 
-	err = ovl_mount_dir(ufs->config.upperdir, &upperpath);
-	if (err)
-		goto out_free_config;
+	sb->s_stack_depth = 0;
+	if (ufs->config.upperdir) {
+		/* FIXME: workdir is not needed for a R/O mount */
+		if (!ufs->config.workdir) {
+			pr_err("overlayfs: missing 'workdir'\n");
+			goto out_free_config;
+		}
 
-	err = ovl_mount_dir(ufs->config.workdir, &workpath);
-	if (err)
-		goto out_put_upperpath;
+		err = ovl_mount_dir(ufs->config.upperdir, &upperpath);
+		if (err)
+			goto out_free_config;
 
-	if (upperpath.mnt != workpath.mnt) {
-		pr_err("overlayfs: workdir and upperdir must reside under the same mount\n");
-		goto out_put_workpath;
+		err = ovl_mount_dir(ufs->config.workdir, &workpath);
+		if (err)
+			goto out_put_upperpath;
+
+		if (upperpath.mnt != workpath.mnt) {
+			pr_err("overlayfs: workdir and upperdir must reside under the same mount\n");
+			goto out_put_workpath;
+		}
+		if (!ovl_workdir_ok(workpath.dentry, upperpath.dentry)) {
+			pr_err("overlayfs: workdir and upperdir must be separate subtrees\n");
+			goto out_put_workpath;
+		}
+		sb->s_stack_depth = upperpath.mnt->mnt_sb->s_stack_depth;
 	}
-	if (!ovl_workdir_ok(workpath.dentry, upperpath.dentry)) {
-		pr_err("overlayfs: workdir and upperdir must be separate subtrees\n");
-		goto out_put_workpath;
-	}
-	sb->s_stack_depth = upperpath.mnt->mnt_sb->s_stack_depth;
 
 	err = ovl_lower_dir(ufs->config.lowerdir, &lowerpath,
 			    &ufs->lower_namelen, &sb->s_stack_depth);
@@ -855,19 +853,21 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		goto out_put_lowerpath;
 	}
 
-	ufs->upper_mnt = clone_private_mount(&upperpath);
-	err = PTR_ERR(ufs->upper_mnt);
-	if (IS_ERR(ufs->upper_mnt)) {
-		pr_err("overlayfs: failed to clone upperpath\n");
-		goto out_put_lowerpath;
-	}
+	if (ufs->config.upperdir) {
+		ufs->upper_mnt = clone_private_mount(&upperpath);
+		err = PTR_ERR(ufs->upper_mnt);
+		if (IS_ERR(ufs->upper_mnt)) {
+			pr_err("overlayfs: failed to clone upperpath\n");
+			goto out_put_lowerpath;
+		}
 
-	ufs->workdir = ovl_workdir_create(ufs->upper_mnt, workpath.dentry);
-	err = PTR_ERR(ufs->workdir);
-	if (IS_ERR(ufs->workdir)) {
-		pr_err("overlayfs: failed to create directory %s/%s\n",
-		       ufs->config.workdir, OVL_WORKDIR_NAME);
-		goto out_put_upper_mnt;
+		ufs->workdir = ovl_workdir_create(ufs->upper_mnt, workpath.dentry);
+		err = PTR_ERR(ufs->workdir);
+		if (IS_ERR(ufs->workdir)) {
+			pr_err("overlayfs: failed to create directory %s/%s\n",
+			       ufs->config.workdir, OVL_WORKDIR_NAME);
+			goto out_put_upper_mnt;
+		}
 	}
 
 	ufs->lower_mnt = kcalloc(1, sizeof(struct vfsmount *), GFP_KERNEL);
@@ -889,8 +889,8 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	ufs->lower_mnt[0] = mnt;
 	ufs->numlower = 1;
 
-	/* If the upper fs is r/o, we mark overlayfs r/o too */
-	if (ufs->upper_mnt->mnt_sb->s_flags & MS_RDONLY)
+	/* If the upper fs is r/o or nonexistent, we mark overlayfs r/o too */
+	if (!ufs->upper_mnt || (ufs->upper_mnt->mnt_sb->s_flags & MS_RDONLY))
 		sb->s_flags |= MS_RDONLY;
 
 	sb->s_d_op = &ovl_dentry_operations;
