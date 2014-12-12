@@ -96,6 +96,7 @@ static struct ovl_cache_entry *ovl_cache_entry_new(struct dentry *dir,
 	p->type = d_type;
 	p->ino = ino;
 	p->is_whiteout = false;
+	p->is_cursor = false;
 
 	if (d_type == DT_CHR) {
 		struct dentry *dentry;
@@ -151,32 +152,6 @@ static int ovl_cache_entry_add_rb(struct ovl_readdir_data *rdd,
 	p = ovl_cache_entry_new(rdd->dir, name, len, ino, d_type);
 	if (p == NULL)
 		return -ENOMEM;
-
-	if (d_type == DT_CHR) {
-		struct dentry *dentry;
-		const struct cred *old_cred;
-		struct cred *override_cred;
-
-		override_cred = prepare_creds();
-		if (!override_cred) {
-			kfree(p);
-			return -ENOMEM;
-		}
-
-		/*
-		 * CAP_DAC_OVERRIDE for lookup
-		 */
-		cap_raise(override_cred->cap_effective, CAP_DAC_OVERRIDE);
-		old_cred = override_creds(override_cred);
-
-		dentry = lookup_one_len(name, rdd->dir, len);
-		if (!IS_ERR(dentry)) {
-			p->is_whiteout = ovl_is_whiteout(dentry);
-			dput(dentry);
-		}
-		revert_creds(old_cred);
-		put_cred(override_cred);
-	}
 
 	list_add_tail(&p->l_node, rdd->list);
 	rb_link_node(&p->node, parent, newp);
@@ -302,7 +277,6 @@ static int ovl_dir_read_merged(struct dentry *dentry, struct list_head *list)
 		next = ovl_path_next(idx, dentry, &realpath);
 
 		if (next != -1) {
-			rdd.dir = realpath.dentry;
 			err = ovl_dir_read(&realpath, &rdd);
 			if (err)
 				break;
