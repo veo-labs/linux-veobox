@@ -507,6 +507,7 @@ static int ovl_dir_open(struct inode *inode, struct file *file)
 	od->realfile = realfile;
 	od->is_real = !OVL_TYPE_MERGE(type);
 	od->is_upper = OVL_TYPE_UPPER(type);
+	od->cursor.is_cursor = true;
 	file->private_data = od;
 
 	return 0;
