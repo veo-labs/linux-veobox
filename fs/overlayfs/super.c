@@ -703,12 +703,8 @@ static bool ovl_is_allowed_fs_type(struct dentry *root)
 
 static int ovl_mount_dir_noesc(const char *name, struct path *path)
 {
-	int err = -EINVAL;
+	int err;
 
-	if (!*name) {
-		pr_err("overlayfs: empty lowerdir\n");
-		goto out;
-	}
 	err = kern_path(name, LOOKUP_FOLLOW, path);
 	if (err) {
 		pr_err("overlayfs: failed to resolve '%s': %i\n", name, err);
@@ -750,7 +746,7 @@ static int ovl_lower_dir(const char *name, struct path *path, long *namelen,
 	int err;
 	struct kstatfs statfs;
 
-	err = ovl_mount_dir_noesc(name, path);
+	err = ovl_mount_dir(name, path);
 	if (err)
 		goto out;
 
@@ -810,7 +806,6 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	struct dentry *root_dentry;
 	struct ovl_entry *oe;
 	struct ovl_fs *ufs;
-	struct kstatfs statfs;
 	struct vfsmount *mnt;
 	unsigned int i;
 	int err;
@@ -838,42 +833,20 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	if (err)
 		goto out_put_upperpath;
 
-	err = ovl_mount_dir(ufs->config.lowerdir, &lowerpath);
-	if (err)
-		goto out_put_workpath;
-
-	err = -EINVAL;
-	if (!S_ISDIR(upperpath.dentry->d_inode->i_mode) ||
-	    !S_ISDIR(lowerpath.dentry->d_inode->i_mode) ||
-	    !S_ISDIR(workpath.dentry->d_inode->i_mode)) {
-		pr_err("overlayfs: upperdir or lowerdir or workdir not a directory\n");
-		goto out_put_lowerpath;
-	}
-
 	if (upperpath.mnt != workpath.mnt) {
 		pr_err("overlayfs: workdir and upperdir must reside under the same mount\n");
-		goto out_put_lowerpath;
+		goto out_put_workpath;
 	}
 	if (!ovl_workdir_ok(workpath.dentry, upperpath.dentry)) {
 		pr_err("overlayfs: workdir and upperdir must be separate subtrees\n");
-		goto out_put_lowerpath;
+		goto out_put_workpath;
 	}
+	sb->s_stack_depth = upperpath.mnt->mnt_sb->s_stack_depth;
 
-	if (!ovl_is_allowed_fs_type(upperpath.dentry)) {
-		pr_err("overlayfs: filesystem of upperdir is not supported\n");
-		goto out_put_lowerpath;
-	}
-
-	if (!ovl_is_allowed_fs_type(lowerpath.dentry)) {
-		pr_err("overlayfs: filesystem of lowerdir is not supported\n");
-		goto out_put_lowerpath;
-	}
-
-	err = vfs_statfs(&lowerpath, &statfs);
-	if (err) {
-		pr_err("overlayfs: statfs failed on lowerpath\n");
-		goto out_put_lowerpath;
-	}
+	err = ovl_lower_dir(ufs->config.lowerdir, &lowerpath,
+			    &ufs->lower_namelen, &sb->s_stack_depth);
+	if (err)
+		goto out_put_workpath;
 
 	err = -EINVAL;
 	sb->s_stack_depth++;
