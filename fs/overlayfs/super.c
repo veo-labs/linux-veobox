@@ -332,92 +332,84 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 			  unsigned int flags)
 {
 	struct ovl_entry *oe;
-	struct dentry *upperdir;
-	struct path lowerdir;
-	struct dentry *upperdentry = NULL;
-	struct dentry *lowerdentry = NULL;
+	struct ovl_entry *poe = dentry->d_parent->d_fsdata;
+	struct path *stack = NULL;
+	struct dentry *upperdir, *upperdentry = NULL;
+	unsigned int ctr = 0;
 	struct inode *inode = NULL;
 	bool upperopaque = false;
 	struct dentry *this, *prev = NULL;
 	unsigned int i;
 	int err;
 
-	err = -ENOMEM;
-	oe = ovl_alloc_entry(1);
-	if (!oe)
-		goto out;
-
-	upperdir = ovl_dentry_upper(dentry->d_parent);
-	ovl_path_lower(dentry->d_parent, &lowerdir);
-
+	upperdir = ovl_upperdentry_dereference(poe);
 	if (upperdir) {
-		upperdentry = ovl_lookup_real(upperdir, &dentry->d_name);
-		err = PTR_ERR(upperdentry);
-		if (IS_ERR(upperdentry))
-			goto out_put_dir;
+		this = ovl_lookup_real(upperdir, &dentry->d_name);
+		err = PTR_ERR(this);
+		if (IS_ERR(this))
+			goto out;
 
-		if (lowerdir.dentry && upperdentry) {
-			if (ovl_is_whiteout(upperdentry)) {
-				dput(upperdentry);
-				upperdentry = NULL;
-				oe->opaque = true;
-			} else if (ovl_is_opaquedir(upperdentry)) {
-				oe->opaque = true;
+		/*
+		 * If this is not the lowermost layer, check whiteout and opaque
+		 * directory.
+		 */
+		if (poe->numlower && this) {
+			if (ovl_is_whiteout(this)) {
+				dput(this);
+				this = NULL;
+				upperopaque = true;
+			} else if (ovl_is_opaquedir(this)) {
+				upperopaque = true;
 			}
 		}
 		upperdentry = prev = this;
 	}
-	if (lowerdir.dentry && !oe->opaque) {
-		lowerdentry = ovl_lookup_real(lowerdir.dentry, &dentry->d_name);
-		err = PTR_ERR(lowerdentry);
-		if (IS_ERR(lowerdentry))
-			goto out_dput_upper;
+
+	if (!upperopaque && poe->numlower) {
+		err = -ENOMEM;
+		stack = kcalloc(poe->numlower, sizeof(struct path), GFP_KERNEL);
+		if (!stack)
+			goto out_put_upper;
 	}
 
 	for (i = 0; !upperopaque && i < poe->numlower; i++) {
 		bool opaque = false;
 		struct path lowerpath = poe->lowerstack[i];
 
+		opaque = false;
 		this = ovl_lookup_real(lowerpath.dentry, &dentry->d_name);
 		err = PTR_ERR(this);
-		if (IS_ERR(this)) {
-			/*
-			 * If it's positive, then treat ENAMETOOLONG as ENOENT.
-			 */
-			if (err == -ENAMETOOLONG && (upperdentry || ctr))
-				continue;
+		if (IS_ERR(this))
 			goto out_put;
-		}
 		if (!this)
 			continue;
-		if (ovl_is_whiteout(this)) {
-			dput(this);
-			break;
+
+		/*
+		 * If this is not the lowermost layer, check whiteout and opaque
+		 * directory.
+		 */
+		if (i < poe->numlower - 1) {
+			if (ovl_is_whiteout(this)) {
+				dput(this);
+				break;
+			} else if (ovl_is_opaquedir(this)) {
+				opaque = true;
+			}
 		}
 		/*
-		 * Only makes sense to check opaque dir if this is not the
-		 * lowermost layer.
+		 * If this is a non-directory then stop here.
+		 *
+		 * FIXME: check for opaqueness maybe better done in remove code.
 		 */
-		if (i < poe->numlower - 1 && ovl_is_opaquedir(this))
+		if (!S_ISDIR(this->d_inode->i_mode)) {
 			opaque = true;
-
-		if (prev && (!S_ISDIR(prev->d_inode->i_mode) ||
-			     !S_ISDIR(this->d_inode->i_mode))) {
-			/*
-			 * FIXME: check for upper-opaqueness maybe better done
-			 * in remove code.
-			 */
+		} else if (prev && (!S_ISDIR(prev->d_inode->i_mode) ||
+				    !S_ISDIR(this->d_inode->i_mode))) {
 			if (prev == upperdentry)
 				upperopaque = true;
 			dput(this);
 			break;
 		}
-		/*
-		 * If this is a non-directory then stop here.
-		 */
-		if (!S_ISDIR(this->d_inode->i_mode))
-			opaque = true;
-
 		stack[ctr].dentry = this;
 		stack[ctr].mnt = lowerpath.mnt;
 		ctr++;
@@ -446,12 +438,8 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 
 	oe->opaque = upperopaque;
 	oe->__upperdentry = upperdentry;
-	if (lowerdentry) {
-		oe->lowerstack[0].dentry = lowerdentry;
-		oe->lowerstack[0].mnt = lowerdir.mnt;
-	} else {
-		oe->numlower = 0;
-	}
+	memcpy(oe->lowerstack, stack, sizeof(struct path) * ctr);
+	kfree(stack);
 	dentry->d_fsdata = oe;
 	d_add(dentry, inode);
 
