@@ -301,11 +301,21 @@ static int ovl_dir_read_merged(struct dentry *dentry, struct list_head *list)
 	for (idx = 0; idx != -1; idx = next) {
 		next = ovl_path_next(idx, dentry, &realpath);
 
-	if (upperpath.dentry) {
-		rdd.dir = upperpath.dentry;
-		err = ovl_dir_read(&upperpath, &rdd);
-		if (err)
-			goto out;
+		if (next != -1) {
+			rdd.dir = realpath.dentry;
+			err = ovl_dir_read(&realpath, &rdd);
+			if (err)
+				break;
+		} else {
+			/*
+			 * Insert lowest layer entries before upper ones, this
+			 * allows offsets to be reasonably constant
+			 */
+			list_add(&rdd.middle, rdd.list);
+			rdd.is_merge = true;
+			err = ovl_dir_read(&realpath, &rdd);
+			list_del(&rdd.middle);
+		}
 	}
 	return err;
 }
