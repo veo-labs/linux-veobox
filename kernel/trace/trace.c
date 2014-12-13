@@ -6881,13 +6881,8 @@ out:
 
 void __init trace_init(void)
 {
-	if (tracepoint_printk) {
-		tracepoint_print_iter =
-			kmalloc(sizeof(*tracepoint_print_iter), GFP_KERNEL);
-		if (WARN_ON(!tracepoint_print_iter))
-			tracepoint_printk = 0;
-	}
 	tracer_alloc_buffers();
+	init_ftrace_syscalls();
 	trace_event_init();	
 }
 
