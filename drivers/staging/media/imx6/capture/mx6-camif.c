@@ -527,7 +527,11 @@ static int update_subdev_fmt(struct mx6cam_dev *dev)
 	}
 #else
 	/* TODO: This should be dynamic */
-	sd_fmt.pad = 1;
+	if (strcmp(dev->ep->sd->name, "adv7611 1-004c") == 0)
+		sd_fmt.pad = 1;
+	else
+		sd_fmt.pad = 6;
+
 	sd_fmt.which = V4L2_SUBDEV_FORMAT_ACTIVE;
 	ret = v4l2_subdev_call(dev->ep->sd, pad, get_fmt, NULL, &sd_fmt);
 	if (ret)
@@ -1686,7 +1690,6 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	struct mx6cam_dev *dev = ctx->dev;
 	struct mx6cam_endpoint *ep;
 	struct v4l2_subdev_format sd_fmt = {
-		.pad = 1,
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
 	int ret;
@@ -1703,6 +1706,10 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	update_format_from_timings(dev, timings);
 
 	sd_fmt.format.code = dev->subdev_fmt.code;
+	if (strcmp(dev->ep->sd->name, "adv7611 1-004c") == 0)
+		sd_fmt.pad = 1;
+	else
+		sd_fmt.pad = 6;
 
 	printk("Calling set_fmt on %s\n", dev->ep->sd->name);
 	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
@@ -2852,13 +2859,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 	 */
 	vfd->lock = &dev->mutex;
 	dev->v4l2_dev.notify = mx6cam_subdev_notification;
-	video_set_drvdata(vfd, dev);
-	ret = video_register_device(vfd, VFL_TYPE_GRABBER, 0);
-	if (ret) {
-		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
-		goto unreg_vdev;
-	}
-
 
 	dev->pad.flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_init(&vfd->entity, 1, &dev->pad, 0);
@@ -2978,6 +2978,14 @@ static int mx6cam_probe(struct platform_device *pdev)
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->vdic_sd->name);
 
+
+	video_set_drvdata(vfd, dev);
+	ret = video_register_device(vfd, VFL_TYPE_GRABBER, -1);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
+		goto unreg_vdev;
+	}
+
 	platform_set_drvdata(pdev, dev);
 
 	v4l2_info(&dev->v4l2_dev,
@@ -2986,6 +2994,8 @@ static int mx6cam_probe(struct platform_device *pdev)
 
 	return 0;
 
+unreg_dev:
+	v4l2_device_unregister(&dev->v4l2_dev);
 unreg_subdevs:
 	mx6cam_unregister_subdevs(dev);
 free_ctrls:
@@ -2995,8 +3005,6 @@ cleanup_ctx:
 		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 unreg_vdev:
 	video_unregister_device(&dev->vfd);
-unreg_dev:
-	v4l2_device_unregister(&dev->v4l2_dev);
 	return ret;
 }
 
