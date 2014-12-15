@@ -174,7 +174,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 		 */
 		csi_ch_num = IPUV3_CHANNEL_CSI0 +
 			(ipu_get_num(dev->ipu) << 1) + csi_id;
-
+		v4l2_err(&priv->sd, "CSI channel %d on IPU %d\n", csi_id, ipu_get_num(dev->ipu) << 1);
 		priv->smfc = ipu_smfc_get(dev->ipu, csi_ch_num);
 		if (IS_ERR(priv->smfc)) {
 			v4l2_err(&priv->sd, "failed to get SMFC\n");

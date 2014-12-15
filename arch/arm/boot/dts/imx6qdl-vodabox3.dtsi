@@ -33,23 +33,23 @@
 
 		led0-red {
 			label = "led0-red";
-			gpios = <&gpio6 11 GPIO_ACTIVE_HIGH>;
-			linux,default-state = "off";
+			gpios = <&gpio6 11 GPIO_ACTIVE_LOW>;
+			default-state = "off";
 		};
 		led0-green {
 			label = "led0-green";
-			gpios = <&gpio6 14 GPIO_ACTIVE_HIGH>;
-			linux,default-state = "on";
+			gpios = <&gpio6 14 GPIO_ACTIVE_LOW>;
+			default-state = "on";
 		};
 		led1-red {
 			label = "led1-red";
-			gpios = <&gpio6 15 GPIO_ACTIVE_HIGH>;
-			linux,default-state = "off";
+			gpios = <&gpio6 15 GPIO_ACTIVE_LOW>;
+			default-state = "off";
 		};
 		led1-green {
 			label = "led1-green";
-			gpios = <&gpio6 16 GPIO_ACTIVE_HIGH>;
-			linux,default-state = "on";
+			gpios = <&gpio6 16 GPIO_ACTIVE_LOW>;
+			default-state = "on";
 		};
 	};
 
@@ -64,7 +64,6 @@
 		mux-int-port = <1>;
 		mux-ext-port = <5>;
 	};
-
 	v4l2cap0: v4l2cap@ipu1 {
 		compatible = "fsl,imx6-v4l2-capture";
 		#address-cells = <1>;
@@ -267,8 +266,9 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					/*remote-endpoint = <&hdmi1_fpga_in>;*/
+					//remote-endpoint = <&hdmi1_fpga_in>;
 					remote-endpoint = <&csi1>;
+					bus-width = <16>;
 				};
 			};
 		};
@@ -299,8 +299,8 @@
 				};
 			};
 			port@3 {
-				reg = <3>;
-				/*hdmi1_fpga_in: endpoint {
+				/*reg = <3>;
+				hdmi1_fpga_in: endpoint {
 					remote-endpoint = <&hdmi1_out>;
 				};*/
 			};
@@ -312,8 +312,8 @@
 				};
 			};
 			port@5 {
-				reg = <5>;
-				/*csi1_fpga_out: endpoint {
+				/*reg = <5>;
+				csi1_fpga_out: endpoint {
 					bus-width = <16>;
 					remote-endpoint = <&csi1>;
 				};*/
