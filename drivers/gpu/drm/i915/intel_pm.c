@@ -6278,11 +6278,9 @@ static void valleyview_enable_rps(struct drm_device *dev)
 	/* RPS code assumes GPLL is used */
 	WARN_ONCE((val & GPLLENABLE) == 0, "GPLL not enabled\n");
 
-	DRM_DEBUG_DRIVER("GPLL enabled? %s\n", val & GPLLENABLE ? "yes" : "no");
-	DRM_DEBUG_DRIVER("GPU status: 0x%08x\n", val);
-
-	if (INTEL_INFO(dev)->gen < 6)
-		return;
+static void gen6_suspend_rps(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	flush_delayed_work(&dev_priv->rps.delayed_resume_work);
 
@@ -6292,6 +6290,24 @@ static void valleyview_enable_rps(struct drm_device *dev)
 	 */
 	if (INTEL_INFO(dev)->gen < 9)
 		gen6_disable_rps_interrupts(dev);
+}
+
+/**
+ * intel_suspend_gt_powersave - suspend PM work and helper threads
+ * @dev: drm device
+ *
+ * We don't want to disable RC6 or other features here, we just want
+ * to make sure any work we've queued has finished and won't bother
+ * us while we're suspended.
+ */
+void intel_suspend_gt_powersave(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (INTEL_INFO(dev)->gen < 6)
+		return;
+
+	gen6_suspend_rps(dev);
 
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
 }
@@ -6365,9 +6381,11 @@ static void ironlake_disable_rc6(struct drm_device *dev)
 		I915_WRITE(PWRCTXA, 0);
 		POSTING_READ(PWRCTXA);
 
-		I915_WRITE(RSTDBYCTL, I915_READ(RSTDBYCTL) & ~RCX_SW_EXIT);
-		POSTING_READ(RSTDBYCTL);
-	}
+	if (INTEL_INFO(dev)->gen < 6)
+		return;
+
+	gen6_suspend_rps(dev);
+	dev_priv->rps.enabled = false;
 }
 
 static int ironlake_setup_rc6(struct drm_device *dev)
