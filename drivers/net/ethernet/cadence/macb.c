@@ -2458,6 +2458,9 @@ static int macb_remove(struct platform_device *pdev)
 		kfree(bp->mii_bus->irq);
 		mdiobus_free(bp->mii_bus);
 		unregister_netdev(dev);
+		queue = bp->queues;
+		for (q = 0; q < bp->num_queues; ++q, ++queue)
+			devm_free_irq(&pdev->dev, queue->irq, queue);
 		if (!IS_ERR(bp->tx_clk))
 			clk_disable_unprepare(bp->tx_clk);
 		clk_disable_unprepare(bp->hclk);
