@@ -1249,7 +1249,7 @@ good_area:
 		}
 
 		/* User mode? Just return to handle the fatal exception */
-		if (flags & FAULT_FLAG_USER)
+		if (fault & FAULT_FLAG_USER)
 			return;
 
 		/* Not returning to user mode? Handle exceptions or die: */
@@ -1259,7 +1259,6 @@ good_area:
 
 	up_read(&mm->mmap_sem);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
-		up_read(&mm->mmap_sem);
 		mm_fault_error(regs, error_code, address, fault);
 		return;
 	}
