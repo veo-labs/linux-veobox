@@ -329,6 +329,7 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 
 	switch (mbus_cfg->type) {
 	case V4L2_MBUS_PARALLEL:
+		printk("[%s]Mbus parallel \n", __func__);
 		csicfg->ext_vsync = 1;
 		csicfg->vsync_pol = (mbus_cfg->flags &
 				     V4L2_MBUS_VSYNC_ACTIVE_LOW) ? 1 : 0;
