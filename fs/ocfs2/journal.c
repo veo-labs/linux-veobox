@@ -2111,6 +2111,39 @@ static void ocfs2_clear_recovering_orphan_dir(struct ocfs2_super *osb,
 	ocfs2_node_map_clear_bit(osb, &osb->osb_recovering_orphan_dirs, slot);
 }
 
+static int ocfs2_truncate_file_locked(struct inode *inode)
+{
+	struct buffer_head *di_bh = NULL;
+	int ret;
+
+	ret = ocfs2_rw_lock(inode, 1);
+	if (ret < 0) {
+		mlog_errno(ret);
+		goto out;
+	}
+
+	ret = ocfs2_inode_lock(inode, &di_bh, 1);
+	if (ret < 0) {
+		ocfs2_rw_unlock(inode, 1);
+		mlog_errno(ret);
+		goto out;
+	}
+
+	ret = ocfs2_truncate_file(inode, di_bh, i_size_read(inode));
+	if (ret < 0) {
+		if (ret != -ENOSPC)
+			mlog_errno(ret);
+		ret = -ENOSPC;
+	}
+
+	ocfs2_inode_unlock(inode, 1);
+	ocfs2_rw_unlock(inode, 1);
+	brelse(di_bh);
+
+out:
+	return ret;
+}
+
 /*
  * Orphan recovery. Each mounted node has it's own orphan dir which we
  * must run during recovery. Our strategy here is to build a list of
@@ -2205,7 +2238,33 @@ static int ocfs2_recover_orphans(struct ocfs2_super *osb,
 			if (ret)
 				mlog_errno(ret);
 
-			wake_up(&OCFS2_I(inode)->append_dio_wq);
+		/*
+		 * We need to take and drop the inode lock to
+		 * force read inode from disk.
+		 */
+		ret = ocfs2_inode_lock(inode, NULL, 0);
+		if (ret) {
+			mlog_errno(ret);
+			goto next;
+		}
+		ocfs2_inode_unlock(inode, 0);
+
+		if (inode->i_nlink == 0) {
+			spin_lock(&oi->ip_lock);
+			/* Set the proper information to get us going into
+			 * ocfs2_delete_inode. */
+			oi->ip_flags |= OCFS2_INODE_MAYBE_ORPHANED;
+			spin_unlock(&oi->ip_lock);
+		} else if (orphan_reco_type == ORPHAN_NEED_TRUNCATE) {
+			ret = ocfs2_truncate_file_locked(inode);
+			if (ret) {
+				mlog_errno(ret);
+				goto next;
+			}
+
+			ret = ocfs2_del_inode_from_orphan(osb, inode, 0, 0);
+			if (ret)
+				mlog_errno(ret);
 		} /* else if ORPHAN_NO_NEED_TRUNCATE, do nothing */
 
 next:
