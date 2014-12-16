@@ -641,7 +641,7 @@ static int ocfs2_releasepage(struct page *page, gfp_t wait)
 }
 
 static int ocfs2_is_overwrite(struct ocfs2_super *osb,
-		struct inode *inode, loff_t offset)
+		struct inode *inode , loff_t offset)
 {
 	int ret = 0;
 	u32 v_cpos = 0;
@@ -688,7 +688,7 @@ static ssize_t ocfs2_direct_IO_write(struct kiocb *iocb,
 		u64 o = offset;
 
 		zero_len = do_div(o, 1 << osb->s_clustersize_bits);
-		cluster_align = !zero_len;
+		cluster_align = !!zero_len;
 	}
 
 	/*
@@ -698,10 +698,8 @@ static ssize_t ocfs2_direct_IO_write(struct kiocb *iocb,
 	 */
 	if (final_size > i_size_read(inode)) {
 		ret = ocfs2_add_inode_to_orphan(osb, inode);
-		if (ret < 0) {
-			mlog_errno(ret);
+		if (ret < 0)
 			goto out;
-		}
 		orphaned = true;
 	}
 
@@ -715,8 +713,7 @@ static ssize_t ocfs2_direct_IO_write(struct kiocb *iocb,
 		if (ocfs2_sparse_alloc(OCFS2_SB(inode->i_sb)))
 			ret = ocfs2_zero_extend(inode, di_bh, offset);
 		else
-			ret = ocfs2_extend_no_holes(inode, di_bh, offset,
-					offset);
+			ret = ocfs2_extend_no_holes(inode, di_bh, offset, offset);
 		if (ret < 0) {
 			mlog_errno(ret);
 			ocfs2_inode_unlock(inode, 1);
@@ -771,8 +768,7 @@ static ssize_t ocfs2_direct_IO_write(struct kiocb *iocb,
 			if (ret < 0)
 				mlog_errno(ret);
 		}
-	} else if (written < 0 && append_write && !is_overwrite &&
-			!cluster_align) {
+	} else if (append_write && !is_overwrite && !cluster_align) {
 		u32 p_cpos = 0;
 		u32 v_cpos = ocfs2_bytes_to_clusters(osb->sb, offset);
 
@@ -787,7 +783,8 @@ static ssize_t ocfs2_direct_IO_write(struct kiocb *iocb,
 
 		ret = blkdev_issue_zeroout(osb->sb->s_bdev,
 				p_cpos << (osb->s_clustersize_bits - 9),
-				zero_len >> 9, GFP_KERNEL, false);
+				zero_len >> 9,
+				GFP_KERNEL);
 		if (ret < 0)
 			mlog_errno(ret);
 	}
@@ -797,7 +794,6 @@ clean_orphan:
 		int tmp_ret;
 		int update_isize = written > 0 ? 1 : 0;
 		loff_t end = update_isize ? offset + written : 0;
-
 		tmp_ret = ocfs2_del_inode_from_orphan(osb, inode,
 				update_isize, end);
 		if (tmp_ret < 0) {
@@ -843,8 +839,7 @@ static ssize_t ocfs2_direct_IO(int rw,
 		return 0;
 
 	if (rw == READ)
-		return __blockdev_direct_IO(rw, iocb, inode,
-				    inode->i_sb->s_bdev,
+		return __blockdev_direct_IO(rw, iocb, inode, inode->i_sb->s_bdev,
 				    iter, offset,
 				    ocfs2_direct_IO_get_blocks,
 				    ocfs2_dio_end_io, NULL, 0);
