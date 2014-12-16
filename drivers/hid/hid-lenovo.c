@@ -665,11 +665,6 @@ static int lenovo_probe_cptkbd(struct hid_device *hdev)
 	if (ret)
 		hid_warn(hdev, "Failed to switch F7/9/11 mode: %d\n", ret);
 
-	/* Switch middle button to native mode */
-	ret = lenovo_send_cmd_cptkbd(hdev, 0x09, 0x01);
-	if (ret)
-		hid_warn(hdev, "Failed to switch middle button: %d\n", ret);
-
 	/* Set keyboard settings to known state */
 	cptkbd_data->fn_lock = true;
 	cptkbd_data->sensitivity = 0x05;
