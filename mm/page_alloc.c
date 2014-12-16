@@ -2846,9 +2846,11 @@ retry_cpuset:
 		 * can deadlock because I/O on the device might not
 		 * complete.
 		 */
-		alloc_mask = memalloc_noio_flags(gfp_mask);
+		gfp_t mask = memalloc_noio_flags(gfp_mask);
 
-		page = __alloc_pages_slowpath(alloc_mask, order, &ac);
+		page = __alloc_pages_slowpath(mask, order,
+				zonelist, high_zoneidx, nodemask,
+				preferred_zone, classzone_idx, migratetype);
 	}
 
 	if (kmemcheck_enabled && page)
