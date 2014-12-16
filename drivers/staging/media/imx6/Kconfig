@@ -23,3 +23,15 @@ config VIDEO_IMX6_CAMERA
 if VIDEO_IMX6_CAMERA
 source "drivers/staging/media/imx6/capture/Kconfig"
 endif
+
+config VIDEO_IMX6_M2M
+	tristate "i.MX6 Mem2Mem driver"
+	depends on VIDEO_IMX6 && VIDEO_DEV
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	default y
+	---help---
+	  Use the IPU IC Post-processor on the i.MX6 SoC for mem2mem
+	  processing of buffers. Operations include scaling, rotation,
+	  and color space conversion. The driver implements tiling to
+	  support scaling up to 4096x4096.
