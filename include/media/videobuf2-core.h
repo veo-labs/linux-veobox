@@ -138,10 +138,13 @@ enum vb2_io_modes {
  * by default the 'streaming' style is used by the file io emulator
  * @VB2_FILEIO_READ_ONCE:	report EOF after reading the first buffer
  * @VB2_FILEIO_WRITE_IMMEDIATELY:	queue buffer after each write() call
+ * @VB2_FILEIO_ALLOW_ZERO_BYTESUSED:	the driver setting this flag will handle
+ *					bytesused == 0 as a special case
  */
 enum vb2_fileio_flags {
 	VB2_FILEIO_READ_ONCE		= (1 << 0),
 	VB2_FILEIO_WRITE_IMMEDIATELY	= (1 << 1),
+	VB2_FILEIO_ALLOW_ZERO_BYTESUSED	= (1 << 2),
 };
 
 /**
