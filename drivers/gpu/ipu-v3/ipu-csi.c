@@ -341,7 +341,7 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 		break;
 	case V4L2_MBUS_BT656:
 		csicfg->ext_vsync = 0;
-		if (mbus_fmt->code == V4L2_MBUS_FMT_YUYV8_2X8)
+		if (mbus_fmt->code == MEDIA_BUS_FMT_YUYV8_2X8)
 			if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
 				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_INTERLACED_SDR;
 			else

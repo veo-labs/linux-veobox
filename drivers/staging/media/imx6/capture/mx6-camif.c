@@ -85,13 +85,13 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	{
 		.name	= "RGB565",
 		.fourcc	= V4L2_PIX_FMT_RGB565,
-		.codes  = {V4L2_MBUS_FMT_RGB565_2X8_LE},
+		.codes  = {MEDIA_BUS_FMT_RGB565_2X8_LE},
 		.depth  = 16,
 	}, {
 		.name	= "RGB24",
 		.fourcc	= V4L2_PIX_FMT_RGB24,
-		.codes  = {V4L2_MBUS_FMT_RGB888_1X24,
-			   V4L2_MBUS_FMT_RGB888_2X12_LE},
+		.codes  = {MEDIA_BUS_FMT_RGB888_1X24,
+			   MEDIA_BUS_FMT_RGB888_2X12_LE},
 		.depth  = 24,
 	}, {
 		.name	= "BGR24",
@@ -100,7 +100,7 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	}, {
 		.name	= "RGB32",
 		.fourcc	= V4L2_PIX_FMT_RGB32,
-		.codes = {V4L2_MBUS_FMT_ARGB8888_1X32},
+		.codes = {MEDIA_BUS_FMT_ARGB8888_1X32},
 		.depth  = 32,
 	}, {
 		.name	= "BGR32",
@@ -109,12 +109,12 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
-		.codes = {V4L2_MBUS_FMT_YUYV8_2X8},//, V4L2_MBUS_FMT_YUYV8_1X16},
+		.codes = {MEDIA_BUS_FMT_YUYV8_2X8},//, MEDIA_BUS_FMT_YUYV8_1X16},
 		.depth  = 16,
 	}, {
 		.name	= "4:2:2 packed, UYVY",
 		.fourcc	= V4L2_PIX_FMT_UYVY,
-		.codes = {V4L2_MBUS_FMT_UYVY8_2X8, V4L2_MBUS_FMT_UYVY8_1X16},
+		.codes = {MEDIA_BUS_FMT_UYVY8_2X8, MEDIA_BUS_FMT_UYVY8_1X16},
 		.depth  = 16,
 	}, {
 		.name	= "4:2:0 planar, YUV",
@@ -242,7 +242,7 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->subdev_fmt.width = dev->format.width;
 	dev->subdev_fmt.height = dev->format.height;
 	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
-	dev->subdev_fmt.code = V4L2_MBUS_FMT_YUYV8_2X8;
+	dev->subdev_fmt.code = MEDIA_BUS_FMT_YUYV8_2X8;
 	dev->subdev_pixfmt = mx6cam_get_format(0, dev->subdev_fmt.code);
 }
 
@@ -292,10 +292,10 @@ static bool can_use_vdic(struct mx6cam_dev *dev,
 {
 	return sf->width <= MAX_W_VDIC &&
 		sf->height <= MAX_H_VDIC &&
-		(sf->code == V4L2_MBUS_FMT_UYVY8_2X8 ||
-		 sf->code == V4L2_MBUS_FMT_UYVY8_1X16 ||
-		 sf->code == V4L2_MBUS_FMT_YUYV8_2X8 ||
-		 sf->code == V4L2_MBUS_FMT_YUYV8_1X16);
+		(sf->code == MEDIA_BUS_FMT_UYVY8_2X8 ||
+		 sf->code == MEDIA_BUS_FMT_UYVY8_1X16 ||
+		 sf->code == MEDIA_BUS_FMT_YUYV8_2X8 ||
+		 sf->code == MEDIA_BUS_FMT_YUYV8_1X16);
 }
 
 /*
@@ -2555,7 +2555,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 	struct v4l2_subdev_format sd_fmt = {
 		.pad = 1,
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
-		.format.code = V4L2_MBUS_FMT_YUYV8_1X16,
+		.format.code = MEDIA_BUS_FMT_YUYV8_1X16,
 	};*/
 	int ret, i;
 
