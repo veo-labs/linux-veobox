@@ -1970,7 +1970,7 @@ static int ov5640_querystd(struct v4l2_subdev *sd, v4l2_std_id *std)
 }
 
 static int ov5640_enum_mbus_fmt(struct v4l2_subdev *sd, unsigned index,
-				enum v4l2_mbus_pixelcode *code)
+				u32 *code)
 {
 	struct ov5640_dev *sensor = to_ov5640_dev(sd);
 
