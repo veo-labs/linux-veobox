@@ -594,15 +594,6 @@ static void sh_mobile_i2c_xfer_dma(struct sh_mobile_i2c_data *pd)
 	dma_addr_t dma_addr;
 	dma_cookie_t cookie;
 
-	if (PTR_ERR(chan) == -EPROBE_DEFER) {
-		if (read)
-			chan = pd->dma_rx = sh_mobile_i2c_request_dma_chan(pd->dev, DMA_DEV_TO_MEM,
-									   pd->res->start + ICDR);
-		else
-			chan = pd->dma_tx = sh_mobile_i2c_request_dma_chan(pd->dev, DMA_MEM_TO_DEV,
-									   pd->res->start + ICDR);
-	}
-
 	if (IS_ERR(chan))
 		return;
 
@@ -803,6 +794,41 @@ static const struct of_device_id sh_mobile_i2c_dt_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, sh_mobile_i2c_dt_ids);
 
+static struct dma_chan *sh_mobile_i2c_request_dma_chan(struct device *dev,
+				enum dma_transfer_direction dir, dma_addr_t port_addr)
+{
+	struct dma_chan *chan;
+	struct dma_slave_config cfg;
+	char *chan_name = dir == DMA_MEM_TO_DEV ? "tx" : "rx";
+	int ret;
+
+	chan = dma_request_slave_channel_reason(dev, chan_name);
+	if (IS_ERR(chan)) {
+		dev_dbg(dev, "request_channel failed for %s (%d)\n", chan_name, ret);
+		return chan;
+	}
+
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.direction = dir;
+	if (dir == DMA_MEM_TO_DEV) {
+		cfg.dst_addr = port_addr;
+		cfg.dst_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
+	} else {
+		cfg.src_addr = port_addr;
+		cfg.src_addr_width = DMA_SLAVE_BUSWIDTH_1_BYTE;
+	}
+
+	ret = dmaengine_slave_config(chan, &cfg);
+	if (ret) {
+		dev_dbg(dev, "slave_config failed for %s (%d)\n", chan_name, ret);
+		dma_release_channel(chan);
+		return ERR_PTR(ret);
+	}
+
+	dev_dbg(dev, "got DMA channel for %s\n", chan_name);
+	return chan;
+}
+
 static void sh_mobile_i2c_release_dma(struct sh_mobile_i2c_data *pd)
 {
 	if (!IS_ERR(pd->dma_tx)) {
@@ -906,7 +932,19 @@ static int sh_mobile_i2c_probe(struct platform_device *dev)
 	/* Init DMA */
 	sg_init_table(&pd->sg, 1);
 	pd->dma_direction = DMA_NONE;
-	pd->dma_rx = pd->dma_tx = ERR_PTR(-EPROBE_DEFER);
+	pd->dma_rx = sh_mobile_i2c_request_dma_chan(pd->dev, DMA_DEV_TO_MEM,
+						    res->start + ICDR);
+	ret = PTR_ERR(pd->dma_rx);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+
+	pd->dma_tx = sh_mobile_i2c_request_dma_chan(pd->dev, DMA_MEM_TO_DEV,
+						    res->start + ICDR);
+	ret = PTR_ERR(pd->dma_tx);
+	if (ret == -EPROBE_DEFER) {
+		sh_mobile_i2c_release_dma(pd);
+		return ret;
+	}
 
 	/* Enable Runtime PM for this device.
 	 *
