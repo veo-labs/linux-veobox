@@ -4132,7 +4132,7 @@ static int ov5642_probe(struct i2c_client *client,
 
 	sensor->i2c_client = client;
 	sensor->dev = dev;
-	sensor->fmt.code = V4L2_MBUS_FMT_YUYV8_2X8;
+	sensor->fmt.code = MEDIA_BUS_FMT_YUYV8_2X8;
 	sensor->fmt.width = 640;
 	sensor->fmt.height = 480;
 	sensor->fmt.field = V4L2_FIELD_NONE;

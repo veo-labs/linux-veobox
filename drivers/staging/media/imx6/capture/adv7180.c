@@ -1204,7 +1204,7 @@ static int adv7180_probe(struct i2c_client *client,
 	sensor->streamcap.timeperframe.numerator = 1;
 	sensor->fmt.width = video_fmts[sensor->video_idx].raw.width;
 	sensor->fmt.height = video_fmts[sensor->video_idx].raw.height;
-	sensor->fmt.code = V4L2_MBUS_FMT_UYVY8_2X8;
+	sensor->fmt.code = MEDIA_BUS_FMT_UYVY8_2X8;
 	sensor->fmt.field = V4L2_FIELD_SEQ_BT;
 
 	mutex_init(&sensor->mutex);
