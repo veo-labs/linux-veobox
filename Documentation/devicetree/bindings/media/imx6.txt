@@ -1,4 +1,27 @@
-Freescale i.MX6 Video Capture
+Freescale i.MX6 Video Capture, Mem2Mem
+
+Video Mem2Mem node
+------------------
+
+This is the imx6 V4L2 mem2mem device node. The mem2mem node is an IPU
+client and uses the register-level primitives of the IPU, so it does
+not require reg or interrupt properties. Only a compatible property
+and the ipu phandle is required.
+
+Required properties:
+- compatible	: "fsl,imx6-v4l2-mem2mem";
+- ipu           : the ipu phandle;
+
+Example:
+
+/ {
+	ipum2m0: ipum2m@ipu1 {
+		compatible = "fsl,imx6-v4l2-mem2mem";
+		ipu = <&ipu1>;
+		status = "okay";
+	};
+};
+
 
 v4l2-capture node
 -----------------
