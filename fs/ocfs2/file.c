@@ -2213,15 +2213,6 @@ static int ocfs2_prepare_inode_for_write(struct file *file,
 		}
 
 		/*
-		 * Fallback to old way if the feature bit is not set.
-		 */
-		if (end > i_size_read(inode) &&
-				!ocfs2_supports_append_dio(osb)) {
-			*direct_io = 0;
-			break;
-		}
-
-		/*
 		 * We don't fill holes during direct io, so
 		 * check for them here. If any are found, the
 		 * caller will have to retake some cluster
