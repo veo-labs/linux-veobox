@@ -235,8 +235,7 @@
 #define OCFS2_CHAIN_FL		(0x00000400)	/* Chain allocator */
 #define OCFS2_DEALLOC_FL	(0x00000800)	/* Truncate log */
 #define OCFS2_QUOTA_FL		(0x00001000)	/* Quota file */
-#define OCFS2_DIO_ORPHANED_FL	(0X00002000)	/* On the orphan list especially
-						 * for dio */
+#define OCFS2_DIO_ORPHANED_FL	(0X00002000)	/* On the orphan list especially for dio */
 
 /*
  * Flags on ocfs2_dinode.i_dyn_features
