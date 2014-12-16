@@ -217,7 +217,6 @@ static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 
 static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_timings *timings)
 {
-	printk("--> %s\n", __func__);
 	dev->format.pixelformat = V4L2_PIX_FMT_YUYV;
 	dev->format.width = timings->bt.width;
 	dev->format.height = timings->bt.height;
@@ -236,7 +235,6 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->format.sizeimage = dev->format.bytesperline * dev->format.height;
 	dev->format.priv = 0;
 	dev->user_pixfmt = mx6cam_get_format_by_fourcc(dev->format.pixelformat);
-	printk("Format of CSI set to %s\n", dev->user_pixfmt->name);
 
 	/* Update subdev_fmt as well */
 	dev->subdev_fmt.width = dev->format.width;
@@ -1698,7 +1696,6 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	if (!ep)
 		return -EINVAL;
 
-	printk("--> %s\n", __func__);
 	ret = v4l2_subdev_call(dev->ep->sd,
 			video, s_dv_timings, timings);
 
@@ -1711,7 +1708,6 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	else
 		sd_fmt.pad = 6;
 
-	printk("Calling set_fmt on %s\n", dev->ep->sd->name);
 	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
 	return ret;
 
