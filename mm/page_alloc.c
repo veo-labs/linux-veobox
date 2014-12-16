@@ -2316,11 +2316,26 @@ should_alloc_retry(gfp_t gfp_mask, unsigned int order,
 
 static inline struct page *
 __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
-	const struct alloc_context *ac, unsigned long *did_some_progress)
+	struct zonelist *zonelist, enum zone_type high_zoneidx,
+	nodemask_t *nodemask, struct zone *preferred_zone,
+	int classzone_idx, int migratetype, unsigned long *did_some_progress)
 {
 	struct page *page;
 
 	*did_some_progress = 0;
+
+	if (oom_killer_disabled)
+		return NULL;
+
+	/*
+	 * Acquire the per-zone oom lock for each zone.  If that
+	 * fails, somebody else is making progress for us.
+	 */
+	if (!oom_zonelist_trylock(zonelist, gfp_mask)) {
+		*did_some_progress = 1;
+		schedule_timeout_uninterruptible(1);
+		return NULL;
+	}
 
 	/*
 	 * Acquire the per-zone oom lock for each zone.  If that
@@ -2355,6 +2370,9 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 		/* The OOM killer does not compensate for light reclaim */
 		if (!(gfp_mask & __GFP_FS))
 			goto out;
+		/* The OOM killer does not compensate for light reclaim */
+		if (!(gfp_mask & __GFP_FS))
+			goto out;
 		/*
 		 * GFP_THISNODE contains __GFP_NORETRY and we never hit this.
 		 * Sanity check for bare calls of __GFP_THISNODE, not real OOM.
@@ -2366,8 +2384,8 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 			goto out;
 	}
 	/* Exhausted what can be done so it's blamo time */
-	if (out_of_memory(ac->zonelist, gfp_mask, order, ac->nodemask, false))
-		*did_some_progress = 1;
+	out_of_memory(zonelist, gfp_mask, order, nodemask, false);
+	*did_some_progress = 1;
 out:
 	oom_zonelist_unlock(ac->zonelist, gfp_mask);
 	return page;
@@ -2626,7 +2644,6 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	    (gfp_mask & GFP_THISNODE) == GFP_THISNODE)
 		goto nopage;
 
-retry:
 	if (!(gfp_mask & __GFP_NO_KSWAPD))
 		wake_all_kswapds(order, ac);
 
@@ -2756,12 +2773,16 @@ retry:
 		 * start OOM killing tasks.
 		 */
 		if (!did_some_progress) {
-			page = __alloc_pages_may_oom(gfp_mask, order, ac,
-							&did_some_progress);
+			page = __alloc_pages_may_oom(gfp_mask, order, zonelist,
+						high_zoneidx, nodemask,
+						preferred_zone, classzone_idx,
+						migratetype,&did_some_progress);
 			if (page)
 				goto got_pg;
-			if (!did_some_progress)
+			if (!did_some_progress) {
+				BUG_ON(gfp_mask & __GFP_NOFAIL);
 				goto nopage;
+			}
 		}
 		/* Wait for some write requests to complete then retry */
 		wait_iff_congested(ac->preferred_zone, BLK_RW_ASYNC, HZ/50);

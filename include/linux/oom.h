@@ -78,8 +78,16 @@ extern int register_oom_notifier(struct notifier_block *nb);
 extern int unregister_oom_notifier(struct notifier_block *nb);
 
 extern bool oom_killer_disabled;
-extern bool oom_killer_disable(void);
-extern void oom_killer_enable(void);
+
+static inline void oom_killer_disable(void)
+{
+	oom_killer_disabled = true;
+}
+
+static inline void oom_killer_enable(void)
+{
+	oom_killer_disabled = false;
+}
 
 extern struct task_struct *find_lock_task_mm(struct task_struct *p);
 
