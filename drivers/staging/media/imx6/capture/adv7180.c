@@ -806,7 +806,7 @@ static int adv7180_s_routing(struct v4l2_subdev *sd, u32 input,
 }
 
 static int adv7180_enum_mbus_fmt(struct v4l2_subdev *sd, unsigned index,
-				 enum v4l2_mbus_pixelcode *code)
+				 u32 *code)
 {
 	struct adv7180_dev *sensor = to_adv7180_dev(sd);
 
