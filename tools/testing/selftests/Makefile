@@ -16,10 +16,8 @@ TARGETS += size
 TARGETS += sysctl
 TARGETS += timers
 TARGETS += user
-TARGETS += sysctl
-TARGETS += firmware
-TARGETS += ftrace
-TARGETS += size
+TARGETS += vm
+#Please keep the TARGETS list alphabetically sorted
 
 TARGETS_HOTPLUG = cpu-hotplug
 TARGETS_HOTPLUG += memory-hotplug
