@@ -2121,7 +2121,7 @@ static int ov5640_probe(struct i2c_client *client,
 
 	sensor->i2c_client = client;
 	sensor->dev = dev;
-	sensor->fmt.code = V4L2_MBUS_FMT_UYVY8_2X8;
+	sensor->fmt.code = MEDIA_BUS_FMT_UYVY8_2X8;
 	sensor->fmt.width = 640;
 	sensor->fmt.height = 480;
 	sensor->streamcap.capability = V4L2_MODE_HIGHQUALITY |

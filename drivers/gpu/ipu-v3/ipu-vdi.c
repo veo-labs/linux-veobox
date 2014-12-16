@@ -125,10 +125,10 @@ void ipu_vdi_setup(struct ipu_vdi *vdi, u32 code, int xres, int yres,
 	 * Full motion, only vertical filter is used.
 	 * Burst size is 4 accesses
 	 */
-	if (code == V4L2_MBUS_FMT_UYVY8_2X8 ||
-	    code == V4L2_MBUS_FMT_UYVY8_1X16 ||
-	    code == V4L2_MBUS_FMT_YUYV8_2X8 ||
-	    code == V4L2_MBUS_FMT_YUYV8_1X16)
+	if (code == MEDIA_BUS_FMT_UYVY8_2X8 ||
+	    code == MEDIA_BUS_FMT_UYVY8_1X16 ||
+	    code == MEDIA_BUS_FMT_YUYV8_2X8 ||
+	    code == MEDIA_BUS_FMT_YUYV8_1X16)
 		pixel_fmt = VDI_C_CH_422;
 	else
 		pixel_fmt = VDI_C_CH_420;
