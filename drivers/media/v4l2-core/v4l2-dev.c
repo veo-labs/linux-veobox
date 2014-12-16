@@ -349,7 +349,6 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int ret = -ENODEV;
 
 	if (vdev->fops->unlocked_ioctl) {
-		printk("[%s] Device %s : unlocked_ioctl\n", __func__, video_device_node_name(vdev));
 		struct mutex *lock = v4l2_ioctl_get_lock(vdev, cmd);
 
 		if (lock && mutex_lock_interruptible(lock))
@@ -359,7 +358,6 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (lock)
 			mutex_unlock(lock);
 	} else if (vdev->fops->ioctl) {
-		printk("[%s] Device %s : ioctl\n", __func__, video_device_node_name(vdev));
 		/* This code path is a replacement for the BKL. It is a major
 		 * hack but it will have to do for those drivers that are not
 		 * yet converted to use unlocked_ioctl.
@@ -388,7 +386,6 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (cmd != VIDIOC_DQBUF)
 			mutex_unlock(m);
 	} else {
-		printk("[%s] Device %s : no ioctl ops\n", __func__, video_device_node_name(vdev));
 		ret = -ENOTTY;
 	}
 
