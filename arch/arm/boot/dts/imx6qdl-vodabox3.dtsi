@@ -64,6 +64,19 @@
 		mux-int-port = <1>;
 		mux-ext-port = <5>;
 	};
+
+	ipum2m0: ipum2m@ipu1 {
+		compatible = "fsl,imx6-v4l2-mem2mem";
+		ipu = <&ipu1>;
+		status = "okay";
+	};
+
+	ipum2m1: ipum2m@ipu2 {
+		compatible = "fsl,imx6-v4l2-mem2mem";
+		ipu = <&ipu2>;
+		status = "okay";
+	};
+
 	v4l2cap0: v4l2cap@ipu1 {
 		compatible = "fsl,imx6-v4l2-capture";
 		#address-cells = <1>;
