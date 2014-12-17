@@ -58,7 +58,6 @@ enum mode_set_atomic {
  * @mode_set_base_atomic: non-blocking mode set (used for kgdb support)
  * @load_lut: load color palette
  * @disable: disable CRTC when no longer in use
- * @enable: enable CRTC
  * @atomic_check: check for validity of an atomic state
  * @atomic_begin: begin atomic update
  * @atomic_flush: flush atomic update
@@ -123,8 +122,6 @@ struct drm_crtc_helper_funcs {
  * @get_crtc: return CRTC that the encoder is currently attached to
  * @detect: connection status detection
  * @disable: disable encoder when not in use (overrides DPMS off)
- * @enable: enable encoder
- * @atomic_check: check for validity of an atomic update
  *
  * The helper operations are called by the mid-layer CRTC helper.
  *
