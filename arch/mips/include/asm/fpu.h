@@ -77,7 +77,7 @@ static inline int __enable_fpu(enum fpu_mode mode)
 	case FPU_32BIT:
 		if (cpu_has_fre) {
 			/* clear FRE */
-			clear_c0_config5(MIPS_CONF5_FRE);
+			write_c0_config5(read_c0_config5() & ~MIPS_CONF5_FRE);
 		}
 fr_common:
 		/* set CU1 & change FR appropriately */
@@ -197,13 +197,15 @@ static inline int init_fpu(void)
 			return 0;
 		}
 
+		config5 = read_c0_config5();
+
 		/*
 		 * Ensure FRE is clear whilst running _init_fpu, since
 		 * single precision FP instructions are used. If FRE
 		 * was set then we'll just end up initialising all 32
 		 * 64b registers.
 		 */
-		config5 = clear_c0_config5(MIPS_CONF5_FRE);
+		write_c0_config5(config5 & ~MIPS_CONF5_FRE);
 		enable_fpu_hazard();
 
 		_init_fpu();
