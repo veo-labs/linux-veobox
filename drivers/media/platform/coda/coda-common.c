@@ -1541,6 +1541,13 @@ static int coda_queue_init(struct coda_ctx *ctx, struct vb2_queue *vq)
 	vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	vq->lock = &ctx->dev->dev_mutex;
+	/* One of means to indicate end-of-stream for coda is to set the
+	 * bytesused == 0. However by default videobuf2 handles videobuf
+	 * equal to 0 as a special case and changes its value to the size
+	 * of the buffer. Set the VB2_FILEIO_ALLOW_ZERO_BYTESUSED flag, so
+	 * that videobuf2 will keep the value of bytesused intact.
+	 */
+	vq->io_flags = VB2_FILEIO_ALLOW_ZERO_BYTESUSED;
 
 	return vb2_queue_init(vq);
 }
