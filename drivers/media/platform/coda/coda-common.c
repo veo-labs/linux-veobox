@@ -836,6 +836,38 @@ static int coda_decoder_cmd(struct file *file, void *fh,
 	return 0;
 }
 
+static int coda_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
+{
+	struct coda_ctx *ctx = fh_to_ctx(fh);
+
+	if (a->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		return -EINVAL;
+
+	a->parm.output.capability = V4L2_CAP_TIMEPERFRAME;
+	a->parm.output.timeperframe.denominator = 1;
+	a->parm.output.timeperframe.numerator = ctx->params.framerate;
+
+	return 0;
+}
+
+static int coda_s_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
+{
+	struct coda_ctx *ctx = fh_to_ctx(fh);
+
+	if (a->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		return -EINVAL;
+
+	if (a->parm.output.timeperframe.numerator != 0) {
+		ctx->params.framerate = a->parm.output.timeperframe.denominator
+				      / a->parm.output.timeperframe.numerator;
+	}
+
+	a->parm.output.timeperframe.denominator = 1;
+	a->parm.output.timeperframe.numerator = ctx->params.framerate;
+
+	return 0;
+}
+
 static int coda_subscribe_event(struct v4l2_fh *fh,
 				const struct v4l2_event_subscription *sub)
 {
@@ -875,6 +907,9 @@ static const struct v4l2_ioctl_ops coda_ioctl_ops = {
 
 	.vidioc_try_decoder_cmd	= coda_try_decoder_cmd,
 	.vidioc_decoder_cmd	= coda_decoder_cmd,
+
+	.vidioc_g_parm		= coda_g_parm,
+	.vidioc_s_parm		= coda_s_parm,
 
 	.vidioc_subscribe_event = coda_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
