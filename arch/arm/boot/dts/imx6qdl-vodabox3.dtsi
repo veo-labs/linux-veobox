@@ -79,16 +79,8 @@
 };
 
 &ipu1_csi0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_csi0>;
-	csi0_input: endpoint {
+	csi0_from_hdmi: endpoint {
 		remote-endpoint = <&hdmi0_out>;
-	};
-};
-
-&ipu2_csi1 {
-	csi1_input: endpoint {
-		remote-endpoint = <&hdmi1_out>;
 	};
 };
 
@@ -190,6 +182,8 @@
 
 	hdmiin1: adv7611@4c {
 		compatible = "adi,adv7611";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_csi0>;
 		reset-gpios = <&gpio1 20 GPIO_ACTIVE_LOW>;
 		reg = <0x4c 0x68 0x66 0x64 0x62
 			0x60 0x5e 0x5c 0x5a 0x58 0x56
@@ -206,7 +200,8 @@
 			port@1 {
 				reg = <1>;
 				hdmi0_out: endpoint@1 {
-					remote-endpoint = <&csi0_input>;
+					//remote-endpoint = <&hdmi0_fpga_in>;
+					remote-endpoint = <&csi0_from_hdmi>;
 					bus-width = <16>;
 				};
 			};
@@ -243,7 +238,8 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					remote-endpoint = <&csi1_input>;
+					remote-endpoint = <&hdmi1_fpga_in>;
+					//remote-endpoint = <&csi1>;
 					bus-width = <16>;
 				};
 			};
@@ -263,10 +259,10 @@
 				};
 			};
 			port@1 {
-				reg = <1>;
+				/*reg = <1>;
 				hdmi0_fpga_in: endpoint {
 					remote-endpoint = <&hdmi0_out>;
-				};
+				};*/
 			};
 			port@2 {
 				reg = <2>;
@@ -280,18 +276,18 @@
 					remote-endpoint = <&hdmi1_out>;
 				};
 			};
-			port@4 {/*
-				reg = <4>;
+			port@4 {
+				/*reg = <4>;
 				csi0_fpga_out: endpoint {
-					remote-endpoint = <&csi0_from_fpga>;
 					bus-width = <16>;
+					remote-endpoint = <&csi0_from_fpga>;
 				};*/
 			};
-			port@5 {/*
-				reg = <5>;
+			port@5 {
+				/*reg = <5>;
 				csi1_fpga_out: endpoint {
-					remote-endpoint = <&csi1_from_fpga>;
 					bus-width = <16>;
+					remote-endpoint = <&csi1>;
 				};*/
 			};
 		};
@@ -611,6 +607,11 @@
 	pinctrl-0 = <&pinctrl_fec>;
 	phy-mode = "rmii";
 	phy-reset-gpios = <&gpio1 30 0>;
+	status = "okay";
+};
+
+&hdmi {
+	ddc-i2c-bus = <&i2c2>;
 	status = "okay";
 };
 
