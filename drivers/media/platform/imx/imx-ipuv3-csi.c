@@ -697,7 +697,7 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 		ipu_ic_enable(ipucsi->ic);
 		/* setup RSC and CSC */
 		ipu_ic_task_init(ipucsi->ic, width, height, width, height,
-				 IPUV3_COLORSPACE_RGB, IPUV3_COLORSPACE_RGB, 0);
+				 IPUV3_COLORSPACE_RGB, IPUV3_COLORSPACE_RGB);
 	}
 
 	/* FIXME */
