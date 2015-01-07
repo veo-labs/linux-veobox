@@ -1291,6 +1291,14 @@ static int vidioc_log_status(struct file *file, void *f)
        return 0;
 }
 
+static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
+{
+       struct video_device *vdev = video_devdata(file);
+
+       v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
+       return 0;
+}
+
 static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 	.vidioc_querycap		= ipucsi_querycap,
 
@@ -1312,6 +1320,7 @@ static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 
 	.vidioc_enum_framesizes		= ipucsi_enum_framesizes,
 	.vidioc_log_status      = vidioc_log_status,
+	.vidioc_s_edid          = vidioc_s_edid,
 };
 
 static int ipucsi_subdev_s_ctrl(struct v4l2_ctrl *ctrl)
