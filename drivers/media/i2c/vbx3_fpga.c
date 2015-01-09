@@ -224,7 +224,7 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	} else {
 		v4l_info(client, "version read : 0x%x\n", version);
 	}
-	i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0, 0x04);
+	i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0, 0x00);
 	i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN1, 0x04);
 	status = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_GLOBAL_STATUS);
 	v4l_info(client, "Status : 0x%x\n", status);

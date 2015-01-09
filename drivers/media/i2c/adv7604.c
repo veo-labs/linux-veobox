@@ -36,12 +36,18 @@
 #include <linux/v4l2-dv-timings.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
+#include <linux/platform_device.h>
 
 #include <media/adv7604.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-of.h>
+
+#include <linux/regmap.h>
+#include <sound/soc.h>
+
+#include "../../../sound/soc/codecs/adv76xx.h"
 
 static int debug;
 module_param(debug, int, 0644);
@@ -82,6 +88,12 @@ enum adv7604_type {
 	ADV7611,
 };
 
+static const char id_names[2][I2C_NAME_SIZE] = {
+		"adv7604",
+		"adv7611",
+};
+
+
 struct adv7604_reg_seq {
 	unsigned int reg;
 	u8 val;
@@ -118,6 +130,7 @@ struct adv7604_chip_info {
 	void (*setup_irqs)(struct v4l2_subdev *sd);
 	unsigned int (*read_hdmi_pixelclock)(struct v4l2_subdev *sd);
 	unsigned int (*read_cable_det)(struct v4l2_subdev *sd);
+	int (*init_core)(struct v4l2_subdev *sd);
 
 	/* 0 = AFE, 1 = HDMI */
 	const struct adv7604_reg_seq *recommended_settings[2];
@@ -137,6 +150,7 @@ struct adv7604_chip_info {
 struct adv7604_state {
 	const struct adv7604_chip_info *info;
 	struct adv7604_platform_data pdata;
+	struct platform_device *pdev_snd_codec;
 
 	struct gpio_desc *hpd_gpio[4];
 
@@ -348,7 +362,6 @@ static const struct adv7604_register adv7604_secondary_names[] = {
 	[ADV7604_PAGE_VDP] = { "vdp", 0x24 },
 };
 
-/* ----------------------------------------------------------------------- */
 
 static inline struct adv7604_state *to_state(struct v4l2_subdev *sd)
 {
@@ -1222,7 +1235,15 @@ static inline bool no_lock_tmds(struct v4l2_subdev *sd)
 
 static inline bool is_hdmi(struct v4l2_subdev *sd)
 {
-	return hdmi_read(sd, 0x05) & 0x80;
+	//io_read(sd, 0x65) & 0x04;
+	return 	hdmi_read(sd, 0x05) & 0x80;
+
+}
+
+static inline bool is_adv7604(struct v4l2_subdev *sd)
+{
+	char * aux = "adv7604";
+	return (!strncmp(sd->name, aux, strlen(aux)));
 }
 
 static inline bool no_lock_sspd(struct v4l2_subdev *sd)
@@ -2297,8 +2318,9 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 				audio_sample_packet_detect ? "detected" : "not detected",
 				audio_mute ? "muted" : "enabled");
 		if (audio_pll_locked && audio_sample_packet_detect) {
+			// Change from adv7611 and adv7604
 			v4l2_info(sd, "Audio format: %s\n",
-					(hdmi_read(sd, 0x07) & 0x20) ? "multi-channel" : "stereo");
+				(hdmi_read(sd, 0x07) & (is_adv7604(sd) ? 0x20 : 0x40 ) ? "multi-channel" : "stereo"));
 		}
 		v4l2_info(sd, "Audio CTS: %u\n", (hdmi_read(sd, 0x5b) << 12) +
 				(hdmi_read(sd, 0x5c) << 8) +
@@ -2353,6 +2375,7 @@ static const struct v4l2_subdev_ops adv7604_ops = {
 	.core = &adv7604_core_ops,
 	.video = &adv7604_video_ops,
 	.pad = &adv7604_pad_ops,
+	// TODO Add .audio ops for adv7611
 };
 
 /* -------------------------- custom ctrls ---------------------------------- */
@@ -2391,6 +2414,75 @@ static const struct v4l2_ctrl_config adv7604_ctrl_free_run_color = {
 };
 
 /* ----------------------------------------------------------------------- */
+static int adv7611_core_init(struct v4l2_subdev *sd)
+{
+	struct adv7604_state *state = to_state(sd);
+	const struct adv7604_chip_info *info = state->info;
+	struct adv7604_platform_data *pdata = &state->pdata;
+
+	hdmi_write(sd, 0x48,(pdata->disable_cable_det_rst ? 0x40 : 0));
+
+	disable_input(sd);
+
+	if (pdata->default_input >= 0 &&
+			pdata->default_input < state->source_pad) {
+
+		state->selected_input = pdata->default_input;
+		select_input(sd);
+		enable_input(sd);
+	}
+
+	/* power */
+	io_write(sd, 0x0c, 0x42);   /* Power up part and power down VDP */
+
+	/* video format */
+	io_write_clr_set(sd, 0x02, 0x0f,
+			pdata->alt_gamma << 3 |
+			pdata->op_656_range << 2 |
+			pdata->alt_data_sat << 0);
+	io_write_clr_set(sd, 0x05, 0x0e, pdata->blank_data << 3 |
+			pdata->insert_av_codes << 2 |
+			pdata->replicate_av_codes << 1);
+	adv7604_setup_format(state);
+
+	cp_write(sd, 0x69, 0x10);   /* Enable CP CSC */
+
+	/* VS, HS polarities */
+	io_write(sd, 0x06, 0xa0 | pdata->inv_vs_pol << 2 |
+			pdata->inv_hs_pol << 1 | pdata->inv_llc_pol);
+
+	/* Adjust drive strength */
+	io_write(sd, 0x14, 0x40 | pdata->dr_str_data << 4 |
+			pdata->dr_str_clk << 2 |
+			pdata->dr_str_sync);
+
+	cp_write(sd, 0xba, (pdata->hdmi_free_run_mode << 1) | 0x01); /* HDMI free run */
+	cp_write(sd, 0xf3, 0xdc); /* Low threshold to enter/exit free run mode */
+	//cp_write(sd, 0xf9, 0x23); /*  STDI ch. 1 - LCVS change threshold -
+	//				      ADI recommended setting [REF_01, c. 2.3.3] */
+	//cp_write(sd, 0x45, 0x23); /*  STDI ch. 2 - LCVS change threshold -
+	//				      ADI recommended setting [REF_01, c. 2.3.3] */
+	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
+					     for digital formats */
+
+	/* HDMI audio */
+	hdmi_write_clr_set(sd, 0x15, 0x03, 0x03); /* Mute on FIFO over-/underflow [REF_01, c. 1.2.18] */
+	hdmi_write_clr_set(sd, 0x1a, 0x0e, 0x08); /* Wait 1 s before unmute */
+	hdmi_write_clr_set(sd, 0x68, 0x06, 0x06); /* FIFO reset on over-/underflow [REF_01, c. 1.2.19] */
+
+	/* TODO from platform data */
+	hdmi_write(sd, 0xb5, 0x01);  /* Setting MCLK to 256Fs */
+
+	dev_info(sd->dev, "Configuring interrup INT1 %d and \n",pdata->int1_config );
+	/* interrupts */
+	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
+	io_write(sd, 0x46, 0x98); /* Enable SSPD, STDI and CP unlocked interrupts */
+	io_write(sd, 0x6e, info->fmt_change_digital_mask); /* Enable V_LOCKED and DE_REGEN_LCK interrupts */
+	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
+	info->setup_irqs(sd);
+
+	return v4l2_ctrl_handler_setup(sd->ctrl_handler);
+}
 
 static int adv7604_core_init(struct v4l2_subdev *sd)
 {
@@ -2399,8 +2491,8 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 	struct adv7604_platform_data *pdata = &state->pdata;
 
 	hdmi_write(sd, 0x48,
-		(pdata->disable_pwrdnb ? 0x80 : 0) |
-		(pdata->disable_cable_det_rst ? 0x40 : 0));
+				(pdata->disable_pwrdnb ? 0x80 : 0) |
+				(pdata->disable_cable_det_rst ? 0x40 : 0));
 
 	disable_input(sd);
 
@@ -2570,7 +2662,7 @@ static const struct adv7604_reg_seq adv7611_recommended_settings_hdmi[] = {
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x87), 0x70 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x57), 0xda },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x58), 0x01 },
-	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x03), 0x98 },
+	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x03), 0x98 },	// Enable Zeroing of I2S, IS2 Mode, 24bits right justified
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x4c), 0x44 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x8d), 0x04 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x8e), 0x1e },
@@ -2612,6 +2704,7 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_EDID) | BIT(ADV7604_PAGE_HDMI) |
 			BIT(ADV7604_PAGE_TEST) | BIT(ADV7604_PAGE_CP) |
 			BIT(ADV7604_PAGE_VDP),
+		.init_core = adv7604_core_init,
 	},
 	[ADV7611] = {
 		.type = ADV7611,
@@ -2641,6 +2734,7 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_INFOFRAME) | BIT(ADV7604_PAGE_AFE) |
 			BIT(ADV7604_PAGE_REP) |  BIT(ADV7604_PAGE_EDID) |
 			BIT(ADV7604_PAGE_HDMI) | BIT(ADV7604_PAGE_CP),
+		.init_core = adv7611_core_init,
 	},
 };
 
@@ -2705,6 +2799,241 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 
 	return 0;
 }
+
+
+// TODO AUDIO CONFIGURATION -----  IN PROGRESS
+#define DAI_FMT_DEFAULT (SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFS)
+
+static bool adv7611_hdmi_readable(struct device *dev, unsigned int reg){
+	return true;
+}
+
+static bool adv7611_hdmi_writable(struct device *dev, unsigned int reg){
+
+	switch (reg) {
+	case ADV7611_HDMI_REGISTER_00:
+	case ADV7611_HDMI_REGISTER_01:
+	case ADV7611_HDMI_REGISTER_03:
+	case ADV7611_HDMI_REGISTER_0D:
+	case ADV7611_AUDIO_MUTE_SPEED:
+	case ADV7611_HDMI_REGISTER_10:
+	case ADV7611_AUDIO_FIFO_ALM_OST_FULL_THRES_HOLD:
+	case ADV7611_AUDIO_FIFO_ALM_OST_EMPTY_THRE_SHOLD:
+	case ADV7611_AUDIO_COAST_MASK:
+	case ADV7611_MUTE_MASK_21_16:
+	case ADV7611_MUTE_MASK_15_8:
+	case ADV7611_MUTE_MASK_7_0:
+	case ADV7611_MUTE_CTRL:
+	case ADV7611_DEEPCOLOR_FIFO_DEBUG_1:
+	case ADV7611_REGISTER_1DH:
+	case ADV7611_REGISTER_3CH:
+	case ADV7611_REGISTER_40H:
+	case ADV7611_REGISTER_41H:
+	case ADV7611_REGISTER_47H:
+	case ADV7611_REGISTER_48H:
+	case ADV7611_REGISTER_4CH:
+	case ADV7611_HDMI_REGISTER_50:
+	case ADV7611_FILT_5V_DET_REG:
+	case ADV7611_REGISTER_5AH:
+	case ADV7611_HPA_DELAY_SEL_3_0:
+	case ADV7611_DSD_MAP_ROT_2_0:
+	case ADV7611_DDC_PAD:
+	case ADV7611_HDMI_REGISTER_02:
+	case ADV7611_EQ_DYNAMIC_FREQ:
+	case ADV7611_EQ_DYN1_LF:
+	case ADV7611_EQ_DYN1_HF:
+	case ADV7611_EQ_DYN2_LF:
+	case ADV7611_EQ_DYN2_HF:
+	case ADV7611_EQ_DYN3_LF:
+	case ADV7611_EQ_DYN3_HF:
+	case ADV7611_EQ_DYNAMIC_ENABLE:
+		return true;
+	}
+
+	return false;
+}
+
+
+// Default register values for the adv7611 device
+static const struct reg_default adv7611_hdmi_reg_defaults[] = {
+		{},
+};
+
+static const struct regmap_config adv76xx_hdmi_snd_regmap = {
+	.name 			= HDMI_REG_NAME,
+	.reg_bits 		= 8,
+	.val_bits 		= 8,
+	.reg_stride 	= 1,
+
+	.readable_reg 		= adv7611_hdmi_readable,
+	.writeable_reg		= adv7611_hdmi_writable,
+
+	.max_register		= ADV7611_HDMI_MAX_REG_OFFSET,
+	.cache_type 		= REGCACHE_RBTREE,
+	.reg_defaults 		= adv7611_hdmi_reg_defaults,
+	.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+};
+
+/**
+ * This dapm route map exists for DPCM link only.
+ * The other routes shall go through Device Tree.
+ */
+static const struct snd_soc_dapm_route audio_map[] = {
+	{"CPU-Capture",  NULL, "Capture"},
+};
+
+static int adv_asoc_card_late_probe(struct snd_soc_card *card)
+{
+//	struct fsl_asoc_card_priv *priv = snd_soc_card_get_drvdata(card);
+//	struct snd_soc_dai *codec_dai = card->rtd[0].codec_dai;
+//	struct codec_priv *codec_priv = &priv->codec_priv;
+//	struct device *dev = card->dev;
+//	int ret;
+//
+//	ret = snd_soc_dai_set_sysclk(codec_dai, codec_priv->mclk_id,
+//				     codec_priv->mclk_freq, SND_SOC_CLOCK_IN);
+//	if (ret) {
+//		dev_err(dev, "failed to set sysclk in %s\n", __func__);
+//		return ret;
+//	}
+
+	if (card == NULL)
+		return -ENODEV;
+
+	dev_info(card->dev, "ASOC card %s late probe \n", card->name);
+
+	return 0;
+}
+
+/*
+ * Unregister Sound
+ */
+static void adv76xx_unregister_snd (struct adv7604_state *state){
+
+	struct adv76xx_snd_data * data;
+
+	if (state != NULL && state->pdev_snd_codec != NULL){
+
+		data = state->pdev_snd_codec->dev.driver_data;
+		snd_soc_unregister_card(&data->card);
+		platform_device_unregister(state->pdev_snd_codec);
+	}
+
+}
+
+/**
+ * Audio configuration.
+ *
+ */
+static int adv76xx_configure_snd(struct adv7604_state *state){
+
+	struct i2c_client *client, *hdmi_client;
+	struct platform_device *pdev;
+	struct adv76xx_snd_data * data;
+	struct device_node *cpu_np;
+	char codec_name[32], card_name[32], platform_name[32];
+	int ret;
+
+	// Check i2c-client
+	if (state->i2c_clients[ADV7604_PAGE_IO] == NULL)
+		return -ENODEV;
+
+	client = state->i2c_clients[ADV7604_PAGE_IO];
+
+	// Check i2c-Client HDMI that will use the regmap
+	if (state->i2c_clients[ADV7604_PAGE_HDMI] == NULL)
+		return -ENODEV;
+
+	hdmi_client = state->i2c_clients[ADV7604_PAGE_HDMI];
+
+	// Getting ssi node information from DT
+	cpu_np = of_parse_phandle(client->dev.of_node, "ssi-controller", 0);
+	if (!cpu_np){
+		dev_err(&client->dev, "No ssi controler found\n");
+		ret = -ENODEV;
+		goto end;
+	}
+
+	// Reserve memory associate to i2c client device
+	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
+	if (!data) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	// Configure regmap for the hdmi I2C region
+	data->regmap = devm_regmap_init_i2c(hdmi_client, &adv76xx_hdmi_snd_regmap);
+	if (IS_ERR(data->regmap)){
+		ret = PTR_ERR(data->regmap);
+		dev_err(&client->dev, "Error initializing regmap %d\n", ret);
+		goto err_regmap;
+	}
+
+	// Create platform name depending on the i2c client
+	sprintf(platform_name, "%s-asoc-codec", client->name);
+
+	// Register the platform device
+	pdev = platform_device_register_resndata(&client->dev,
+										platform_name,
+										PLATFORM_DEVID_NONE,
+										NULL,0, 	// Resources and Num Resources
+										data,sizeof(struct adv76xx_snd_data)); 	// Specific platform data and size
+
+	// Check platform device correct value
+	if (IS_ERR(pdev)){
+		dev_err(&client->dev, "Fail registering platform %s\n", PLATFORM_DRIVER_NAME);
+		ret = -ENODEV;
+		goto err_platform;
+	}
+
+	// Save the reference on state
+	state->pdev_snd_codec = pdev;
+
+	// Configure names depending on i2c client
+	sprintf(codec_name, "%s-asoc-codec", client->name);
+	sprintf(card_name, "%s-snd-card", client->name);
+
+	// Configure DAI data
+	data->dai.name = "HDMI Audio";
+	data->dai.stream_name = "Sound";
+	data->dai.codec_dai_name = DAI_DRIVER_NAME;
+	data->dai.cpu_of_node = cpu_np;				// IMX ssi controler node
+	data->dai.codec_name = codec_name; 			// MUST match with the snd_soc_register_codec dev name, one per each device??
+	data->dai.platform_of_node = cpu_np;		// IMX ssi controler node
+	data->dai.dai_fmt = DAI_FMT_DEFAULT; 		// Default format I2S, normal BCLK + FRAME, codec clk master & frame slave
+
+	/* Initialize sound card */
+	data->card.dev = &pdev->dev;
+	data->card.name = card_name;
+	data->card.dai_link = &data->dai;
+	data->card.num_links = 1;
+	data->card.dapm_routes = audio_map;
+	data->card.num_dapm_routes = ARRAY_SIZE(audio_map);
+	data->card.late_probe = adv_asoc_card_late_probe; // TODO Delete?
+	data->card.num_dapm_widgets = 0;
+
+	// Set the drvdata for the card
+	snd_soc_card_set_drvdata(&data->card, data);
+
+	// Register the card with the sound system
+	ret = snd_soc_register_card(&data->card);
+	if (ret) {
+		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
+		goto err_card;
+	}
+
+	return 0;
+
+err_card:
+	platform_device_unregister(pdev);
+err_platform:
+err_regmap:
+	// Clean data devm_kzalloc
+	devm_kfree(&client->dev,data);
+end:
+	return ret;
+}
+
 
 static int adv7604_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
@@ -2772,8 +3101,9 @@ static int adv7604_probe(struct i2c_client *client,
 	state->timings = cea640x480;
 	state->format = adv7604_format_info(state, MEDIA_BUS_FMT_YUYV8_2X8);
 
+
 	sd = &state->sd;
-	v4l2_i2c_subdev_init(sd, client, &adv7604_ops);
+	v4l2_i2c_subdev_init(sd, client, &adv7604_ops); // dev.driver_data update
 	snprintf(sd->name, sizeof(sd->name), "%s %d-%04x",
 		id->name, i2c_adapter_id(client->adapter),
 		client->addr);
@@ -2800,6 +3130,8 @@ static int adv7604_probe(struct i2c_client *client,
 			return -ENODEV;
 		}
 	}
+
+
 
 	/* control handlers */
 	hdl = &state->hdl;
@@ -2884,11 +3216,20 @@ static int adv7604_probe(struct i2c_client *client,
 	if (err)
 		goto err_work_queues;
 
-	err = adv7604_core_init(sd);
+	err = state->info->init_core(sd);
 	if (err)
 		goto err_entity;
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 			client->addr << 1, client->adapter->name);
+
+	// TODO CHANGE TO BOTH 7611 AND 7604
+	if (!is_adv7604(sd)){
+		/* snd configuration */
+		err = adv76xx_configure_snd(state);
+
+		if (err)
+			goto err_entity;
+	}
 
 	err = v4l2_async_register_subdev(sd);
 	if (err)
@@ -2915,6 +3256,7 @@ static int adv7604_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7604_state *state = to_state(sd);
 
+	adv76xx_unregister_snd(state);
 	cancel_delayed_work(&state->delayed_work_enable_hotplug);
 	destroy_workqueue(state->work_queues);
 	v4l2_async_unregister_subdev(sd);
