@@ -530,6 +530,7 @@ static int __media_entity_setup_link_notify(struct media_link *link, u32 flags)
 	int ret;
 
 	/* Notify both entities. */
+	printk("[%s] Call link_setup\n", __func__);
 	ret = media_entity_call(link->source->entity, link_setup,
 				link->source, link->sink, flags);
 	if (ret < 0 && ret != -ENOIOCTLCMD)
@@ -573,12 +574,17 @@ int __media_entity_setup_link(struct media_link *link, u32 flags)
 	if (link == NULL)
 		return -EINVAL;
 
+	printk("[%s]\n", __func__);
 	/* The non-modifiable link flags must not be modified. */
-	if ((link->flags & ~mask) != (flags & ~mask))
+	if ((link->flags & ~mask) != (flags & ~mask)) {
+		printk("[%s] non-modifiable link flags must not be modified\n", __func__);
 		return -EINVAL;
+	}
 
-	if (link->flags & MEDIA_LNK_FL_IMMUTABLE)
+	if (link->flags & MEDIA_LNK_FL_IMMUTABLE) {
+		printk("[%s] link is immutable\n", __func__);
 		return link->flags == flags ? 0 : -EINVAL;
+	}
 
 	if (link->flags == flags)
 		return 0;

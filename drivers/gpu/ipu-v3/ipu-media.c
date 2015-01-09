@@ -184,11 +184,16 @@ EXPORT_SYMBOL_GPL(ipu_get_entity);
 static inline int ipu_entity(struct ipu_soc *ipu, struct media_entity *entity)
 {
 	int i;
+	struct media_entity *entity_local;
 
+	printk("[%s] %d entities to parse and find %s\n", __func__, IPU_NUM_ENTITIES, entity->name);
 	for (i = 0; i < IPU_NUM_ENTITIES; i++) {
+		entity_local = &ipu->subdevs[i]->entity;
+		printk("[%s] Parsing %s\n", __func__, entity_local->name);
 		if (&ipu->subdevs[i]->entity == entity)
 			return i;
 	}
+	printk("[%s] %s not found, i=%d\n", __func__, entity->name, i);
 
 	return -EINVAL;
 }
@@ -229,6 +234,12 @@ static const struct ipu_link *ipu_find_link(struct ipu_soc *ipu,
 		link.dst_pad = local->index;
 	}
 
+	printk("[%s] find link %s(%d):%d -> %s(%d):%d in ipu_links\n", __func__, local->entity->name,
+									link.src_entity,
+									link.src_pad,
+									remote->entity->name,
+									link.dst_entity,
+									link.dst_pad);
 	for (i = 0; i < ARRAY_SIZE(ipu_links); i++) {
 		if (memcmp(&link, &ipu_links[i], 4) == 0)
 			return &ipu_links[i];
@@ -294,18 +305,24 @@ int ipu_csi_link_setup(struct media_entity *entity,
 	struct ipu_csi *csi;
 	bool ic;
 
+	printk("[%s] Find link...\n", __func__);
 	link = ipu_find_link(ipu, local, remote);
-	if (!link)
+	if (!link) {
+		printk("[%s] link not found\n", __func__);
 		return ipu_invalid_link(ipu, local, remote);
+	}
 
 	switch (ipu_entity(ipu, entity)) {
 	case IPU_CSI0:
 		csi = ipu->csi_priv[0];
+		printk("[%s] CSI0\n", __func__);
 		break;
 	case IPU_CSI1:
 		csi = ipu->csi_priv[1];
+		printk("[%s] CSI0\n", __func__);
 		break;
 	default:
+		printk("[%s] no such ipu entity\n", __func__);
 		return ipu_invalid_link(ipu, local, remote);
 	}
 
@@ -342,9 +359,12 @@ static int ipu_smfc_link_setup(struct media_entity *entity,
 	u32 mask, sel = FS_SEL_ARM;
 	int csi, smfc;
 
+	printk("[%s] Find link...\n", __func__);
 	link = ipu_find_link(ipu, local, remote);
-	if (!link)
+	if (!link) {
+		printk("[%s] link not found\n", __func__);
 		return ipu_invalid_link(ipu, local, remote);
+	}
 
 	if (local->flags & MEDIA_PAD_FL_SINK) {
 		/* SMFC_MAP_CHx */
@@ -703,6 +723,9 @@ int ipu_register_subdev(struct ipu_soc *ipu, enum ipu_entities idx,
 		if (!sd_src || !sd_dst)
 			continue;
 
+		printk("[%s] create link '%s':%d -> '%s':%d\n", __func__,
+			sd_src->name, l->src_pad,
+			sd_dst->name, l->dst_pad);
 		ret = media_entity_create_link(&sd_src->entity, l->src_pad,
 					       &sd_dst->entity, l->dst_pad, 0);
 		if (ret) {
@@ -720,6 +743,9 @@ int ipu_register_subdev(struct ipu_soc *ipu, enum ipu_entities idx,
 			if (memcmp(l, &ipu_default_links[k], sizeof(*l)))
 				continue;
 
+			printk("[%s] searching link: '%s':%d -> '%s':%d\n", __func__,
+				sd_src->name, l->src_pad,
+				sd_dst->name, l->dst_pad);
 			link = media_entity_find_link(
 				&sd_src->entity.pads[l->src_pad],
 				&sd_dst->entity.pads[l->dst_pad]);

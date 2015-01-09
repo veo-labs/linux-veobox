@@ -346,6 +346,7 @@ static int ipucsi_get_resources(struct ipucsi *ipucsi)
 	int ret;
 	int i;
 
+	printk("[%s]\n", __func__);
 	entity = ipu_get_entity(ipu, ipucsi->id ? IPU_CSI1: IPU_CSI0);
 	if (!entity)
 		return -ENODEV;
@@ -932,9 +933,6 @@ static int ipucsi_g_fmt(struct file *file, void *fh,
 {
 	struct ipucsi *ipucsi = video_drvdata(file);
 
-	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-
 	*f = ipucsi->format;
 
 	return 0;
@@ -1159,6 +1157,7 @@ static void ipucsi_create_links(struct ipucsi *ipucsi)
 {
 	int i, ret;
 
+	printk("[%s]\n", __func__);
 	if (ipucsi->vdev.entity.num_links)
 		return;
 
@@ -1174,6 +1173,7 @@ static void ipucsi_create_links(struct ipucsi *ipucsi)
 			continue;
 		}
 
+		printk("[%s] create link '%s':%d\n", __func__, pad->entity->name, pad->index);
 		ret = media_entity_create_link(pad->entity, pad->index,
 					       &ipucsi->vdev.entity, 0, 0);
 		if (ret < 0) {
@@ -1188,6 +1188,8 @@ static int ipucsi_open(struct file *file)
 {
 	struct ipucsi *ipucsi = video_drvdata(file);
 	int ret;
+
+	printk("[%s]\n", __func__);
 
 	/*
 	 * FIXME - this should be done somewhere else, once, after CSI, SMFC,
@@ -1281,7 +1283,7 @@ static int ipucsi_enum_framesizes(struct file *file, void *fh,
 
 	return 0;
 }
-
+/*
 static int vidioc_log_status(struct file *file, void *f)
 {
        struct video_device *vdev = video_devdata(file);
@@ -1298,7 +1300,7 @@ static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
        v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
        return 0;
 }
-
+*/
 static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 	.vidioc_querycap		= ipucsi_querycap,
 
@@ -1313,14 +1315,14 @@ static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 
 	.vidioc_qbuf			= vb2_ioctl_qbuf,
 	.vidioc_dqbuf			= vb2_ioctl_dqbuf,
-	.vidioc_expbuf			= vb2_ioctl_expbuf,
+/*	.vidioc_expbuf			= vb2_ioctl_expbuf,*/
 
 	.vidioc_streamon		= vb2_ioctl_streamon,
 	.vidioc_streamoff		= vb2_ioctl_streamoff,
 
 	.vidioc_enum_framesizes		= ipucsi_enum_framesizes,
-	.vidioc_log_status      = vidioc_log_status,
-	.vidioc_s_edid          = vidioc_s_edid,
+/*	.vidioc_log_status      = vidioc_log_status,
+	.vidioc_s_edid          = vidioc_s_edid,*/
 };
 
 static int ipucsi_subdev_s_ctrl(struct v4l2_ctrl *ctrl)

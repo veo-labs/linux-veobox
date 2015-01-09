@@ -201,27 +201,42 @@ static long media_device_setup_link(struct media_device *mdev,
 	struct media_entity *sink;
 	int ret;
 
+	printk("[%s]\n", __func__);
 	if (copy_from_user(&ulink, _ulink, sizeof(ulink)))
 		return -EFAULT;
 
 	/* Find the source and sink entities and link.
 	 */
+	printk("[%s] find entity %d \n", __func__, ulink.source.entity);
 	source = find_entity(mdev, ulink.source.entity);
+	if (source == NULL)
+		printk("[%s] entity %d not found\n", __func__, ulink.source.entity);
+
+	printk("[%s] find entity %d \n", __func__, ulink.sink.entity);
 	sink = find_entity(mdev, ulink.sink.entity);
+	if (sink == NULL)
+		printk("[%s] entity %d not found\n", __func__, ulink.sink.entity);
 
 	if (source == NULL || sink == NULL)
 		return -EINVAL;
 
+	printk("[%s] entities %d and %d found\n", __func__, ulink.source.entity, ulink.sink.entity);
 	if (ulink.source.index >= source->num_pads ||
 	    ulink.sink.index >= sink->num_pads)
 		return -EINVAL;
 
+	printk("[%s] %d:%d with source->num_pads %d\n", __func__, ulink.source.entity, ulink.source.index, source->num_pads);
+	printk("[%s] %d:%d with sink->num_pads %d\n", __func__, ulink.sink.entity, ulink.sink.index, sink->num_pads);
+	printk("[%s] Looking for link...\n", __func__);
 	link = media_entity_find_link(&source->pads[ulink.source.index],
 				      &sink->pads[ulink.sink.index]);
-	if (link == NULL)
+	if (link == NULL) {
+		printk("[%s] Link not found\n", __func__);
 		return -EINVAL;
+	}
 
 	/* Setup the link on both entities. */
+	printk("[%s] Setting up link...\n", __func__);
 	ret = __media_entity_setup_link(link, ulink.flags);
 
 	if (copy_to_user(_ulink, &ulink, sizeof(ulink)))
