@@ -79,14 +79,14 @@
 };
 
 &ipu1_csi0 {
-	csi0_from_hdmi: endpoint {
-		remote-endpoint = <&csi0_fpga_out>;
+	csi0_input: endpoint {
+		remote-endpoint = <&hdmi0_out>;
 	};
 };
 
 &ipu2_csi1 {
-	csi1_from_hdmi: endpoint {
-		remote-endpoint = <&csi1_fpga_out>;
+	csi1_input: endpoint {
+		remote-endpoint = <&hdmi1_out>;
 	};
 };
 
@@ -206,7 +206,7 @@
 			port@1 {
 				reg = <1>;
 				hdmi0_out: endpoint@1 {
-					remote-endpoint = <&hdmi0_fpga_in>;
+					remote-endpoint = <&csi0_input>;
 					bus-width = <16>;
 				};
 			};
@@ -243,7 +243,7 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					remote-endpoint = <&hdmi1_fpga_in>;
+					remote-endpoint = <&csi1_input>;
 					bus-width = <16>;
 				};
 			};
@@ -280,19 +280,19 @@
 					remote-endpoint = <&hdmi1_out>;
 				};
 			};
-			port@4 {
+			port@4 {/*
 				reg = <4>;
 				csi0_fpga_out: endpoint {
-					remote-endpoint = <&csi0_from_hdmi>;
+					remote-endpoint = <&csi0_from_fpga>;
 					bus-width = <16>;
-				};
+				};*/
 			};
-			port@5 {
+			port@5 {/*
 				reg = <5>;
 				csi1_fpga_out: endpoint {
-					remote-endpoint = <&csi1_from_hdmi>;
+					remote-endpoint = <&csi1_from_fpga>;
 					bus-width = <16>;
-				};
+				};*/
 			};
 		};
 	};
