@@ -53,7 +53,7 @@
 		};
 	};
 
-	sound {
+/*	sound {
 		compatible = "fsl,imx6q-vbx3-sgtl5000",
 			     "fsl,imx-audio-sgtl5000";
 		model = "imx6q-vbx3-sgtl5000";
@@ -63,8 +63,12 @@
 			"LINE_IN", "Line In Jack";
 		mux-int-port = <1>;
 		mux-ext-port = <5>;
-	};
+	};*/
 
+	hdmiaudio {
+		compatible = "adi,adv76xx";
+	};
+	
 	ipum2m0: ipum2m@ipu1 {
 		compatible = "fsl,imx6-v4l2-mem2mem";
 		ipu = <&ipu1>;
@@ -225,6 +229,7 @@
 
 	hdmiin1: adv7611@4c {
 		compatible = "adi,adv7611";
+		ssi-controller = <&ssi1>;
 		reset-gpios = <&gpio1 20 GPIO_ACTIVE_LOW>;
 		reg = <0x4c 0x68 0x66 0x64 0x62
 			0x60 0x5e 0x5c 0x5a 0x58 0x56
