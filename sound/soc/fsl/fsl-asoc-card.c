@@ -552,7 +552,7 @@ static int fsl_asoc_card_probe(struct platform_device *pdev)
 	}
 
 	/* Finish card registering */
-	platform_set_drvdata(pdev, priv);
+	platform_set_drvdata(pdev, priv); // TODO Will be modified on snd_soc_register_card, why to do it??
 	snd_soc_card_set_drvdata(&priv->card, priv);
 
 	ret = devm_snd_soc_register_card(&pdev->dev, &priv->card);
