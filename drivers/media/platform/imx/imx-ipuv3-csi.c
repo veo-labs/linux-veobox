@@ -54,6 +54,7 @@ struct ipucsi_format {
 	u32 fourcc;
 	u32 bytes_per_pixel; /* memory */
 	int bytes_per_sample; /* mbus */
+	unsigned fmt_skip:1;
 	unsigned rgb:1;
 	unsigned yuv:1;
 	unsigned raw:1;
@@ -104,6 +105,7 @@ static struct ipucsi_format ipucsi_formats[] = {
 		.bytes_per_pixel = 2,
 		.bytes_per_sample = 2,
 		.raw = 1,
+		.fmt_skip = 1,
 	}, {
 		.name = "YUYV 1x16 bit",
 		.fourcc = V4L2_PIX_FMT_YUYV,
@@ -111,6 +113,7 @@ static struct ipucsi_format ipucsi_formats[] = {
 		.bytes_per_pixel = 2,
 		.bytes_per_sample = 2,
 		.raw = 1,
+		.fmt_skip = 1,
 	},
 };
 
@@ -364,7 +367,6 @@ static int ipucsi_get_resources(struct ipucsi *ipucsi)
 	int ret;
 	int i;
 
-	printk("[%s]\n", __func__);
 	entity = ipu_get_entity(ipu, ipucsi->id ? IPU_CSI1: IPU_CSI0);
 	if (!entity)
 		return -ENODEV;
@@ -968,13 +970,19 @@ static int ipucsi_enum_fmt(struct file *file, void *priv,
 		return 0;
 	}
 
+	if (f->index >= ARRAY_SIZE(ipucsi_formats))
+		return -EINVAL;
+
+	ipucsi->ipucsifmt = ipucsi_formats[f->index];
+
+	if (ipucsi->ipucsifmt.fmt_skip)
+		return -EINVAL;
+
 	if (ipucsi->ipucsifmt.rgb)
 		return ipu_enum_fmt_rgb(file, priv, f);
+
 	if (ipucsi->ipucsifmt.yuv)
 		return ipu_enum_fmt_yuv(file, priv, f);
-
-	if (f->index)
-		return -EINVAL;
 
 	if (!ipucsi->ipucsifmt.name)
 		return -EINVAL;
@@ -1172,7 +1180,6 @@ static void ipucsi_create_links(struct ipucsi *ipucsi)
 {
 	int i, ret;
 
-	printk("[%s]\n", __func__);
 	if (ipucsi->vdev.entity.num_links)
 		return;
 
@@ -1188,7 +1195,6 @@ static void ipucsi_create_links(struct ipucsi *ipucsi)
 			continue;
 		}
 
-		printk("[%s] create link '%s':%d\n", __func__, pad->entity->name, pad->index);
 		ret = media_entity_create_link(pad->entity, pad->index,
 					       &ipucsi->vdev.entity, 0, 0);
 		if (ret < 0) {
@@ -1204,7 +1210,6 @@ static int ipucsi_open(struct file *file)
 	struct ipucsi *ipucsi = video_drvdata(file);
 	int ret;
 
-	printk("[%s]\n", __func__);
 
 	/*
 	 * FIXME - this should be done somewhere else, once, after CSI, SMFC,
@@ -1273,6 +1278,9 @@ static int ipucsi_enum_framesizes(struct file *file, void *fh,
 	if (((fsize->index != 0) &&
 	     (mbus_config.type != V4L2_MBUS_BT656)) ||
 	    (fsize->index > 1))
+		return -EINVAL;
+
+	if (ipucsi->ipucsifmt.fmt_skip)
 		return -EINVAL;
 
 	if (ipucsifmt->rgb)
@@ -1358,9 +1366,9 @@ static const struct v4l2_ctrl_ops ipucsi_subdev_ctrl_ops = {
 
 static const char * const ipucsi_test_pattern_menu[] = {
 	"Disabled",
-	"Checkerboard-red",
+/*	"Checkerboard-red",
 	"Checkerboard-green",
-	"Checkerboard-blue",
+	"Checkerboard-blue",*/
 };
 
 static int ipucsi_create_controls(struct ipucsi *ipucsi)
