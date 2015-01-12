@@ -155,7 +155,7 @@ struct ipucsi {
 	struct ipu_soc			*ipu;
 	struct v4l2_of_endpoint		endpoint;
 
-	struct v4l2_format		format;
+	struct v4l2_pix_format		format;
 	struct ipucsi_format		ipucsifmt;
 	struct v4l2_ctrl_handler	ctrls;
 	struct v4l2_ctrl_handler	ctrls_vdev;
@@ -169,6 +169,24 @@ struct ipucsi {
 	struct ipu_media_link		*link;
 	struct v4l2_fh			fh;
 };
+
+static void ipucsi_fill_pix_format(struct ipucsi *ipucsi,
+                               struct v4l2_pix_format *pix)
+{
+       pix->pixelformat = V4L2_PIX_FMT_YUYV;
+       pix->width = 1280;
+       pix->height = 720;
+       pix->field = V4L2_FIELD_NONE;
+       pix->colorspace = V4L2_COLORSPACE_REC709;
+       /*
+        * The YUYV format is four bytes for every two pixels, so bytesperline
+        * is width * 2.
+        */
+       pix->bytesperline = pix->width * 2;
+       pix->sizeimage = pix->bytesperline * pix->height;
+       pix->priv = 0;
+}
+
 
 static struct ipucsi_buffer *to_ipucsi_vb(struct vb2_buffer *vb)
 {
@@ -286,7 +304,7 @@ static irqreturn_t ipucsi_new_frame_handler(int irq, void *context)
 					   struct ipucsi_buffer, queue);
 	vb = &ipucsi->active->vb;
 	do_gettimeofday(&vb->v4l2_buf.timestamp);
-	vb->v4l2_buf.field = ipucsi->format.fmt.pix.field;
+	vb->v4l2_buf.field = ipucsi->format.field;
 	vb->v4l2_buf.sequence = ipucsi->sequence++;
 
 	/*
@@ -451,9 +469,6 @@ static int ipucsi_videobuf_setup(struct vb2_queue *vq, const struct v4l2_format 
 	int bytes_per_line;
 	struct ipucsi_format *ipucsifmt = ipucsi_current_format(ipucsi);
 
-	if (!fmt)
-		fmt = &ipucsi->format;
-
 	bytes_per_line = fmt->fmt.pix.width * ipucsifmt->bytes_per_pixel;
 
 	dev_dbg(ipucsi->dev, "bytes: %d x: %d y: %d",
@@ -475,7 +490,7 @@ static int ipucsi_videobuf_prepare(struct vb2_buffer *vb)
 {
 	struct ipucsi *ipucsi = vb->vb2_queue->drv_priv;
 	struct ipucsi_buffer *buf;
-	struct v4l2_pix_format *pix = &ipucsi->format.fmt.pix;
+	struct v4l2_pix_format *pix = &ipucsi->format;
 
 	buf = to_ipucsi_vb(vb);
 
@@ -545,8 +560,8 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 {
 	struct ipucsi *ipucsi = vq->drv_priv;
 	struct ipucsi_format *ipucsifmt = ipucsi_current_format(ipucsi);
-	u32 width = ipucsi->format.fmt.pix.width;
-	u32 height = ipucsi->format.fmt.pix.height;
+	u32 width = ipucsi->format.width;
+	u32 height = ipucsi->format.height;
 	struct device *dev = ipucsi->dev;
 	int burstsize;
 	struct vb2_buffer *vb;
@@ -574,7 +589,7 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 	}
 
 	dev_dbg(dev, "width: %d height: %d, %c%c%c%c (%c%c%c%c)\n",
-		width, height, pixfmtstr(ipucsi->format.fmt.pix.pixelformat),
+		width, height, pixfmtstr(ipucsi->format.pixelformat),
 		pixfmtstr(ipucsifmt->raw));
 
 	/*
@@ -601,7 +616,7 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 		 * formats we understand, we can write it in any format not requiring
 		 * colorspace conversion.
 		 */
-		u32 fourcc = ipucsi->format.fmt.pix.pixelformat;
+		u32 fourcc = ipucsi->format.pixelformat;
 		switch (fourcc) {
 		case V4L2_PIX_FMT_RGB32:
 			ipu_cpmem_set_stride(ipucsi->ipuch, width * 4);
@@ -908,7 +923,7 @@ static int ipucsi_s_fmt(struct file *file, void *fh,
 	if (ret)
 		return ret;
 
-	ipucsi->format = *f;
+	ipucsi->format = f->fmt.pix;
 
 	/*
 	 * Set IDMAC scan order interlace offset (ILO) for translation between
@@ -933,7 +948,7 @@ static int ipucsi_g_fmt(struct file *file, void *fh,
 {
 	struct ipucsi *ipucsi = video_drvdata(file);
 
-	*f = ipucsi->format;
+	f->fmt.pix = ipucsi->format;
 
 	return 0;
 }
@@ -1511,6 +1526,8 @@ static int ipucsi_probe(struct platform_device *pdev)
 	ipucsi->v4l2_dev = ipu_media_get_v4l2_dev();
 	if (!ipucsi->v4l2_dev)
 		return -EPROBE_DEFER;
+
+	ipucsi_fill_pix_format(ipucsi, &ipucsi->format);
 
 	node = ipucsi_get_port(pdev->dev.parent->of_node, pdata->csi);
 	if (!node) {
