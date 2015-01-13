@@ -472,6 +472,14 @@ static int ipucsi_videobuf_setup(struct vb2_queue *vq, const struct v4l2_format 
 	int bytes_per_line;
 	struct ipucsi_format *ipucsifmt = ipucsi_current_format(ipucsi);
 
+	if (vq->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+
+	if (!fmt) {
+		printk("[%s] fmt is not defined\n", __func__);
+		return -EINVAL;
+	}
+
 	bytes_per_line = fmt->fmt.pix.width * ipucsifmt->bytes_per_pixel;
 
 	dev_dbg(ipucsi->dev, "bytes: %d x: %d y: %d",
@@ -852,67 +860,32 @@ static int ipucsi_querycap(struct file *file, void *priv,
 static int ipucsi_try_fmt(struct file *file, void *fh,
 		struct v4l2_format *f)
 {
-	struct ipucsi *ipucsi = video_drvdata(file);
-	struct ipucsi_format *ipucsifmt = ipucsi_current_format(ipucsi);
-	enum v4l2_field in = ipucsi->format_mbus[1].field;
-	enum v4l2_field out = f->fmt.pix.field;
-	struct ipu_fmt *fmt = NULL;
-	int bytes_per_pixel;
+	struct ipucsi_format *ipucsifmt;
+	struct v4l2_pix_format *pix = &f->fmt.pix;
+	int i;
 
-	if (ipucsifmt->fmt_skip)
+	for (i = 0; i < ARRAY_SIZE(ipucsi_formats); i++) {
+		ipucsifmt = &ipucsi_formats[i];
+		if (pix->pixelformat == ipucsifmt->fourcc)
+			break;
+	}
+
+	if (!ipucsifmt)
 		return -EINVAL;
-	if (ipucsifmt->rgb)
-		fmt = ipu_find_fmt_rgb(f->fmt.pix.pixelformat);
-	if (ipucsifmt->yuv)
-		fmt = ipu_find_fmt_yuv(f->fmt.pix.pixelformat);
 
-	if (ipucsifmt->raw) {
-		f->fmt.pix.pixelformat = ipucsifmt->fourcc;
-		bytes_per_pixel = ipucsifmt->bytes_per_pixel;
-	} else {
-		if (!fmt)
-			return -EINVAL;
-		bytes_per_pixel = fmt->bytes_per_pixel;
-	}
+	pix->pixelformat = ipucsifmt->fourcc;
+	pix->field = V4L2_FIELD_NONE;
+	v4l_bound_align_image(&pix->width, 128, 1920, 3,
+				&pix->height, 128, 1080, 1, 0);
 
-	v4l_bound_align_image(&f->fmt.pix.width, 128,
-			      ipucsi->format_mbus[1].width, 3,
-			      &f->fmt.pix.height, 128,
-			      ipucsi->format_mbus[1].height, 1, 0);
-
-	f->fmt.pix.bytesperline = f->fmt.pix.width * bytes_per_pixel;
-	f->fmt.pix.sizeimage = f->fmt.pix.bytesperline * f->fmt.pix.height;
-	if (fmt->fourcc == V4L2_PIX_FMT_YUV420 ||
-	    fmt->fourcc == V4L2_PIX_FMT_YVU420 ||
-	    fmt->fourcc == V4L2_PIX_FMT_NV12)
-		f->fmt.pix.sizeimage = f->fmt.pix.sizeimage * 3 / 2;
-	else if (fmt->fourcc == V4L2_PIX_FMT_YUV422P)
-		f->fmt.pix.sizeimage *= 2;
-
-	if ((in == V4L2_FIELD_SEQ_TB && out == V4L2_FIELD_INTERLACED_TB) ||
-	    (in == V4L2_FIELD_INTERLACED_TB && out == V4L2_FIELD_SEQ_TB) ||
-	    (in == V4L2_FIELD_SEQ_BT && out == V4L2_FIELD_INTERLACED_BT) ||
-	    (in == V4L2_FIELD_INTERLACED_BT && out == V4L2_FIELD_SEQ_BT)) {
-		/*
-		 * IDMAC scan order can be used for translation between
-		 * interlaced and sequential field formats.
-		 */
-	} else if (out == V4L2_FIELD_NONE || out == V4L2_FIELD_INTERLACED) {
-		/*
-		 * If userspace requests progressive or interlaced frames,
-		 * interlace sequential fields as closest approximation.
-		 */
-		if (in == V4L2_FIELD_SEQ_TB)
-			out = V4L2_FIELD_INTERLACED_TB;
-		else if (in == V4L2_FIELD_SEQ_BT)
-			out = V4L2_FIELD_INTERLACED_BT;
-		else
-			out = in;
-	} else {
-		/* Translation impossible or userspace doesn't care */
-		out = in;
-	}
-	f->fmt.pix.field = out;
+	pix->bytesperline = pix->width * ipucsifmt->bytes_per_pixel;
+	pix->sizeimage = pix->bytesperline * pix->height;
+	if (ipucsifmt->fourcc == V4L2_PIX_FMT_YUV420 ||
+		ipucsifmt->fourcc == V4L2_PIX_FMT_YVU420 ||
+		ipucsifmt->fourcc == V4L2_PIX_FMT_NV12)
+		pix->sizeimage = pix->sizeimage * 3 / 2;
+	else if (ipucsifmt->fourcc == V4L2_PIX_FMT_YUV422P)
+		pix->sizeimage *= 2;
 
 	return 0;
 }
@@ -934,16 +907,20 @@ static int ipucsi_s_fmt(struct file *file, void *fh,
 	 * Set IDMAC scan order interlace offset (ILO) for translation between
 	 * interlaced and sequential field formats.
 	 */
-	in = ipucsi->format_mbus[1].field;
-	out = f->fmt.pix.field;
-	if ((in == V4L2_FIELD_SEQ_TB && out == V4L2_FIELD_INTERLACED_TB) ||
-	    (in == V4L2_FIELD_INTERLACED_TB && out == V4L2_FIELD_SEQ_TB))
-		ipucsi->ilo = f->fmt.pix.bytesperline;
-	else if ((in == V4L2_FIELD_SEQ_BT && out == V4L2_FIELD_INTERLACED_BT) ||
-		 (in == V4L2_FIELD_INTERLACED_BT && out == V4L2_FIELD_SEQ_BT))
-		ipucsi->ilo = -f->fmt.pix.bytesperline;
-	else
+	if (ipucsi->format_mbus[1].field) {
+		in = ipucsi->format_mbus[1].field;
+		out = f->fmt.pix.field;
+		if ((in == V4L2_FIELD_SEQ_TB && out == V4L2_FIELD_INTERLACED_TB) ||
+		    (in == V4L2_FIELD_INTERLACED_TB && out == V4L2_FIELD_SEQ_TB))
+			ipucsi->ilo = f->fmt.pix.bytesperline;
+		else if ((in == V4L2_FIELD_SEQ_BT && out == V4L2_FIELD_INTERLACED_BT) ||
+			 (in == V4L2_FIELD_INTERLACED_BT && out == V4L2_FIELD_SEQ_BT))
+			ipucsi->ilo = -f->fmt.pix.bytesperline;
+		else
+			ipucsi->ilo = 0;
+	} else {
 		ipucsi->ilo = 0;
+	}
 
 	return 0;
 }
@@ -979,15 +956,6 @@ static int ipucsi_enum_fmt(struct file *file, void *priv,
 	ipucsi->ipucsifmt = ipucsi_formats[f->index];
 
 	if (ipucsi->ipucsifmt.fmt_skip)
-		return -EINVAL;
-
-	if (ipucsi->ipucsifmt.rgb)
-		return ipu_enum_fmt_rgb(file, priv, f);
-
-	if (ipucsi->ipucsifmt.yuv)
-		return ipu_enum_fmt_yuv(file, priv, f);
-
-	if (!ipucsi->ipucsifmt.name)
 		return -EINVAL;
 
 	strlcpy(f->description, ipucsi->ipucsifmt.name, sizeof(f->description));
