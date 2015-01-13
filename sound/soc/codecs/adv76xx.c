@@ -24,10 +24,26 @@
 
 #include "adv76xx.h"
 
+static int adv7611_disable_mute_conditions(struct snd_soc_codec * codec)
+{
+	unsigned int reg;
+
+	/* Clean mute condition masks */
+	snd_soc_write(codec, ADV7611_MUTE_MASK_21_16, 0x00);
+	snd_soc_write(codec, ADV7611_MUTE_MASK_15_8, 0x00);
+	snd_soc_write(codec, ADV7611_MUTE_MASK_7_0, 0x00);
+
+	/* No mute automatic conditions, disabling Audio Delay Line */
+	reg = snd_soc_read(codec, ADV7611_AUDIO_MUTE_SPEED);
+	snd_soc_write(codec, ADV7611_AUDIO_MUTE_SPEED,
+			(reg & 0x1f) | 0xc0);
 
 
-struct regmap * adv7611_get_regmap(struct device * dev){
+	return 0;
+}
 
+static struct regmap * adv7611_get_regmap(struct device * dev)
+{
 	struct adv76xx_snd_data * snd_data = dev->platform_data;
 
 	if (snd_data == NULL)
@@ -37,10 +53,13 @@ struct regmap * adv7611_get_regmap(struct device * dev){
 }
 
 
-static int adv7611_codec_probe(struct snd_soc_codec * codec)
-{
+static int adv7611_codec_probe(struct snd_soc_codec * codec){
 
-	dev_info(codec->dev, "Audio Codec Driver probe\n");
+	/* Disable mute conditions */
+	adv7611_disable_mute_conditions(codec);
+
+	/* Setting MCLK to 256Fs */
+	snd_soc_write(codec, ADV7611_MCLK_FS, 0x01);
 
 	return 0;
 }
@@ -69,7 +88,6 @@ static struct snd_soc_codec_driver adv7611_audio_codec = {
 	.set_pll			= ,
 
 	// codec IO
-
 	.read				= ,
 	.write				= ,
 	.reg_cache_size		= , // unsigned int
@@ -86,7 +104,8 @@ static struct snd_soc_codec_driver adv7611_audio_codec = {
 	 */
 };
 
-static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt){
+static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+{
 
 	struct snd_soc_codec *codec = dai->codec;
 	int finalfmt = snd_soc_read(codec, ADV7611_HDMI_REGISTER_03);
@@ -107,21 +126,39 @@ static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt){
 }
 
 static int adv7611_ops_hw_params(struct snd_pcm_substream * substream,
-		struct snd_pcm_hw_params * hw_params, struct snd_soc_dai * dai){
+		struct snd_pcm_hw_params * hw_params, struct snd_soc_dai * dai)
+{
 
 	struct snd_soc_codec *codec = dai->codec;
+	unsigned int reg;
 	unsigned int channels = params_channels(hw_params);
+	unsigned int rates = params_rate(hw_params);
 	int linewidthreg = snd_soc_read(codec, ADV7611_LINE_WIDTH_1);
 
-	// Read audio channel register
-	dev_info(dai->dev, "ADV7611 Audio Codec Ops hw params: fifo size %lu rate num %u rate deno %u channels %u\n" ,
-			(unsigned long)hw_params->fifo_size,hw_params->rate_num, hw_params->rate_den, hw_params->mres, channels );
+	// Force N update
+	reg = snd_soc_read(codec, ADV7611_REGISTER_5AH);
+	snd_soc_write(codec, ADV7611_REGISTER_5AH,
+			reg | 0x01);
+
+	// Get the Audio PLL Locked status
+	reg = snd_soc_read(codec, ADV7611_HDMI_REGISTER_04) & ADV7611_AUDIO_PLL_LOCKED;
+	dev_info(dai->dev, "Audio PLL Locked is %s \n", reg ? "locked" : "not locked");
+
+	// Read Mute value
+	//reg = regmap_read(codec, ADV7611_MUTE_CTRL) & ADV7611_AUDIO_PLL_LOCKED;
+
+	// Read the CTS from the data stream 5b, 5c ,5d
+	dev_info(dai->dev, "ADV7611 Audio Codec Ops hw params: fifo size %lu rate %u rate deno %u channels %u\n" ,
+			(unsigned long)hw_params->fifo_size,rates , hw_params->rate_den, hw_params->mres, channels );
+
+	// Read the N from the data stream 5d, 5e, 5f
 
 	return 0;
 }
 
 static void adv7611_ops_shutdown(struct snd_pcm_substream * substream,
-		struct snd_soc_dai * dai){
+		struct snd_soc_dai * dai)
+{
 
 	dev_info(dai->dev, "ADV7611 Audio Codec Ops shutdown\n");
 }

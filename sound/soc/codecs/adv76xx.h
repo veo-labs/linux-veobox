@@ -19,15 +19,19 @@
 #ifndef ADV7611_CODEC_H_
 #define ADV7611_H_
 
+#include <media/v4l2-device.h>
+#include <media/v4l2-ctrls.h>
+
+
 #define PLATFORM_DRIVER_NAME	"adv76xx-asoc-codec"
 #define DAI_DRIVER_NAME			"adv76xx-dai"
-#define HDMI_REG_NAME			"hdmi_regmap"
-
 
 #define ADV7611_HDMI_MAX_REG_OFFSET 	0x96
+#define ADV7611_IO_MAX_REG_OFFSET 	0xFF
 
 /* Global Control Register */
 #define ADV7611_RD_INFO					0xEA
+#define ADV7611_RD_INFO_2				0xEB
 
 /**
  * IO Registers
@@ -44,6 +48,11 @@
 
 #define ADV7611_HDMI_EDG_RAW_STATUS_2	0x7E	// RO
 #define ADV7611_HDMI_EDG_RAW_STATUS_3	0x83	// RO
+
+/**
+ * DPLL Registers
+ */
+#define ADV7611_MCLK_FS					0xb5	// RW
 
 /*
  * HDMI Registers
@@ -70,9 +79,9 @@
 #define ADV7611_MUTE_MASK_7_0			0x16	// RW
 #define ADV7611_PACKETS_DETECTED_2		0x18	// RO
 #define ADV7611_PACKETS_DETECTED_3		0x19	// RO
-#define ADV7611_MUTE_CTRL				0x1A	// RW
-#define ADV7611_DEEPCOLOR_FIFO_DEBUG_1	0x1B	// RW
-#define ADV7611_DEEPCOLOR_FIFO_DEBUG_2	0x1C	// RO
+#define ADV7611_MUTE_CTRL			0x1A	// RW
+#define ADV7611_DEEPCOLOR_FIFO_DEBUG_1		0x1B	// RW
+#define ADV7611_DEEPCOLOR_FIFO_DEBUG_2		0x1C	// RO
 #define ADV7611_REGISTER_1DH			0x1D	// RW
 #define ADV7611_TOTAL_LINE_WIDTH_1		0x1E	// RO
 #define ADV7611_TOTAL_LINE_WIDTH_2		0x1F	// RO
@@ -194,17 +203,22 @@
 #define ADV7611_I2S_SDPIF_MAP_ROT_I2S2_SPDIF2	2
 #define ADV7611_I2S_SDPIF_MAP_ROT_I2S1_SPDIF1	3
 
+// Mute
+#define ADV7611_MUTE_AUDIO_MASK			0x10
+
 // I2S Out mode
 #define ADV7611_I2S_OUT_MODE_MASK		0x60
 #define ADV7611_I2S_OUT_MODE_I2S		0x00
 
+// Mute masks
+#define ADV7611_MUTE_FIFO_UNDERFLOW_MASK	0x02
+#define ADV7611_MUTE_FIFO_OVERFLOW_MASK		0x01
 
 // Struct with dai and codec information
 struct adv76xx_snd_data {
 	struct snd_soc_dai_link dai;
 	struct snd_soc_card card;
 	struct regmap *regmap;
-
 };
 
 #endif /* ADV7611_CODEC_H_ */
