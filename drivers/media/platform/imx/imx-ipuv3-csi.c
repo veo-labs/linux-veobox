@@ -188,6 +188,7 @@ static void ipucsi_fill_pix_format(struct ipucsi *ipucsi,
        pix->bytesperline = pix->width * 2;
        pix->sizeimage = pix->bytesperline * pix->height;
        pix->priv = 0;
+       ipucsi->ipucsifmt = ipucsi_formats[4];
 }
 
 
@@ -858,6 +859,8 @@ static int ipucsi_try_fmt(struct file *file, void *fh,
 	struct ipu_fmt *fmt = NULL;
 	int bytes_per_pixel;
 
+	if (ipucsifmt->fmt_skip)
+		return -EINVAL;
 	if (ipucsifmt->rgb)
 		fmt = ipu_find_fmt_rgb(f->fmt.pix.pixelformat);
 	if (ipucsifmt->yuv)
