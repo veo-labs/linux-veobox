@@ -327,8 +327,10 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 
 	mbus_code_to_bus_cfg(csicfg, mbus_fmt->code);
 
+	printk("[%s] Format 0x%08x\n", __func__, mbus_fmt->code);
 	switch (mbus_cfg->type) {
 	case V4L2_MBUS_PARALLEL:
+		printk("[%s] bus parallel\n", __func__);
 		csicfg->ext_vsync = 1;
 		csicfg->vsync_pol = (mbus_cfg->flags &
 				     V4L2_MBUS_VSYNC_ACTIVE_LOW) ? 1 : 0;
@@ -339,19 +341,25 @@ static void fill_csi_bus_cfg(struct ipu_csi_bus_config *csicfg,
 		csicfg->clk_mode = IPU_CSI_CLK_MODE_GATED_CLK;
 		break;
 	case V4L2_MBUS_BT656:
+		printk("[%s] bus BT.656\n", __func__);
 		csicfg->ext_vsync = 0;
-		if (mbus_fmt->code == MEDIA_BUS_FMT_YUYV8_2X8)
-			if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
+		if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
+			if (mbus_fmt->code == MEDIA_BUS_FMT_YUYV8_1X16) {
 				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_INTERLACED_SDR;
+				csicfg->data_width = IPU_CSI_DATA_WIDTH_8;
+			}
 			else
-				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_PROGRESSIVE_SDR;
-		else
-			if (V4L2_FIELD_HAS_BOTH(mbus_fmt->field))
 				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_INTERLACED;
+		else
+			if (mbus_fmt->code == MEDIA_BUS_FMT_YUYV8_1X16) {
+				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR1120_PROGRESSIVE_SDR;
+				csicfg->data_width = IPU_CSI_DATA_WIDTH_8;
+			}
 			else
 				csicfg->clk_mode = IPU_CSI_CLK_MODE_CCIR656_PROGRESSIVE;
 		break;
 	case V4L2_MBUS_CSI2:
+		printk("[%s] bus CSI2\n", __func__);
 		/*
 		 * MIPI CSI-2 requires non gated clock mode, all other
 		 * parameters are not applicable for MIPI CSI-2 bus.
