@@ -382,6 +382,7 @@ static int ipu_smfc_link_setup(struct media_entity *entity,
 		default:
 			return ipu_invalid_link(ipu, local, remote);
 		}
+		printk("[%s] set csi %d on channel %d\n", __func__, csi, smfc);
 		return ipu_smfc_set_csi(ipu, smfc, csi);
 	} else if (local->flags & MEDIA_PAD_FL_SOURCE) {
 		/* SMFCx_DEST_SEL */

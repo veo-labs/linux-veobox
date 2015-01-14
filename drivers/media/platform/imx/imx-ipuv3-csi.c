@@ -104,7 +104,7 @@ static struct ipucsi_format ipucsi_formats[] = {
 		.mbus_code = MEDIA_BUS_FMT_UYVY8_1X16,
 		.bytes_per_pixel = 2,
 		.bytes_per_sample = 2,
-		.raw = 1,
+		.yuv = 1,
 		.fmt_skip = 1,
 	}, {
 		.name = "YUYV 1x16 bit",
@@ -112,7 +112,7 @@ static struct ipucsi_format ipucsi_formats[] = {
 		.mbus_code = MEDIA_BUS_FMT_YUYV8_1X16,
 		.bytes_per_pixel = 2,
 		.bytes_per_sample = 2,
-		.raw = 1,
+		.yuv = 1,
 		.fmt_skip = 1,
 	},
 };
@@ -280,7 +280,7 @@ static irqreturn_t ipucsi_new_frame_handler(int irq, void *context)
 	/* The IDMAC just started to write pixel data into the current buffer */
 
 	spin_lock_irqsave(&ipucsi->lock, flags);
-
+	printk("[%s]\n", __func__);
 	/*
 	 * If there is a previously active frame, mark it as done to hand it off
 	 * to userspace. Or, if there are no further frames queued, hold on to it.
@@ -325,6 +325,30 @@ static irqreturn_t ipucsi_new_frame_handler(int irq, void *context)
 out:
 	spin_unlock_irqrestore(&ipucsi->lock, flags);
 
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t encoder_eof_interrupt(int irq, void *context)
+{
+	struct ipucsi *ipucsi = context;
+	unsigned long flags;
+	/* The IDMAC finished to write pixel data into the current buffer */
+
+	spin_lock_irqsave(&ipucsi->lock, flags);
+	printk("[%s]\n", __func__);
+
+	spin_unlock_irqrestore(&ipucsi->lock, flags);
+	return IRQ_HANDLED;
+}
+static irqreturn_t encoder_nfb4eof_interrupt(int irq, void *context)
+{
+	struct ipucsi *ipucsi = context;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ipucsi->lock, flags);
+	printk("[%s]\n", __func__);
+
+	spin_unlock_irqrestore(&ipucsi->lock, flags);
 	return IRQ_HANDLED;
 }
 
@@ -469,30 +493,24 @@ static int ipucsi_videobuf_setup(struct vb2_queue *vq, const struct v4l2_format 
 		unsigned int sizes[], void *alloc_ctxs[])
 {
 	struct ipucsi *ipucsi = vq->drv_priv;
-	int bytes_per_line;
-	struct ipucsi_format *ipucsifmt = ipucsi_current_format(ipucsi);
 
 	if (vq->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	if (!fmt) {
-		printk("[%s] fmt is not defined\n", __func__);
+	if (vq->num_buffers + *count < 3)
+		*count = 3 - vq->num_buffers;
+
+	if (fmt && fmt->fmt.pix.sizeimage < ipucsi->format.sizeimage)
 		return -EINVAL;
-	}
-
-	bytes_per_line = fmt->fmt.pix.width * ipucsifmt->bytes_per_pixel;
-
-	dev_dbg(ipucsi->dev, "bytes: %d x: %d y: %d",
-			bytes_per_line, fmt->fmt.pix.width, fmt->fmt.pix.height);
 
 	*num_planes = 1;
 
 	ipucsi->sequence = 0;
-	sizes[0] = fmt->fmt.pix.sizeimage;
+	sizes[0] = fmt ? fmt->fmt.pix.sizeimage : ipucsi->format.sizeimage;
 	alloc_ctxs[0] = ipucsi->alloc_ctx;
 
-	if (!*count)
-		*count = 32;
+	dev_dbg(ipucsi->dev, "get %d buffer(s) of size %d each.\n",
+				*count, sizes[0]);
 
 	return 0;
 }
@@ -521,7 +539,7 @@ static void ipucsi_videobuf_queue(struct vb2_buffer *vb)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ipucsi->lock, flags);
-
+	printk("[%s]\n", __func__);
 	/*
 	 * If there is no next buffer queued, point the inactive buffer
 	 * address to the incoming buffer
@@ -577,10 +595,11 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 	int burstsize;
 	struct vb2_buffer *vb;
 	struct ipucsi_buffer *buf;
-	int nfack_irq;
+	int nfack_irq, eof_irq, nfb4eof_irq;
 	int ret;
 	const char *irq_name[2] = { "CSI0", "CSI1" };
 	struct v4l2_rect window;
+	struct ipu_image image;
 
 	ret = ipucsi_get_resources(ipucsi);
 	if (ret < 0) {
@@ -598,6 +617,29 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 		dev_err(dev, "Failed to request NFACK interrupt: %d\n", nfack_irq);
 		return ret;
 	}
+	dev_dbg(dev, "Requested NFACK interrupt : %d\n", nfack_irq);
+
+	eof_irq = ipu_idmac_channel_irq(ipucsi->ipu, ipucsi->ipuch,
+			IPU_IRQ_EOF);
+	ret = devm_request_irq(dev, eof_irq,
+				encoder_eof_interrupt, 0,
+				"mx6cam-enc-eof", ipucsi);
+	if (ret) {
+		dev_err(dev, "Failed to request EOF interrupt: %d\n", eof_irq);
+		goto free_irq;
+	}
+	dev_dbg(dev, "Requested EOF interrupt : %d\n", eof_irq);
+
+	nfb4eof_irq = ipu_idmac_channel_irq(ipucsi->ipu, ipucsi->ipuch,
+			IPU_IRQ_NFB4EOF);
+	ret = devm_request_irq(dev, nfb4eof_irq,
+				encoder_nfb4eof_interrupt, 0,
+				"mx6cam-enc-nfb4eof", ipucsi);
+	if (ret) {
+		dev_err(dev, "Failed to request NFB4EOF interrupt: %d\n", nfb4eof_irq);
+		goto free_irq;
+	}
+	dev_dbg(dev, "Requested NFB4EOF interrupt : %d\n", nfb4eof_irq);
 
 	dev_dbg(dev, "width: %d height: %d, %c%c%c%c (%c%c%c%c)\n",
 		width, height, pixfmtstr(ipucsi->format.pixelformat),
@@ -608,10 +650,11 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 	 * replace set_resolution, set_stride, set_fmt_*, set_yuv_*, set_buffer
 	 * with ipu_cpmem_set_image
 	 */
-
+#if 0
 	ipu_cpmem_set_resolution(ipucsi->ipuch, width, height);
 
 	if (ipucsifmt->raw && ipucsi->smfc) {
+		dev_dbg(dev, "raw format through smfc\n");
 		/*
 		 * raw formats. We can only pass them through to memory
 		 */
@@ -635,6 +678,7 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 			break;
 		case V4L2_PIX_FMT_UYVY:
 		case V4L2_PIX_FMT_YUYV:
+			dev_dbg(dev, "yuyv format through smfc\n");
 			ipu_cpmem_set_stride(ipucsi->ipuch, width * 2);
 			ipu_cpmem_set_yuv_interleaved(ipucsi->ipuch, fourcc);
 			break;
@@ -658,6 +702,15 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 
 	if (ipucsi->ilo)
 		ipu_cpmem_interlaced_scan(ipucsi->ipuch, ipucsi->ilo);
+#endif
+	ipu_cpmem_zero(ipucsi->ipuch);
+	memset(&image, 0, sizeof(image));
+	image.pix.width = image.rect.width = ipucsi->format.width;
+	image.pix.height = image.rect.height = ipucsi->format.height;
+	image.pix.bytesperline = ipucsi->format.bytesperline;
+	image.pix.pixelformat = ipucsi->format.pixelformat;
+	ipu_cpmem_set_image(ipucsi->ipuch, &image);
+
 
 	/*
 	 * Some random value. The reference manual tells us that the burstsize
@@ -665,10 +718,10 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 	 * it doesn't tell us which function this is.
 	 */
 	/* FIXME */
-//	burstsize = (width % 16) ? 8 : 16;
+	burstsize = (width % 16) ? 8 : 16;
+	ipu_cpmem_set_burstsize(ipucsi->ipuch, burstsize);
 
 	if (ipucsi->smfc) {
-#if 0
 		/*
 		 * Set the channel for the direct CSI-->memory via SMFC
 		 * use-case to very high priority, by enabling the watermark
@@ -681,16 +734,20 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 		 * The WM's are set very low by intention here to ensure that
 		 * the SMFC FIFOs do not overflow.
 		 */
-		ipu_smfc_set_wmc(ipucsi->smfc, false, 0x01);
-		ipu_smfc_set_wmc(ipucsi->smfc, true, 0x02);
+
+		ipu_smfc_set_watermark(ipucsi->smfc, 0x02, 0x01);
+		ipu_cpmem_set_high_priority(ipucsi->ipuch);
 		ipu_idmac_enable_watermark(ipucsi->ipuch, true);
 		ipu_cpmem_set_axi_id(ipucsi->ipuch, 0);
 		ipu_idmac_lock_enable(ipucsi->ipuch, 8);
-#endif
-		ipu_smfc_set_burstsize(ipucsi->smfc, burstsize - 1);
+
+		/* FIXME: it should take passthrough into account */
+		burstsize = (burstsize >> 2) - 1;
+		dev_dbg(dev, "smfc burstsize : %d\n", burstsize);
+		ipu_smfc_set_burstsize(ipucsi->smfc, burstsize);
+		dev_dbg(dev, "smfc map channel 0 on %d\n", ipucsi->id);
 		ipu_smfc_map_channel(ipucsi->smfc, ipucsi->id, 0);
 
-		ipu_cpmem_set_high_priority(ipucsi->ipuch);
 	}
 	if (ipucsi->ic) {
 		/* TODO: s_fmt */
@@ -762,6 +819,9 @@ static int ipucsi_videobuf_start_streaming(struct vb2_queue *vq, unsigned int co
 		ipu_ic_dump(ipucsi->ic);
 		ipu_csi_dump(ipucsi->csi);
 	}
+	ipu_dump(ipucsi->ipu);
+	ipu_cpmem_dump(ipucsi->ipuch);
+	ipu_csi_dump(ipucsi->csi);
 
 	ret = v4l2_media_subdev_s_stream(&ipucsi->subdev.entity, 1);
 	if (ret)
@@ -791,7 +851,13 @@ static void ipucsi_videobuf_stop_streaming(struct vb2_queue *vq)
 	unsigned long flags;
 	int nfack_irq = ipu_idmac_channel_irq(ipucsi->ipu, ipucsi->ipuch,
 				IPU_IRQ_NFACK);
+	int eof_irq = ipu_idmac_channel_irq(ipucsi->ipu, ipucsi->ipuch,
+				IPU_IRQ_EOF);
+	int nfb4eof_irq = ipu_idmac_channel_irq(ipucsi->ipu, ipucsi->ipuch,
+				IPU_IRQ_NFB4EOF);
 
+	free_irq(nfb4eof_irq, ipucsi);
+	free_irq(eof_irq, ipucsi);
 	free_irq(nfack_irq, ipucsi);
 	ipu_csi_disable(ipucsi->csi);
 	ipu_idmac_disable_channel(ipucsi->ipuch);
@@ -1277,7 +1343,7 @@ static int ipucsi_enum_framesizes(struct file *file, void *fh,
 
 	return 0;
 }
-/*
+
 static int vidioc_log_status(struct file *file, void *f)
 {
        struct video_device *vdev = video_devdata(file);
@@ -1294,7 +1360,7 @@ static int vidioc_s_edid(struct file *file, void *f, struct v4l2_edid *edid)
        v4l2_device_call_all(vdev->v4l2_dev, 0, pad, set_edid, edid);
        return 0;
 }
-*/
+
 static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 	.vidioc_querycap		= ipucsi_querycap,
 
@@ -1315,8 +1381,8 @@ static const struct v4l2_ioctl_ops ipucsi_capture_ioctl_ops = {
 	.vidioc_streamoff		= vb2_ioctl_streamoff,
 
 	.vidioc_enum_framesizes		= ipucsi_enum_framesizes,
-/*	.vidioc_log_status      = vidioc_log_status,
-	.vidioc_s_edid          = vidioc_s_edid,*/
+	.vidioc_log_status      = vidioc_log_status,
+	.vidioc_s_edid          = vidioc_s_edid,
 };
 
 static int ipucsi_subdev_s_ctrl(struct v4l2_ctrl *ctrl)
@@ -1426,22 +1492,27 @@ static int ipucsi_vb2_init(struct ipucsi *ipucsi)
 	struct vb2_queue *q;
 	int ret;
 
+	printk("[%s] Allocate ctx\n", __func__);
 	ipucsi->alloc_ctx = vb2_dma_contig_init_ctx(ipucsi->dev);
 	if (IS_ERR(ipucsi->alloc_ctx))
 		return PTR_ERR(ipucsi->alloc_ctx);
 
+	printk("[%s] Init queue\n", __func__);
 	q = &ipucsi->vb2_vidq;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	q->drv_priv = ipucsi;
 	q->ops = &ipucsi_videobuf_ops;
 	q->mem_ops = &vb2_dma_contig_memops;
+	q->min_buffers_needed = 2;
 	q->buf_struct_size = sizeof(struct ipucsi_buffer);
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 
 	ret = vb2_queue_init(q);
-	if (ret)
+	if (ret) {
+		printk("[%s] Failed to init vb2 queue: %d\n", __func__, ret);
 		return ret;
+	}
 
 	return 0;
 }

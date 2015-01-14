@@ -52,6 +52,7 @@ int ipu_smfc_set_burstsize(struct ipu_smfc *smfc, int burstsize)
 	val &= ~(0xf << shift);
 	val |= burstsize << shift;
 	writel(val, priv->base + SMFC_BS);
+	printk("[%s] SMFC_BS: 0x%08X\n", __func__, readl(priv->base + SMFC_BS));
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 
@@ -76,6 +77,7 @@ int ipu_smfc_set_csi(struct ipu_soc *ipu, int chno, int csi_id)
 	val &= ~(0x4 << shift);
 	val |= (csi_id << 2) << shift;
 	writel(val, priv->base + SMFC_MAP);
+	printk("[%s] SMFC_MAP: 0x%08X\n", __func__, readl(priv->base + SMFC_MAP));
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 
@@ -90,11 +92,13 @@ int ipu_smfc_map_channel(struct ipu_smfc *smfc, int csi_id, int mipi_id)
 
 	spin_lock_irqsave(&priv->lock, flags);
 
+	printk("[%s] map channel %d on %d\n", __func__, mipi_id, csi_id);
 	shift = smfc->chno * 3;
 	val = readl(priv->base + SMFC_MAP);
 	val &= ~(0x3 << shift);
 	val |= mipi_id << shift;
 	writel(val, priv->base + SMFC_MAP);
+	printk("[%s] SMFC_MAP: 0x%08X\n", __func__, readl(priv->base + SMFC_MAP));
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 
@@ -115,6 +119,7 @@ int ipu_smfc_set_watermark(struct ipu_smfc *smfc, u32 set_level, u32 clr_level)
 	val &= ~(0x3f << shift);
 	val |= ((clr_level << 3) | set_level) << shift;
 	writel(val, priv->base + SMFC_WMC);
+	printk("[%s] SMFC_WMC: 0x%08X\n", __func__, readl(priv->base + SMFC_WMC));
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 
