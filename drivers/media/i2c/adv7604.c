@@ -358,15 +358,46 @@ static inline unsigned vtotal(const struct v4l2_bt_timings *t)
 	return V4L2_DV_BT_FRAME_HEIGHT(t);
 }
 
+static int regmap_read_check(struct adv7604_state *state,
+			     int client_page, u8 reg)
+{
+	struct i2c_client *client = state->i2c_clients[client_page];
+	int err;
+	unsigned int val;
+
+	err = regmap_read(state->regmap[client_page], reg, &val);
+
+	if (err) {
+		v4l_err(client, "error reading %02x, %02x\n",
+				client->addr, reg);
+		return err;
+	}
+	return val;
+}
+
+/* regmap_write_block(): Write raw data with a maximum of I2C_SMBUS_BLOCK_MAX
+ * size to one or more registers.
+ *
+ * A value of zero will be returned on success, a negative errno will
+ * be returned in error cases.
+ */
+static int regmap_write_block(struct adv7604_state *state, int client_page,
+			      unsigned int init_reg, const void *val,
+			      size_t val_len)
+{
+	struct regmap *regmap = state->regmap[client_page];
+
+	if (val_len > I2C_SMBUS_BLOCK_MAX)
+		val_len = I2C_SMBUS_BLOCK_MAX;
+
+	return regmap_raw_write(regmap, init_reg, val, val_len);
+}
 
 static inline int io_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_IO], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_IO, reg);
 }
 
 static inline int io_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -384,11 +415,8 @@ static inline int io_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 v
 static inline int avlink_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_AVLINK], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
 }
 
 static inline int avlink_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -401,11 +429,8 @@ static inline int avlink_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int cec_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_CEC], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_CEC, reg);
 }
 
 static inline int cec_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -423,11 +448,8 @@ static inline int cec_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 
 static inline int infoframe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_INFOFRAME], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_INFOFRAME, reg);
 }
 
 static inline int infoframe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -440,11 +462,8 @@ static inline int infoframe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int esdp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_ESDP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_ESDP, reg);
 }
 
 static inline int esdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -457,11 +476,8 @@ static inline int esdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int dpp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_DPP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_DPP, reg);
 }
 
 static inline int dpp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -474,11 +490,8 @@ static inline int dpp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int afe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_AFE], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AFE, reg);
 }
 
 static inline int afe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -491,11 +504,8 @@ static inline int afe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int rep_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_REP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_REP, reg);
 }
 
 static inline int rep_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -513,11 +523,8 @@ static inline int rep_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 
 static inline int edid_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_EDID], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
 }
 
 static inline int edid_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -595,11 +602,8 @@ static void adv7604_delayed_work_enable_hotplug(struct work_struct *work)
 static inline int hdmi_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_HDMI], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_HDMI, reg);
 }
 
 static u16 hdmi_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -622,11 +626,8 @@ static inline int hdmi_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8
 static inline int test_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_TEST], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_TEST, reg);
 }
 
 static inline int test_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -639,11 +640,8 @@ static inline int test_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int cp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_CP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_CP, reg);
 }
 
 static u16 cp_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -666,11 +664,8 @@ static inline int cp_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 v
 static inline int vdp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_VDP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_VDP, reg);
 }
 
 static inline int vdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -2782,11 +2777,9 @@ static const struct reg_default adv7611_hdmi_reg_defaults[] = {
 };
 static const struct regmap_config adv76xx_snd_regmap[] = {
 	{
-		.name			= "regmap_io",
+		.name			= "io",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= ADV7611_IO_MAX_REG_OFFSET,
@@ -2795,11 +2788,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_avlink",
+		.name			= "avlink",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2808,11 +2799,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_cec",
+		.name			= "cec",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2821,11 +2810,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_infoframe",
+		.name			= "infoframe",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2834,11 +2821,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_esdp",
+		.name			= "esdp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2847,11 +2832,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_epp",
+		.name			= "epp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2860,11 +2843,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_afe",
+		.name			= "afe",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2873,11 +2854,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_rep",
+		.name			= "rep",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2886,11 +2865,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_edid",
+		.name			= "edid",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2900,12 +2877,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 	},
 
 	{
-		.name			= "regmap_hdmi",
+		.name			= "hdmi",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_hdmi_writable,
 
 		.max_register		= ADV7611_HDMI_MAX_REG_OFFSET,
@@ -2914,11 +2888,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_test",
+		.name			= "test",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2927,11 +2899,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_cp",
+		.name			= "cp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride	= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
@@ -2940,11 +2910,9 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name			= "regmap_vdp",
+		.name			= "vdp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.reg_stride		= 1,
-		.readable_reg		= adv7611_regmap_readable,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
