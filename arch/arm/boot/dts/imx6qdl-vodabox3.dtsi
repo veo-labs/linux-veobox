@@ -10,6 +10,7 @@
  */
 
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/sound/fsl-imx-audmux.h>
 
 / {
 
@@ -135,6 +136,29 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_audmux>;
 	status = "okay";
+
+	ssi1 {
+		fsl,audmux-port = <0>; /* Port 1 on Freescale documentatin */
+		fsl,port-config = <
+			(IMX_AUDMUX_V2_PTCR_RFSEL(8 | 4) |
+			IMX_AUDMUX_V2_PTCR_RCSEL(8 | 4) |
+			IMX_AUDMUX_V2_PTCR_TFSEL(4) |
+			IMX_AUDMUX_V2_PTCR_TCSEL(4) |
+			IMX_AUDMUX_V2_PTCR_RFSDIR |
+			IMX_AUDMUX_V2_PTCR_RCLKDIR |
+			IMX_AUDMUX_V2_PTCR_TFSDIR |
+			IMX_AUDMUX_V2_PTCR_TCLKDIR)
+			IMX_AUDMUX_V2_PDCR_RXDSEL(4)
+		>;
+	};
+
+	aud5 {
+		fsl,audmux-port = <4>; /* Port 5 on Freescale documentation */
+		fsl,port-config = <
+			0x00000000
+			IMX_AUDMUX_V2_PDCR_RXDSEL(0)
+		>;
+	};
 };
 
 &fec {
