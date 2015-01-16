@@ -561,14 +561,25 @@ static inline int edid_read_block(struct v4l2_subdev *sd, unsigned len, u8 *val)
 }
 
 static inline int edid_write_block(struct v4l2_subdev *sd,
-					unsigned len, const u8 *val)
+					unsigned int total_len, const u8 *val)
 {
 	struct adv7604_state *state = to_state(sd);
 	int err = 0;
+	int i = 0;
+	int len = 0;
 
-	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n", __func__, len);
+	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n",
+				__func__, total_len);
 
-	err = regmap_raw_write(state->regmap[ADV7604_PAGE_EDID], 0, val, len);
+	while (!err && i < total_len) {
+		len = (total_len - i) > I2C_SMBUS_BLOCK_MAX ?
+				I2C_SMBUS_BLOCK_MAX :
+				(total_len - i);
+
+		err = regmap_write_block(state, ADV7604_PAGE_EDID,
+				i, val + i, len);
+		i += len;
+	}
 
 	return err;
 }
