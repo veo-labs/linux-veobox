@@ -387,25 +387,6 @@ static int regmap_write_block(struct adv7604_state *state, int client_page,
 {
 	struct regmap *regmap = state->regmap[client_page];
 
-	if (err) {
-		v4l_err(client, "error reading %02x, %02x\n",
-				client->addr, reg);
-		return err;
-	}
-	return val;
-}
-
-/* regmap_write_block(): Write raw data with a maximum of I2C_SMBUS_BLOCK_MAX
- * size to one or more registers.
- *
- * A value of zero will be returned on success, a negative errno will
- * be returned in error cases.
- */
-static int regmap_write_block(struct adv7604_state *state, int client_page,
-			      unsigned int init_reg, const void *val,
-			      size_t val_len)
-	struct regmap *regmap = state->regmap[client_page];
-
 	if (val_len > I2C_SMBUS_BLOCK_MAX)
 		val_len = I2C_SMBUS_BLOCK_MAX;
 
