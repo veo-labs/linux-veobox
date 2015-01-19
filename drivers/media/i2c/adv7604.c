@@ -47,8 +47,6 @@
 #include <linux/regmap.h>
 #include <sound/soc.h>
 
-#include "../../../sound/soc/codecs/adv76xx.h"
-
 static int debug;
 module_param(debug, int, 0644);
 MODULE_PARM_DESC(debug, "debug level (0-2)");
@@ -83,15 +81,25 @@ MODULE_LICENSE("GPL");
 
 #define ADV7604_OP_SWAP_CB_CR				(1 << 0)
 
+#define DAI_FMT_DEFAULT (SND_SOC_DAIFMT_I2S |\
+			SND_SOC_DAIFMT_NB_NF |\
+			SND_SOC_DAIFMT_CBM_CFM)
+
 enum adv7604_type {
 	ADV7604,
 	ADV7611,
 };
 
-
 struct adv7604_reg_seq {
 	unsigned int reg;
 	u8 val;
+};
+
+struct adv76xx_snd_data
+{
+	struct snd_soc_dai_link dai;
+	struct snd_soc_card card;
+	struct adv7604_state *state;
 };
 
 struct adv7604_format_info {
@@ -133,6 +141,14 @@ struct adv7604_chip_info {
 
 	unsigned long page_mask;
 };
+
+/*
+ **********************************************************************
+ *
+ *  Arrays with configuration parameters for the ADV7604
+ *
+ **********************************************************************
+ */
 
 struct adv7604_state {
 	const struct adv7604_chip_info *info;
@@ -177,16 +193,6 @@ struct adv7604_state {
 	struct v4l2_ctrl *free_run_color_ctrl;
 	struct v4l2_ctrl *rgb_quantization_range_ctrl;
 };
-
-/*
- **********************************************************************
- *
- *  Arrays with configuration parameters for the ADV7604
- *
- **********************************************************************
- */
-
-
 
 static bool adv7604_has_afe(struct adv7604_state *state)
 {
@@ -378,15 +384,46 @@ static inline unsigned vtotal(const struct v4l2_bt_timings *t)
 	return V4L2_DV_BT_FRAME_HEIGHT(t);
 }
 
+static int regmap_read_check(struct adv7604_state *state,
+			     int client_page, u8 reg)
+{
+	struct i2c_client *client = state->i2c_clients[client_page];
+	int err;
+	unsigned int val;
+
+	err = regmap_read(state->regmap[client_page], reg, &val);
+
+	if (err) {
+		v4l_err(client, "error reading %02x, %02x\n",
+				client->addr, reg);
+		return err;
+	}
+	return val;
+}
+
+/* regmap_write_block(): Write raw data with a maximum of I2C_SMBUS_BLOCK_MAX
+ * size to one or more registers.
+ *
+ * A value of zero will be returned on success, a negative errno will
+ * be returned in error cases.
+ */
+static int regmap_write_block(struct adv7604_state *state, int client_page,
+			      unsigned int init_reg, const void *val,
+			      size_t val_len)
+{
+	struct regmap *regmap = state->regmap[client_page];
+
+	if (val_len > I2C_SMBUS_BLOCK_MAX)
+		val_len = I2C_SMBUS_BLOCK_MAX;
+
+	return regmap_raw_write(regmap, init_reg, val, val_len);
+}
 
 static inline int io_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_IO], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_IO, reg);
 }
 
 static inline int io_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -404,11 +441,8 @@ static inline int io_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 v
 static inline int avlink_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_AVLINK], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
 }
 
 static inline int avlink_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -421,11 +455,8 @@ static inline int avlink_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int cec_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_CEC], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_CEC, reg);
 }
 
 static inline int cec_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -438,11 +469,8 @@ static inline int cec_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int infoframe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_INFOFRAME], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_INFOFRAME, reg);
 }
 
 static inline int infoframe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -455,11 +483,8 @@ static inline int infoframe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int esdp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_ESDP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_ESDP, reg);
 }
 
 static inline int esdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -472,11 +497,8 @@ static inline int esdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int dpp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_DPP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_DPP, reg);
 }
 
 static inline int dpp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -489,11 +511,8 @@ static inline int dpp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int afe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_AFE], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AFE, reg);
 }
 
 static inline int afe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -506,11 +525,8 @@ static inline int afe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int rep_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_REP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_REP, reg);
 }
 
 static inline int rep_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -528,11 +544,8 @@ static inline int rep_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 
 static inline int edid_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_EDID], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
 }
 
 static inline int edid_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -543,14 +556,25 @@ static inline int edid_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 }
 
 static inline int edid_write_block(struct v4l2_subdev *sd,
-					unsigned len, const u8 *val)
+					unsigned int total_len, const u8 *val)
 {
 	struct adv7604_state *state = to_state(sd);
 	int err = 0;
+	int i = 0;
+	int len = 0;
 
-	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n", __func__, len);
+	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n",
+				__func__, total_len);
 
-	err = regmap_raw_write(state->regmap[ADV7604_PAGE_EDID],0x00, val, len);
+	while (!err && i < total_len) {
+		len = (total_len - i) > I2C_SMBUS_BLOCK_MAX ?
+				I2C_SMBUS_BLOCK_MAX :
+				(total_len - i);
+
+		err = regmap_write_block(state, ADV7604_PAGE_EDID,
+				i, val + i, len);
+		i += len;
+	}
 
 	return err;
 }
@@ -584,11 +608,8 @@ static void adv7604_delayed_work_enable_hotplug(struct work_struct *work)
 static inline int hdmi_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_HDMI], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_HDMI, reg);
 }
 
 static u16 hdmi_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -600,7 +621,7 @@ static inline int hdmi_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return 	regmap_write(state->regmap[ADV7604_PAGE_HDMI], reg, val);
+	return regmap_write(state->regmap[ADV7604_PAGE_HDMI], reg, val);
 }
 
 static inline int hdmi_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 val)
@@ -611,11 +632,8 @@ static inline int hdmi_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8
 static inline int test_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_TEST], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_TEST, reg);
 }
 
 static inline int test_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -628,11 +646,8 @@ static inline int test_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 static inline int cp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_CP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_CP, reg);
 }
 
 static u16 cp_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -655,11 +670,8 @@ static inline int cp_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 v
 static inline int vdp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
-	unsigned int val;
 
-	regmap_read(state->regmap[ADV7604_PAGE_VDP], reg, &val);
-
-	return val;
+	return regmap_read_check(state, ADV7604_PAGE_VDP, reg);
 }
 
 static inline int vdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
@@ -1243,14 +1255,7 @@ static inline bool no_lock_tmds(struct v4l2_subdev *sd)
 
 static inline bool is_hdmi(struct v4l2_subdev *sd)
 {
-	return 	hdmi_read(sd, 0x05) & 0x80;
-
-}
-
-static inline bool is_adv7604(struct v4l2_subdev *sd)
-{
-	char * aux = "adv7604";
-	return (!strncmp(sd->name, aux, strlen(aux)));
+	return hdmi_read(sd, 0x05) & 0x80;
 }
 
 static inline bool no_lock_sspd(struct v4l2_subdev *sd)
@@ -2325,9 +2330,13 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 				audio_sample_packet_detect ? "detected" : "not detected",
 				audio_mute ? "muted" : "enabled");
 		if (audio_pll_locked && audio_sample_packet_detect) {
-			// Change from adv7611 and adv7604
-			v4l2_info(sd, "Audio format: %s\n",
-				(hdmi_read(sd, 0x07) & (is_adv7604(sd) ? 0x20 : 0x40 ) ? "multi-channel" : "stereo"));
+			/* Change for ADV7611 to ADV7604 */
+			if (state->info->type == ADV7604)
+				v4l2_info(sd, "Audio format: %s\n",
+					(hdmi_read(sd, 0x07) & 0x20) ? "multi-channel" : "stereo");
+			else
+				v4l2_info(sd, "Audio format: %s\n",
+					(hdmi_read(sd, 0x07) & 0x40) ? "multi-channel" : "stereo");
 		}
 		v4l2_info(sd, "Audio CTS: %u\n", (hdmi_read(sd, 0x5b) << 12) +
 				(hdmi_read(sd, 0x5c) << 8) +
@@ -2382,7 +2391,6 @@ static const struct v4l2_subdev_ops adv7604_ops = {
 	.core = &adv7604_core_ops,
 	.video = &adv7604_video_ops,
 	.pad = &adv7604_pad_ops,
-	// TODO Add .audio ops for adv7611
 };
 
 /* -------------------------- custom ctrls ---------------------------------- */
@@ -2795,54 +2803,46 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 	return 0;
 }
 
-
-#define DAI_FMT_DEFAULT (SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBM_CFS)
-
-static bool adv7611_regmap_readable(struct device *dev, unsigned int reg)
-{
-	return true;
-}
-
 static bool adv7611_hdmi_writable(struct device *dev, unsigned int reg)
 {
 
 	switch (reg) {
-	case ADV7611_HDMI_REGISTER_00:
-	case ADV7611_HDMI_REGISTER_01:
-	case ADV7611_HDMI_REGISTER_03:
-	case ADV7611_HDMI_REGISTER_0D:
-	case ADV7611_AUDIO_MUTE_SPEED:
-	case ADV7611_HDMI_REGISTER_10:
-	case ADV7611_AUDIO_FIFO_ALM_OST_FULL_THRES_HOLD:
-	case ADV7611_AUDIO_FIFO_ALM_OST_EMPTY_THRE_SHOLD:
-	case ADV7611_AUDIO_COAST_MASK:
-	case ADV7611_MUTE_MASK_21_16:
-	case ADV7611_MUTE_MASK_15_8:
-	case ADV7611_MUTE_MASK_7_0:
-	case ADV7611_MUTE_CTRL:
-	case ADV7611_DEEPCOLOR_FIFO_DEBUG_1:
-	case ADV7611_REGISTER_1DH:
+	case ADV76XX_HDMI_REGISTER_00:
+	case ADV76XX_HDMI_REGISTER_01:
+	case ADV76XX_HDMI_REGISTER_03:
+	case ADV76XX_HDMI_REGISTER_0D:
+	case ADV76XX_AUDIO_MUTE_SPEED:
+	case ADV76XX_HDMI_REGISTER_10:
+	case ADV76XX_AUDIO_FIFO_ALM_OST_FULL_THRES_HOLD:
+	case ADV76XX_AUDIO_FIFO_ALM_OST_EMPTY_THRE_SHOLD:
+	case ADV76XX_AUDIO_COAST_MASK:
+	case ADV76XX_MUTE_MASK_21_16:
+	case ADV76XX_MUTE_MASK_15_8:
+	case ADV76XX_MUTE_MASK_7_0:
+	case ADV76XX_MUTE_CTRL:
+	case ADV76XX_DEEPCOLOR_FIFO_DEBUG_1:
+	case ADV76XX_REGISTER_1DH:
 	case ADV7611_REGISTER_3CH:
-	case ADV7611_REGISTER_40H:
-	case ADV7611_REGISTER_41H:
-	case ADV7611_REGISTER_47H:
-	case ADV7611_REGISTER_48H:
+	case ADV76XX_REGISTER_40H:
+	case ADV76XX_REGISTER_41H:
+	case ADV76XX_REGISTER_47H:
+	case ADV76XX_REGISTER_48H:
 	case ADV7611_REGISTER_4CH:
-	case ADV7611_HDMI_REGISTER_50:
-	case ADV7611_FILT_5V_DET_REG:
-	case ADV7611_REGISTER_5AH:
+	case ADV76XX_HDMI_REGISTER_50:
+	case ADV76XX_FILT_5V_DET_REG:
+	case ADV76XX_REGISTER_5AH:
 	case ADV7611_HPA_DELAY_SEL_3_0:
 	case ADV7611_DSD_MAP_ROT_2_0:
 	case ADV7611_DDC_PAD:
 	case ADV7611_HDMI_REGISTER_02:
-	case ADV7611_EQ_DYNAMIC_FREQ:
-	case ADV7611_EQ_DYN1_LF:
-	case ADV7611_EQ_DYN1_HF:
-	case ADV7611_EQ_DYN2_LF:
-	case ADV7611_EQ_DYN2_HF:
-	case ADV7611_EQ_DYN3_LF:
-	case ADV7611_EQ_DYN3_HF:
-	case ADV7611_EQ_DYNAMIC_ENABLE:
+	case ADV76XX_EQ_DYNAMIC_FREQ:
+	case ADV76XX_EQ_DYN1_LF:
+	case ADV76XX_EQ_DYN1_HF:
+	case ADV76XX_EQ_DYN2_LF:
+	case ADV76XX_EQ_DYN2_HF:
+	case ADV76XX_EQ_DYN3_LF:
+	case ADV76XX_EQ_DYN3_HF:
+	case ADV76XX_EQ_DYNAMIC_ENABLE:
 		return true;
 	}
 
@@ -2854,215 +2854,156 @@ static bool adv7611_regmap_writable(struct device *dev, unsigned int reg)
 	return true;
 }
 
-
-
-// Default register values for the adv7611 device
+/* Default register values for the adv7611 device */
 static const struct reg_default adv7611_hdmi_reg_defaults[] = {
-		{},
+	{},
 };
 static const struct regmap_config adv76xx_snd_regmap[] = {
 	{
-		.name 			= "regmap_io",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "io",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= ADV7611_IO_MAX_REG_OFFSET,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_avlink",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "avlink",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_cec",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "cec",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_infoframe",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "infoframe",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_esdp",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "esdp",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_epp",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "epp",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_afe",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "afe",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_rep",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "rep",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_edid",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "edid",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 
 	{
-		.name 			= "regmap_hdmi",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "hdmi",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_hdmi_writable,
 
-		.max_register		= ADV7611_HDMI_MAX_REG_OFFSET,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.max_register		= ADV76XX_HDMI_MAX_REG_OFFSET,
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_test",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "test",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_cp",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 	= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "cp",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 	{
-		.name 			= "regmap_vdp",
-		.reg_bits 		= 8,
-		.val_bits 		= 8,
-		.reg_stride 		= 1,
-		.readable_reg 		= adv7611_regmap_readable,
+		.name			= "vdp",
+		.reg_bits		= 8,
+		.val_bits		= 8,
 		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
-		.cache_type 		= REGCACHE_NONE,
-		.reg_defaults 		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
+		.cache_type		= REGCACHE_NONE,
+		.reg_defaults		= adv7611_hdmi_reg_defaults,
+		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
 	},
 };
-
-//static const struct regmap_config adv76xx_hdmi_snd_regmap = {
-//	.name 			= "regmap_hdmi",
-//	.reg_bits 		= 8,
-//	.val_bits 		= 8,
-//	.reg_stride 	= 1,
-//
-//	.readable_reg 		= adv7611_hdmi_readable,
-//	.writeable_reg		= adv7611_hdmi_writable,
-//
-//	.max_register		= ADV7611_HDMI_MAX_REG_OFFSET,
-//	.cache_type 		= REGCACHE_RBTREE,
-//	.reg_defaults 		= adv7611_hdmi_reg_defaults,
-//	.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-//};
-
-//static const struct regmap_config adv76xx_io_snd_regmap = {
-//	.name 			= "regmap_io",
-//	.reg_bits 		= 8,
-//	.val_bits 		= 8,
-//	.reg_stride 	= 1,
-//
-//	.readable_reg 		= adv7611_hdmi_readable,
-//	.writeable_reg		= adv7611_hdmi_writable,
-//
-//	.max_register		= ADV7611_IO_MAX_REG_OFFSET,
-//	.cache_type 		= REGCACHE_RBTREE,
-//	.reg_defaults 		= adv7611_hdmi_reg_defaults,
-//	.num_reg_defaults 	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-//};
 
 /**
  * This dapm route map exists for DPCM link only.
@@ -3071,7 +3012,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 static const struct snd_soc_dapm_route audio_map[] = {
 	{"CPU-Capture",  NULL, "Capture"},
 };
-
 
 /*
  * Unregister Sound
@@ -3086,23 +3026,26 @@ static void adv76xx_unregister_snd (struct adv7604_state *state){
 		snd_soc_unregister_card(&data->card);
 		platform_device_unregister(state->pdev_snd_codec);
 	}
-
 }
 
 static int configure_regmap(struct adv7604_state *state, int region)
 {
 	int err;
 
-	if (state->i2c_clients[region] == NULL)
+	if (!state->i2c_clients[region])
 		return -ENODEV;
 
-	if (state->regmap[region] == NULL) {
+	if (!state->regmap[region]) {
 
-		state->regmap[region] = devm_regmap_init_i2c(state->i2c_clients[region],
-							     &adv76xx_snd_regmap[region]);
+		state->regmap[region] =
+			devm_regmap_init_i2c(state->i2c_clients[region],
+					     &adv76xx_snd_regmap[region]);
+
 		if (IS_ERR(state->regmap[region])) {
 			err = PTR_ERR(state->regmap[region]);
-			v4l_err(state->i2c_clients[region], "Error initializing regmap %d with error %d\n", region, err);
+			v4l_err(state->i2c_clients[region],
+					"Error initializing regmap %d with error %d\n",
+					region, err);
 			return -EINVAL;
 		}
 	}
@@ -3116,19 +3059,15 @@ static int configure_regmaps(struct adv7604_state *state)
 
 	for (i = 0 ; i < ADV7604_PAGE_MAX; i++) {
 		err = configure_regmap(state, i);
-		if (err && (err != -ENODEV)) {
+		if (err && (err != -ENODEV))
 			return err;
-		}
 	}
 	return 0;
 }
 
-
-/**
- * Audio configuration.
- *
- */
-static int adv76xx_configure_snd (struct adv7604_state *state){
+/* Audio configuration */
+static int adv76xx_configure_snd(struct adv7604_state *state)
+{
 
 	struct i2c_client *client, *hdmi_client;
 	struct platform_device *pdev;
@@ -3137,19 +3076,19 @@ static int adv76xx_configure_snd (struct adv7604_state *state){
 	char codec_name[32], card_name[32], platform_name[32];
 	int ret;
 
-	// Check i2c-client
+	/* Check i2c-client */
 	if (state->i2c_clients[ADV7604_PAGE_IO] == NULL)
 		return -ENODEV;
 
 	client = state->i2c_clients[ADV7604_PAGE_IO];
 
-	// Check i2c-Client HDMI that will use the regmap
+	/* Check i2c-Client HDMI that will use the regmap */
 	if (state->i2c_clients[ADV7604_PAGE_HDMI] == NULL)
 		return -ENODEV;
 
 	hdmi_client = state->i2c_clients[ADV7604_PAGE_HDMI];
 
-	// Getting ssi node information from DT
+	/* Getting ssi node information from DT */
 	cpu_np = of_parse_phandle(client->dev.of_node, "ssi-controller", 0);
 	if (!cpu_np){
 		dev_err(&client->dev, "No ssi controler found\n");
@@ -3164,40 +3103,40 @@ static int adv76xx_configure_snd (struct adv7604_state *state){
 		goto end;
 	}
 
-	/* Configure regmap for the hdmi I2C region */
-	data->regmap = state->regmap[ADV7604_PAGE_HDMI];
-
-	// Create platform name depending on the i2c client
+	/* Create platform name depending on the i2c client */
 	sprintf(platform_name, "%s-asoc-codec", client->name);
+	data->state = state;
 
-	// Register the platform device
+	/* Register the platform device */
 	pdev = platform_device_register_resndata(&client->dev,
 						 platform_name,
-						PLATFORM_DEVID_NONE,
-						NULL,0,
-						data,sizeof(struct adv76xx_snd_data));
+						 PLATFORM_DEVID_NONE,
+						 NULL, 0,
+						 data, sizeof(struct adv76xx_snd_data));
 
 	if (IS_ERR(pdev)) {
-		dev_err(&client->dev, "Fail registering platform %s\n", PLATFORM_DRIVER_NAME);
+		dev_err(&client->dev,
+			"Fail registering platform %s\n",
+			platform_name);
 		ret = -ENODEV;
 		goto err_platform;
 	}
 
-	// Save the reference on state
+	/* Save the reference on state */
 	state->pdev_snd_codec = pdev;
 
-	// Configure names depending on i2c client
+	/* Configure names depending on i2c client */
 	sprintf(codec_name, "%s-asoc-codec", client->name);
 	sprintf(card_name, "%s-snd-card", client->name);
 
-	// Configure DAI data
+	/* Configure DAI data */
 	data->dai.name = "HDMI Audio";
 	data->dai.stream_name = "Sound";
-	data->dai.codec_dai_name = DAI_DRIVER_NAME;
-	data->dai.cpu_of_node = cpu_np;				// IMX ssi controler node
-	data->dai.codec_name = codec_name; 			// MUST match with the snd_soc_register_codec dev name, one per each device??
-	data->dai.platform_of_node = cpu_np;		// IMX ssi controler node
-	data->dai.dai_fmt = DAI_FMT_DEFAULT; 		// Default format I2S, normal BCLK + FRAME, codec clk master & frame slave
+	data->dai.codec_dai_name = "adv76xx-dai";
+	data->dai.cpu_of_node = cpu_np;
+	data->dai.codec_name = codec_name;
+	data->dai.platform_of_node = cpu_np;
+	data->dai.dai_fmt = DAI_FMT_DEFAULT;
 
 	/* Initialize sound card */
 	data->card.dev = &pdev->dev;
@@ -3208,10 +3147,10 @@ static int adv76xx_configure_snd (struct adv7604_state *state){
 	data->card.num_dapm_routes = ARRAY_SIZE(audio_map);
 	data->card.num_dapm_widgets = 0;
 
-	// Set the drvdata for the card
+	/* Set the drvdata for the card */
 	snd_soc_card_set_drvdata(&data->card, data);
 
-	// Register the card with the sound system
+	/* Register the card with the sound system */
 	ret = snd_soc_register_card(&data->card);
 	if (ret) {
 		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
@@ -3224,12 +3163,11 @@ err_card:
 	platform_device_unregister(pdev);
 err_platform:
 err_regmap:
-	// Clean data devm_kzalloc
+	/* Clean data devm_kzalloc */
 	devm_kfree(&client->dev,data);
 end:
 	return ret;
 }
-
 
 static int adv7604_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
