@@ -24,190 +24,168 @@
 
 #include "adv76xx.h"
 
-static int adv7611_disable_mute_conditions(struct snd_soc_codec * codec)
+static int adv7611_disable_mute_conditions(struct snd_soc_codec *codec)
 {
 	unsigned int reg;
 
 	/* Clean mute condition masks */
-	snd_soc_write(codec, ADV7611_MUTE_MASK_21_16, 0x00);
-	snd_soc_write(codec, ADV7611_MUTE_MASK_15_8, 0x00);
-	snd_soc_write(codec, ADV7611_MUTE_MASK_7_0, 0x00);
+	snd_soc_write(codec, ADV76XX_MUTE_MASK_21_16, 0x00);
+	snd_soc_write(codec, ADV76XX_MUTE_MASK_15_8, 0x00);
+	snd_soc_write(codec, ADV76XX_MUTE_MASK_7_0, 0x00);
 
 	/* No mute automatic conditions, disabling Audio Delay Line */
-	reg = snd_soc_read(codec, ADV7611_AUDIO_MUTE_SPEED);
-	snd_soc_write(codec, ADV7611_AUDIO_MUTE_SPEED,
+	reg = snd_soc_read(codec, ADV76XX_AUDIO_MUTE_SPEED);
+	snd_soc_write(codec, ADV76XX_AUDIO_MUTE_SPEED,
 			(reg & 0x1f) | 0xc0);
 
 
 	return 0;
 }
 
-static struct regmap * adv7611_get_regmap(struct device * dev)
+static struct regmap * adv7611_get_regmap(struct device *dev)
 {
 	struct adv76xx_snd_data * snd_data = dev->platform_data;
 
 	if (snd_data == NULL)
 		return NULL;
 
-	return snd_data->regmap;
+	return snd_data->state->regmap[ADV7604_PAGE_HDMI];
 }
 
+/*
+ * Set the Master Clock register multiplier that control
+ * the Master Clock output frequency
+ */
+static int adv7611_set_mclk_fs_n(struct snd_soc_codec *codec,
+				 unsigned int fs)
+{
+	struct adv76xx_snd_data * snd_data = codec->dev->platform_data;
+
+	if (!snd_data)
+		return -ENODEV;
+
+	return regmap_write(snd_data->state->regmap[ADV7604_PAGE_AFE],
+			ADV7611_MCLK_FS, fs);
+}
 
 static int adv7611_codec_probe(struct snd_soc_codec * codec){
+
+	/* Do not mux SPDIF and I2S output */
+	snd_soc_write(codec, ADV7611_DST_MAP_ROT_2_0, 0x04);
 
 	/* Disable mute conditions */
 	adv7611_disable_mute_conditions(codec);
 
-	/* Setting MCLK to 256Fs */
-	snd_soc_write(codec, ADV7611_MCLK_FS, 0x01);
+	/* Set MCLK to 256fs*/
+	adv7611_set_mclk_fs_n(codec, 0x01);
 
 	return 0;
 }
 
-
 static struct snd_soc_codec_driver adv7611_audio_codec = {
-	/* We can define here */
-	.probe				= adv7611_codec_probe,
-	.get_regmap			= adv7611_get_regmap,
-
-	/*
-	.suspend			= ,
-	.resume				= ,
-	.component_driver	= , // struct snd_soc_component_driver
-
-	// Default control and setup, added after probe() is run
-	.controls			= , // snd_kcontrol_new
-	.num_controls		= , // int
- 	.dapm_widgets		= , // snd_soc_dapm_widget
-	.num_dapm_widgets	= , // int
-	.dapm_routes		= , // snd_soc_dapm_route
-	.num_dapm_routes	= , // int
-
-	// codec wide operations
-	.set_sysclk			= ,
-	.set_pll			= ,
-
-	// codec IO
-	.read				= ,
-	.write				= ,
-	.reg_cache_size		= , // unsigned int
-	.reg_cache_step		= , // short
-	.reg_word_size		= , // short
-	.reg_cache_default	= ,
-
-	// codec bias level
-	.set_bias_level		= ,
-	.idle_bias_off		= , // bool
-	.suspend_bias_off 	= , // bool
-
-	.seq_notifier		= ,
-	 */
+	.probe = adv7611_codec_probe,
+	.get_regmap = adv7611_get_regmap,
 };
 
 static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
 
 	struct snd_soc_codec *codec = dai->codec;
-	int finalfmt = snd_soc_read(codec, ADV7611_HDMI_REGISTER_03);
+	int finalfmt = snd_soc_read(codec, ADV76XX_HDMI_REGISTER_03);
 
-	/* setting i2s data format */
+	/* Setting i2s data format */
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
-		finalfmt &= (~ADV7611_I2S_OUT_MODE_MASK | ADV7611_I2S_OUT_MODE_I2S);
+		finalfmt &= (~ADV76XX_I2SOUTMODE_MASK |
+				ADV76XX_I2SOUTMODE_I2S);
+		break;
+	case SND_SOC_DAIFMT_RIGHT_J:
+	case SND_SOC_DAIFMT_LEFT_J:
+	default:
+		return -EINVAL;
+	}
+
+	snd_soc_write(codec, ADV76XX_HDMI_REGISTER_03, finalfmt);
+
+	/*
+	 * i2s clock and frame master setting.
+	 * ONLY support:
+	 *  - clock and frame master
+	*/
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	case SND_SOC_DAIFMT_CBM_CFM:
+		/* Setting MCLK to 256fs */
+		snd_soc_write(codec, ADV7611_MCLK_FS, 0x01);
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	snd_soc_write(codec, ADV7611_HDMI_REGISTER_03, finalfmt);
-
 	return 0;
-
 }
 
-static int adv7611_ops_hw_params(struct snd_pcm_substream * substream,
-		struct snd_pcm_hw_params * hw_params, struct snd_soc_dai * dai)
-{
+static void log_pcm_sample_info(struct snd_soc_dai *dai){
 
+	int freq;
+	unsigned int reg;
+	struct adv76xx_snd_data * snd_data = dai->dev->platform_data;
+
+	/* Check channel status data */
+	if (snd_data) {
+		regmap_read(snd_data->state->regmap[ADV7604_PAGE_IO], 0x65, &reg);
+		reg &= 0x80;
+		dev_info(dai->dev, "Channel status data is %s\n", reg ? "valid" : "not valid");
+	}
+
+	/* Check if there are PCM audio samples */
+	reg = snd_soc_read(dai->codec, 0x18) & 0x01;
+	dev_info(dai->codec->dev, "Received PCM package: %s\n", reg ? "yes":"no");
+
+	reg = snd_soc_read(dai->codec, 0x36) & 0x02;
+	dev_info(dai->dev, "Received PCM package(from CS_DATA): %s\n", reg ? "no":"yes");
+
+	if (!reg){
+		/* Get audio sampling frequency */
+		reg = snd_soc_read(dai->codec, 0x39) & 0x0f;
+		dev_info(dai->dev, "Sample Freq: %x\n", reg);
+
+		reg = snd_soc_read(dai->codec, 0x39) & 0x30;
+		dev_info(dai->codec->dev, "Clock accuracy: %x\n", reg);
+
+		reg = snd_soc_read(dai->codec, 0x3a) & 0x01;
+		dev_info(dai->dev, "Max audio sample word length: %d\n", reg ? 24 : 20);
+
+		reg = snd_soc_read(dai->codec, 0x3a) & 0x0e;
+		dev_info(dai->dev, "Audio sample word length: %x\n", reg);
+	}
+
+	reg = snd_soc_read(dai->codec, 0x7e);
+	dev_info(dai->dev, "FIFO Underflow %s\n", reg & 0x40 ? "true": "false");
+	dev_info(dai->dev, "FIFO Overflow %s\n", reg & 0x20 ? "true": "false");
+}
+
+static int adv7611_ops_hw_params(struct snd_pcm_substream *substream,
+				 struct snd_pcm_hw_params *hw_params,
+				 struct snd_soc_dai *dai)
+{
 	struct snd_soc_codec *codec = dai->codec;
 	unsigned int reg;
 	unsigned int channels = params_channels(hw_params);
 	unsigned int rates = params_rate(hw_params);
-	int linewidthreg = snd_soc_read(codec, ADV7611_LINE_WIDTH_1);
+	int linewidthreg = snd_soc_read(codec, ADV76XX_LINE_WIDTH_1);
 
-	// Force N update
-	reg = snd_soc_read(codec, ADV7611_REGISTER_5AH);
-	snd_soc_write(codec, ADV7611_REGISTER_5AH,
-			reg | 0x01);
-
-	// Get the Audio PLL Locked status
-	reg = snd_soc_read(codec, ADV7611_HDMI_REGISTER_04) & ADV7611_AUDIO_PLL_LOCKED;
-	dev_info(dai->dev, "Audio PLL Locked is %s \n", reg ? "locked" : "not locked");
-
-	// Read Mute value
-	//reg = regmap_read(codec, ADV7611_MUTE_CTRL) & ADV7611_AUDIO_PLL_LOCKED;
-
-	// Read the CTS from the data stream 5b, 5c ,5d
-	dev_info(dai->dev, "ADV7611 Audio Codec Ops hw params: fifo size %lu rate %u rate deno %u channels %u\n" ,
-			(unsigned long)hw_params->fifo_size,rates , hw_params->rate_den, hw_params->mres, channels );
-
-	// Read the N from the data stream 5d, 5e, 5f
+	/* Check if there are PCM audio samples */
+	reg = snd_soc_read(dai->codec, ADV7611_PACKETS_DETECTED_2) &
+			ADV7611_AUDIO_SAMPLE_PCKT_DET;
+	if (!reg)
+		return -ENODEV;
 
 	return 0;
 }
-
-static void adv7611_ops_shutdown(struct snd_pcm_substream * substream,
-		struct snd_soc_dai * dai)
-{
-
-	dev_info(dai->dev, "ADV7611 Audio Codec Ops shutdown\n");
-}
-
-
-static int adv7611_set_pll(struct snd_soc_dai *dai, int pll_id, int source,
-	unsigned int freq_in, unsigned int freq_out)
-{
-	dev_info(dai->dev, "Audio Codec Driver set_pll clkid %d source %d freq_in %d freq_out %d\n", pll_id, source, freq_in, freq_out);
-
-	return 0;
-}
-
-static int adv7611_set_sysclk(struct snd_soc_dai *dai,
-		  int clk_id, int source, unsigned int freq, int dir)
-{
-
-	dev_info(dai->dev, "Audio Codec Driver set_sysclk clkid %d source %d freq %d dir %d\n", clk_id, source, freq, dir);
-
-	return 0;
-}
-
 
 static struct snd_soc_dai_ops adv7611_dai_ops = {
-
-	// ALSA PCM audio operations
-	.shutdown		= adv7611_ops_shutdown,
-	.hw_params		= adv7611_ops_hw_params,
-		//.hw_free		= ,
-		//.prepare		= ,
-	.set_fmt		= adv76xx_set_dai_fmt,
-	.set_sysclk		= adv7611_set_sysclk,
-	.set_pll		= adv7611_set_pll,
-
-	/* We can define here DAI clocking configuration
-
-	.set_clkdiv		= ,
-	.set_bclk_ratio	= ,
-
-	 //DAI format configuration
-	.xlate_tdm_slot_mask	= ,
-	.set_tdm_slot			= ,
-	.set_channel_map		= ,
-	.set_tristate			= ,
-
-	// Digital Mute
-	.digital_mute	= ,
-	.mute_stream	= ,
-*/
+	.hw_params = adv7611_ops_hw_params,
+	.set_fmt = adv76xx_set_dai_fmt,
 };
 
 #define ADV7611_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
@@ -215,45 +193,40 @@ static struct snd_soc_dai_ops adv7611_dai_ops = {
 			SNDRV_PCM_FMTBIT_S24_LE |\
 			SNDRV_PCM_FMTBIT_S32_LE)
 
-// DAI (Digital Audio Interface) struct for the codec
+/* DAI (Digital Audio Interface) struct for the codec */
 static struct snd_soc_dai_driver adv7611_dai = {
-	.name 	= DAI_DRIVER_NAME, // Same used on snd_soc_dai_link.codec_dai_name
+	.name = DAI_DRIVER_NAME,
 	.capture = {
-			.stream_name = "HDMI-Capture",
-			.channels_min = 1,
-			.channels_max = 2,
-			.rates = SNDRV_PCM_RATE_8000_48000 | SNDRV_PCM_RATE_96000,
-			.formats = ADV7611_FORMATS,
-		},
-	.ops 	= &adv7611_dai_ops, // Operations
+		.stream_name    = "HDMI-Capture",
+		.channels_min   = 1,
+		.channels_max   = 2,
+		.rate_min       = 32000,
+		.rate_max       = 768000,
+		.rates		= SNDRV_PCM_RATE_8000_192000,
+		.formats	= ADV7611_FORMATS,
+	},
+	.ops = &adv7611_dai_ops,
 };
 
-
-/*
- *
- */
 static int adv76xx_codec_dev_probe(struct platform_device *pdev)
 {
 	int ret;
 
-	// Check good pdev value
-	if (pdev == NULL )
+	/* Check good pdev value */
+	if (pdev == NULL)
 		return -ENODEV;
 
 	pdev->dev.init_name = pdev->name;
 
-	// Register the codec on the platform device
-	ret = snd_soc_register_codec(&pdev->dev,
-			&adv7611_audio_codec,
-			&adv7611_dai,
-			1);
+	/* Register the codec on the platform device */
+	ret = snd_soc_register_codec(&pdev->dev, &adv7611_audio_codec,
+					&adv7611_dai, 1);
 
 	if (ret)
 		return -ENODEV;
 
 	return ret;
 }
-
 
 static int adv76xx_codec_dev_remove(struct platform_device *pdev)
 {
@@ -274,7 +247,7 @@ MODULE_DEVICE_TABLE(of, adv76xx_dt_ids);
 
 static struct platform_driver adv76xx_snd_driver = {
 	.driver	= {
-		.name	= PLATFORM_DRIVER_NAME, // Same name used on platform_device_register_resndata
+		.name   = PLATFORM_DRIVER_NAME,
 		.owner	= THIS_MODULE,
 		.of_match_table = adv76xx_dt_ids,
 	},
