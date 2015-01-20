@@ -2547,14 +2547,6 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
 				     for digital formats */
 
-	/* HDMI audio */
-	hdmi_write_clr_set(sd, 0x15, 0x03, 0x03); /* Mute on FIFO over-/underflow [REF_01, c. 1.2.18] */
-	hdmi_write_clr_set(sd, 0x1a, 0x0e, 0x08); /* Wait 1 s before unmute */
-	hdmi_write_clr_set(sd, 0x48, 0x06, 0x06); /* FIFO reset on over-/underflow [REF_01, c. 1.2.19] */
-
-	/* TODO from platform data */
-	afe_write(sd, 0xb5, 0x01);  /* Setting MCLK to 256Fs */
-
 	if (adv7604_has_afe(state)) {
 		afe_write(sd, 0x02, pdata->ain_sel); /* Select analog input muxing mode */
 		io_write_clr_set(sd, 0x30, 1 << 4, pdata->output_bus_lsb_to_msb << 4);
@@ -2855,21 +2847,16 @@ static bool adv7611_hdmi_writable(struct device *dev, unsigned int reg)
 	return false;
 }
 
-static bool adv7611_regmap_writable(struct device *dev, unsigned int reg)
-{
-	return true;
-}
-
 /* Default register values for the adv7611 device */
 static const struct reg_default adv7611_hdmi_reg_defaults[] = {
 	{},
 };
+
 static const struct regmap_config adv76xx_snd_regmap[] = {
 	{
 		.name			= "io",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= ADV7611_IO_MAX_REG_OFFSET,
 		.cache_type		= REGCACHE_NONE,
@@ -2880,7 +2867,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "avlink",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2891,7 +2877,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "cec",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2902,7 +2887,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "infoframe",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2913,7 +2897,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "esdp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2924,7 +2907,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "epp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2935,9 +2917,8 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "afe",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
-		.max_register		= 0xff,
+		.max_register		= ADV76XX_DPLL_MAX_REG_OFFSET,
 		.cache_type		= REGCACHE_NONE,
 		.reg_defaults		= adv7611_hdmi_reg_defaults,
 		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
@@ -2946,7 +2927,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "rep",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2957,7 +2937,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "edid",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2980,7 +2959,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "test",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -2991,7 +2969,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "cp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -3002,7 +2979,6 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 		.name			= "vdp",
 		.reg_bits		= 8,
 		.val_bits		= 8,
-		.writeable_reg		= adv7611_regmap_writable,
 
 		.max_register		= 0xff,
 		.cache_type		= REGCACHE_NONE,
@@ -3075,11 +3051,11 @@ static int configure_regmaps(struct adv7604_state *state)
 static int adv76xx_configure_snd(struct adv7604_state *state)
 {
 
-	struct i2c_client *client, *hdmi_client;
+	struct i2c_client *client;
 	struct platform_device *pdev;
 	struct adv76xx_snd_data * data;
 	struct device_node *cpu_np;
-	char codec_name[32], card_name[32], platform_name[32];
+	char codec_name[32], card_name[32], platform_name[32], codec_dai_name[32];
 	int ret;
 
 	/* Check i2c-client */
@@ -3088,11 +3064,7 @@ static int adv76xx_configure_snd(struct adv7604_state *state)
 
 	client = state->i2c_clients[ADV7604_PAGE_IO];
 
-	/* Check i2c-Client HDMI that will use the regmap */
-	if (state->i2c_clients[ADV7604_PAGE_HDMI] == NULL)
-		return -ENODEV;
-
-	hdmi_client = state->i2c_clients[ADV7604_PAGE_HDMI];
+	dev_info(&client->dev, "Configuring sound system\n");
 
 	/* Getting ssi node information from DT */
 	cpu_np = of_parse_phandle(client->dev.of_node, "ssi-controller", 0);
@@ -3134,11 +3106,12 @@ static int adv76xx_configure_snd(struct adv7604_state *state)
 	/* Configure names depending on i2c client */
 	sprintf(codec_name, "%s-asoc-codec", client->name);
 	sprintf(card_name, "%s-snd-card", client->name);
+	sprintf(codec_dai_name, "%s-dai", client->name);
 
 	/* Configure DAI data */
 	data->dai.name = "HDMI Audio";
 	data->dai.stream_name = "Sound";
-	data->dai.codec_dai_name = "adv76xx-dai";
+	data->dai.codec_dai_name = codec_dai_name;
 	data->dai.cpu_of_node = cpu_np;
 	data->dai.codec_name = codec_name;
 	data->dai.platform_of_node = cpu_np;
@@ -3376,13 +3349,11 @@ static int adv7604_probe(struct i2c_client *client,
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 			client->addr << 1, client->adapter->name);
 
-	if (state->info->type == ADV7611){
-		/* snd configuration */
-		err = adv76xx_configure_snd(state);
+	/* snd configuration */
+	err = adv76xx_configure_snd(state);
 
-		if (err)
-			goto err_entity;
-	}
+	if (err)
+		goto err_entity;
 
 	err = v4l2_async_register_subdev(sd);
 	if (err)
