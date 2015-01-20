@@ -25,16 +25,17 @@
 
 /* IO Registers definition */
 enum adv7611_io_reg {
+	ADV7611_HDMI_LVL_RAW_STATUS_2 = 0x65,
 	ADV7611_IO_MAX_REG_OFFSET = 0xFF,
 	ADV7611_RD_INFO	= 0xEA,
 	ADV7611_RD_INFO_2 = 0xEB,
 };
 
 /* DPLL Afe */
-enum adv7611_dpll_reg {
-	ADV7611_DPLL_MAX_REG_OFFSET = 0xB5,
-	ADV7611_AUDIO_MISC = 0xA0,
-	ADV7611_MCLK_FS = 0xB5,
+enum adv76xx_dpll_reg {
+	ADV76XX_DPLL_MAX_REG_OFFSET = 0xC8,
+	ADV76XX_AUDIO_MISC = 0xA0,
+	ADV76XX_MCLK_FS = 0xB5,
 };
 
 /* Specifics HDMI registers for ADV7611 */
@@ -187,11 +188,11 @@ enum adv76xx_i2s_mode_sel {
 };
 
 /* Audio Package detection (HDMI register 0x18, [3:0]) */
-enum adv7611_audio_pckt_det {
-	ADV7611_AUDIO_SAMPLE_PCKT_DET = 0x01,
-	ADV7611_DSD_PACKET_DET = 0x02,
+enum adv76xx_audio_pckt_det {
+	ADV76XX_AUDIO_SAMPLE_PCKT_DET = 0x01,
+	ADV76XX_DSD_PACKET_DET = 0x02,
 	ADV7611_DST_AUDIO_PCKT_DET = 0x04,
-	ADV7611_HBR_AUDIO_PCKT_DET = 0x08,
+	ADV76XX_HBR_AUDIO_PCKT_DET = 0x08,
 };
 
 enum adv7604_drive_strength {
