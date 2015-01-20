@@ -66,10 +66,6 @@
 		mux-ext-port = <5>;
 	};*/
 
-	hdmiaudio {
-		compatible = "adi,adv76xx";
-	};
-	
 	ipum2m0: ipum2m@ipu1 {
 		compatible = "fsl,imx6-v4l2-mem2mem";
 		ipu = <&ipu1>;
@@ -159,6 +155,30 @@
 			IMX_AUDMUX_V2_PDCR_RXDSEL(0)
 		>;
 	};
+	
+	ssi2 {
+		fsl,audmux-port = <1>; /* Port 2 on Freescale documentatin */
+		fsl,port-config = <
+			(IMX_AUDMUX_V2_PTCR_RFSEL(8 | 5) |
+			IMX_AUDMUX_V2_PTCR_RCSEL(8 | 5) |
+			IMX_AUDMUX_V2_PTCR_TFSEL(5) |
+			IMX_AUDMUX_V2_PTCR_TCSEL(5) |
+			IMX_AUDMUX_V2_PTCR_RFSDIR |
+			IMX_AUDMUX_V2_PTCR_RCLKDIR |
+			IMX_AUDMUX_V2_PTCR_TFSDIR |
+			IMX_AUDMUX_V2_PTCR_TCLKDIR)
+			IMX_AUDMUX_V2_PDCR_RXDSEL(5)
+		>;
+	};
+
+	aud6 {
+		fsl,audmux-port = <5>; /* Port 6 on Freescale documentation */
+		fsl,port-config = <
+			0x00000000
+			IMX_AUDMUX_V2_PDCR_RXDSEL(1)
+		>;
+	};
+	
 };
 
 &fec {
@@ -281,6 +301,7 @@
 	hdmiin2: adv7604@20 {
 		compatible = "adi,adv7604";
 		reset-gpios = <&gpio1 18 GPIO_ACTIVE_LOW>;
+		ssi-controller = <&ssi2>;
 		reg = <0x20>;
 		hpd-gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>;
 
@@ -680,12 +701,13 @@
 	status = "okay";
 };
 
-&hdmi {
-	ddc-i2c-bus = <&i2c2>;
+&ssi1 {
 	status = "okay";
+	fsl,mode = "i2s-master";
+	fsl,ssi-asynchronous;
 };
 
-&ssi1 {
+&ssi2 {
 	status = "okay";
 	fsl,mode = "i2s-master";
 	fsl,ssi-asynchronous;
