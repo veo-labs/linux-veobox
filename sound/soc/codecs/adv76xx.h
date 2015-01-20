@@ -22,8 +22,45 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
 
-#define DAI_DRIVER_NAME		"adv76xx-dai"
+#define DAI_ADV7611_NAME	"adv7611-dai"
+#define DAI_ADV7604_NAME	"adv7604-dai"
 #define PLATFORM_DRIVER_NAME	"adv76xx-asoc-codec"
+
+enum adv7604_type {
+	ADV7604,
+	ADV7611,
+};
+
+struct adv7604_chip_info {
+	enum adv7604_type type;
+
+	bool has_afe;
+	unsigned int max_port;
+	unsigned int num_dv_ports;
+
+	unsigned int edid_enable_reg;
+	unsigned int edid_status_reg;
+	unsigned int lcf_reg;
+
+	unsigned int cable_det_mask;
+	unsigned int tdms_lock_mask;
+	unsigned int fmt_change_digital_mask;
+
+	const struct adv7604_format_info *formats;
+	unsigned int nformats;
+
+	void (*set_termination)(struct v4l2_subdev *sd, bool enable);
+	void (*setup_irqs)(struct v4l2_subdev *sd);
+	unsigned int (*read_hdmi_pixelclock)(struct v4l2_subdev *sd);
+	unsigned int (*read_cable_det)(struct v4l2_subdev *sd);
+	int (*init_core)(struct v4l2_subdev *sd);
+
+	/* 0 = AFE, 1 = HDMI */
+	const struct adv7604_reg_seq *recommended_settings[2];
+	unsigned int num_recommended_settings[2];
+
+	unsigned long page_mask;
+};
 
 /* Struct used on adv7604.c for manage private information */
 struct adv7604_state {
