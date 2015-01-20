@@ -2476,7 +2476,6 @@ static int adv7611_core_init(struct v4l2_subdev *sd)
 	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
 					     for digital formats */
 
-
 	/* interrupts */
 	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
 	io_write(sd, 0x46, 0x98); /* Enable SSPD, STDI and CP unlocked interrupts */
@@ -2657,7 +2656,7 @@ static const struct adv7604_reg_seq adv7611_recommended_settings_hdmi[] = {
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x87), 0x70 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x57), 0xda },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x58), 0x01 },
-	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x03), 0x98 },	// Enable Zeroing of I2S, IS2 Mode, 24bits right justified
+	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x03), 0x98 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x4c), 0x44 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x8d), 0x04 },
 	{ ADV7604_REG(ADV7604_PAGE_HDMI, 0x8e), 0x1e },
@@ -3210,7 +3209,7 @@ static int adv7604_probe(struct i2c_client *client,
 
 
 	sd = &state->sd;
-	v4l2_i2c_subdev_init(sd, client, &adv7604_ops); // dev.driver_data update
+	v4l2_i2c_subdev_init(sd, client, &adv7604_ops);
 	snprintf(sd->name, sizeof(sd->name), "%s %d-%04x",
 		id->name, i2c_adapter_id(client->adapter),
 		client->addr);
