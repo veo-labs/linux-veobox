@@ -126,8 +126,8 @@ static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	return 0;
 }
 
-static void log_pcm_sample_info(struct snd_soc_dai *dai){
-
+static void log_pcm_sample_info(struct snd_soc_dai *dai)
+{
 	int freq;
 	unsigned int reg;
 	struct adv76xx_snd_data * snd_data = dai->dev->platform_data;
@@ -146,7 +146,7 @@ static void log_pcm_sample_info(struct snd_soc_dai *dai){
 	reg = snd_soc_read(dai->codec, 0x36) & 0x02;
 	dev_info(dai->dev, "Received PCM package(from CS_DATA): %s\n", reg ? "no":"yes");
 
-	if (!reg){
+	if (!reg) {
 		/* Get audio sampling frequency */
 		reg = snd_soc_read(dai->codec, 0x39) & 0x0f;
 		dev_info(dai->dev, "Sample Freq: %x\n", reg);
@@ -178,8 +178,6 @@ static int adv76xx_ops_hw_params(struct snd_pcm_substream *substream,
 
 	if (!snd_data)
 		return -ENODEV;
-
-	log_pcm_sample_info(dai);
 
 	/* Check if there are PCM audio samples */
 	reg = snd_soc_read(dai->codec, ADV7611_PACKETS_DETECTED_2);
