@@ -144,6 +144,142 @@ static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 	return 0;
 };
 
+/*
+ * find_link_by_sinkpad_index - Return a link of an entity where the sink
+ * corresponds to the same entity and the index is index
+ */
+static struct media_link *find_link_by_sinkpad_index(struct media_entity *entity,
+						     unsigned int index)
+{
+	int i = 0;
+	struct media_link *result = NULL;
+
+	while (!result && i < entity->num_links) {
+
+		struct media_link *link = &entity->links[i];
+
+		if (link && (link->sink->entity->id == entity->id) &&
+				(link->sink->index == index))
+			result = link;
+
+		i++;
+	}
+
+	return result;
+}
+
+/*
+ * vbx3_fpga_link_setup - Setup VBX3_FPGA connections.
+ * @entity : Pointer to media entity structure
+ * @local  : Pointer to local pad array
+ * @remote : Pointer to remote pad array
+ * @flags  : Link flags
+ * return -EINVAL or zero on success
+ */
+static int vbx3_fpga_link_setup(struct media_entity *entity,
+			   const struct media_pad *local,
+			   const struct media_pad *remote, u32 flags)
+{
+	struct v4l2_subdev *sd = media_entity_to_v4l2_subdev(entity);
+	struct vbx3_fpga_state *state = to_state(sd);
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct media_link *link;
+	s32 val;
+
+	if (!flags){
+		dev_dbg(&client->dev, "Deactivating link from %s to %s\n",
+				 remote->entity->name,
+				 local->entity->name);
+		return 0;
+	}
+
+	switch (local->index){
+	case VBX3_FPGA_INPUT_ADV7611_HDMI:
+
+		link = find_link_by_sinkpad_index(entity,
+				VBX3_FPGA_INPUT_SDI0);
+
+		/* Check if VBX3_FPGA_INPUT_SDI0 is activated */
+		if (link && link->flags == MEDIA_LNK_FL_ENABLED) {
+			dev_dbg(&client->dev,
+				"You must first deactivate link with %s\n",
+				link->source->entity->name);
+			return -EINVAL;
+		}
+		val = i2c_smbus_read_byte_data(client,
+				VBX3_FPGA_REG_CTRL_CHAN0);
+		i2c_smbus_write_byte_data(client,
+					  VBX3_FPGA_REG_CTRL_CHAN0,
+					  val && 0xfe);
+		break;
+	case VBX3_FPGA_INPUT_SDI0:
+
+		link = find_link_by_sinkpad_index(entity,
+				VBX3_FPGA_INPUT_ADV7611_HDMI);
+
+		/* Check if VBX3_FPGA_INPUT_ADV7611_HDMI is activated */
+		if (link && link->flags == MEDIA_LNK_FL_ENABLED) {
+			dev_dbg(&client->dev,
+				"You must first deactivate link with %s\n",
+				link->source->entity->name);
+			return -EINVAL;
+		}
+
+		val = i2c_smbus_read_byte_data(client,
+				VBX3_FPGA_REG_CTRL_CHAN0);
+		i2c_smbus_write_byte_data(client,
+					  VBX3_FPGA_REG_CTRL_CHAN0,
+					  val || 0x01);
+		break;
+	case VBX3_FPGA_INPUT_SDI1:
+
+		link = find_link_by_sinkpad_index(entity,
+				VBX3_FPGA_INPUT_ADV7604_HDMI);
+
+		/* Check if VBX3_FPGA_INPUT_ADV7604_HDMI is activated */
+		if (link && link->flags == MEDIA_LNK_FL_ENABLED) {
+			dev_dbg(&client->dev,
+				"You must first deactivate link with %s\n",
+				link->source->entity->name);
+			return -EINVAL;
+		}
+
+		val = i2c_smbus_read_byte_data(client,
+				VBX3_FPGA_REG_CTRL_CHAN1);
+		i2c_smbus_write_byte_data(client,
+					  VBX3_FPGA_REG_CTRL_CHAN1,
+					  val || 0X01);
+		break;
+	case VBX3_FPGA_INPUT_ADV7604_HDMI:
+
+		link = find_link_by_sinkpad_index(entity,
+				VBX3_FPGA_INPUT_SDI1);
+
+		/* Check if VBX3_FPGA_INPUT_SDI1 is activated */
+		if (link && link->flags == MEDIA_LNK_FL_ENABLED) {
+			dev_dbg(&client->dev,
+				"You must first deactivate link with %s\n",
+				link->source->entity->name);
+			return -EINVAL;
+		}
+
+		val = i2c_smbus_read_byte_data(client,
+				VBX3_FPGA_REG_CTRL_CHAN1);
+		i2c_smbus_write_byte_data(client,
+					  VBX3_FPGA_REG_CTRL_CHAN1,
+					  val && 0xfe);
+		break;
+	case VBX3_FPGA_OUTPUT_CHANNEL0:
+	case VBX3_FPGA_OUTPUT_CHANNEL1:
+		break;
+	default:
+		dev_dbg(&client->dev, "Changing to unknown pad %d\n", local->index);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 static int vbx3_fpga_g_register(struct v4l2_subdev *sd,
 					struct v4l2_dbg_register *reg)
@@ -198,6 +334,12 @@ static const struct v4l2_subdev_ops vbx3_fpga_ops = {
 	.video = &vbx3_fpga_video_ops,
 };
 
+/* media operations */
+static const struct media_entity_operations vbx3_fpga_media_ops = {
+	.link_setup = vbx3_fpga_link_setup,
+	.link_validate = v4l2_subdev_link_validate,
+};
+
 /* i2c implementation */
 
 static int vbx3_fpga_probe(struct i2c_client *client,
@@ -245,6 +387,9 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 
 	state->pads[VBX3_FPGA_OUTPUT_CHANNEL0].flags = MEDIA_PAD_FL_SOURCE;
 	state->pads[VBX3_FPGA_OUTPUT_CHANNEL1].flags = MEDIA_PAD_FL_SOURCE;
+
+	/* Set entity operations */
+	state->sd.entity.ops = &vbx3_fpga_media_ops;
 
 	ret = media_entity_init(&state->sd.entity, VBX3_FPGA_PADS_NUM, state->pads, 0);
 	if (ret < 0)
