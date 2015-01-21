@@ -3140,7 +3140,6 @@ static int adv76xx_configure_snd(struct adv7604_state *state)
 err_card:
 	platform_device_unregister(pdev);
 err_platform:
-err_regmap:
 	/* Clean data devm_kzalloc */
 	devm_kfree(&client->dev,data);
 end:
