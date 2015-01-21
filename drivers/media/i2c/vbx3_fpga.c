@@ -72,7 +72,6 @@ static inline struct vbx3_fpga_state *to_state(struct v4l2_subdev *sd)
 static int vbx3_fpga_s_routing (struct v4l2_subdev *sd,
 				u32 input, u32 output, u32 config)
 {
-	struct vbx3_fpga_state *state = to_state(sd);
 	return 0;
 }
 
@@ -166,7 +165,7 @@ static int vbx3_fpga_g_register(struct v4l2_subdev *sd,
 }
 
 static int vbx3_fpga_s_register(struct v4l2_subdev *sd,
-					struct v4l2_dbg_register *reg)
+				const struct v4l2_dbg_register *reg)
 {
 	int ret;
 	struct vbx3_fpga_state *state = to_state(sd);
@@ -208,7 +207,6 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	struct vbx3_fpga_state *state;
 	int version, status;
 	int ret = 0;
-	int pad;
 
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
@@ -266,7 +264,7 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 static int vbx3_fpga_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
-	struct vbx3_fpga_state *state;
+	struct vbx3_fpga_state *state = to_state(sd);
 
 	sd = &state->sd;
 	media_entity_cleanup(&sd->entity);
