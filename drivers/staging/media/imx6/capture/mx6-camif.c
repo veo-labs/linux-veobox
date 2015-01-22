@@ -2447,7 +2447,7 @@ mx6cam_graph_find_entity(struct mx6cam_dev *camdev,
 static int mx6cam_graph_build_one(struct mx6cam_dev *camdev,
 				struct mx6cam_graph_entity *entity)
 {
-	u32 link_flags = MEDIA_LNK_FL_ENABLED;
+	u32 link_flags = 0;
 	struct media_entity *local = entity->entity;
 	struct media_entity *remote;
 	struct media_pad *local_pad;
