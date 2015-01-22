@@ -29,7 +29,6 @@ static void v4l2_of_parse_csi_bus(const struct device_node *node,
 	unsigned int flags = 0;
 	u32 v;
 
-	printk("Entering %s\n", __func__);
 	prop = of_find_property(node, "data-lanes", NULL);
 	if (prop) {
 		const __be32 *lane = NULL;
@@ -41,14 +40,12 @@ static void v4l2_of_parse_csi_bus(const struct device_node *node,
 				break;
 		}
 		bus->num_data_lanes = i;
-		printk("[%s] %d data-lanes found\n", __func__, i);
 		while (i--)
 			bus->data_lanes[i] = data_lanes[i];
 	}
 
 	if (!of_property_read_u32(node, "clock-lanes", &v)) {
 		bus->clock_lane = v;
-		printk("[%s] %d clock-lanes found\n", __func__, v);
 		have_clk_lane = true;
 	}
 
@@ -57,7 +54,6 @@ static void v4l2_of_parse_csi_bus(const struct device_node *node,
 	else if (have_clk_lane || bus->num_data_lanes > 0)
 		flags |= V4L2_MBUS_CSI2_CONTINUOUS_CLOCK;
 
-	printk("[%s] flags : %08X\n", __func__, flags);
 	bus->flags = flags;
 	endpoint->bus_type = V4L2_MBUS_CSI2;
 }
@@ -69,7 +65,6 @@ static void v4l2_of_parse_parallel_bus(const struct device_node *node,
 	unsigned int flags = 0;
 	u32 v;
 
-	printk("Entering %s\n", __func__);
 
 	if (!of_property_read_u32(node, "hsync-active", &v))
 		flags |= v ? V4L2_MBUS_HSYNC_ACTIVE_HIGH :
@@ -87,11 +82,9 @@ static void v4l2_of_parse_parallel_bus(const struct device_node *node,
 		flags |= v ? V4L2_MBUS_FIELD_EVEN_HIGH :
 			V4L2_MBUS_FIELD_EVEN_LOW;
 	if (flags) {
-		printk("[%s]Bus type is parallel\n", __func__);
 		endpoint->bus_type = V4L2_MBUS_PARALLEL;
 	}
 	else {
-		printk("[%s]Bus type is BT.656\n", __func__);
 		endpoint->bus_type = V4L2_MBUS_BT656;
 	}
 
@@ -106,11 +99,9 @@ static void v4l2_of_parse_parallel_bus(const struct device_node *node,
 
 	if (!of_property_read_u32(node, "bus-width", &v))
 		bus->bus_width = v;
-	printk("[%s]Bus width : %d\n", __func__, bus->bus_width);
 
 	if (!of_property_read_u32(node, "data-shift", &v))
 		bus->data_shift = v;
-	printk("[%s]Data shift : %d\n", __func__, bus->data_shift);
 
 	if (!of_property_read_u32(node, "sync-on-green-active", &v))
 		flags |= v ? V4L2_MBUS_VIDEO_SOG_ACTIVE_HIGH :
