@@ -28,6 +28,7 @@
 #include <linux/i2c.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
+#include <linux/regmap.h>
 
 MODULE_DESCRIPTION("i2c device driver for VBX3 fpga source switch");
 MODULE_AUTHOR("Jean-Michel Hautbois");
@@ -62,6 +63,15 @@ struct vbx3_fpga_state {
 	struct v4l2_subdev sd;
 	struct media_pad pads[VBX3_FPGA_PADS_NUM];
 	struct i2c_client *i2c_client;
+	struct regmap *regmap;
+};
+
+static const struct regmap_config vbx3_fpga_regmap = {
+	.name			= "vbx3_fpga",
+	.reg_bits		= 8,
+	.val_bits		= 8,
+	.max_register		= 0xff,
+	.cache_type		= REGCACHE_NONE,
 };
 
 static inline struct vbx3_fpga_state *to_state(struct v4l2_subdev *sd)
@@ -78,8 +88,7 @@ static int vbx3_fpga_s_routing (struct v4l2_subdev *sd,
 static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 {
 	struct vbx3_fpga_state *state = to_state(sd);
-	struct i2c_client *client = state->i2c_client;
-	u8 value;
+	unsigned int value;
 
 	static const char * const sdi_format[] = {
 		"SD",
@@ -115,30 +124,30 @@ static int vbx3_fpga_log_status(struct v4l2_subdev *sd)
 
 	v4l2_info(sd, "-----Chip status-----\n");
 
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_VERSION);
+	regmap_read(state->regmap, VBX3_FPGA_REG_VERSION, &value);
 	v4l2_info(sd, "FPGA version: 0x%2x\n", value);
 
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_GLOBAL_STATUS);
+	regmap_read(state->regmap, VBX3_FPGA_REG_GLOBAL_STATUS, &value);
 	v4l2_info(sd, "HDMI 0 connected : %s\n", (value & 0x80) ? "Yes" : "No");
 	v4l2_info(sd, "HDMI 1 connected : %s\n", (value & 0x40) ? "Yes" : "No");
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_STATUS_SDI0);
+	regmap_read(state->regmap, VBX3_FPGA_REG_STATUS_SDI0, &value);
 	v4l2_info(sd, "SDI 0 locked : %s\n", (value & 0x80) ? "Yes" : "No");
 	if (value & 0x80)
 		v4l2_info(sd, "SDI 0 format %s: %s@%s\n", sdi_format[(value & 0x60) >> 5],
 						sdi_video[(value & 0x18) >> 3],
 						sdi_fps[value & 0x07]);
 
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_STATUS_SDI1);
+	regmap_read(state->regmap, VBX3_FPGA_REG_STATUS_SDI1, &value);
 	v4l2_info(sd, "SDI 1 locked : %s\n", (value & 0x80) ? "Yes" : "No");
 	if (value & 0x80)
 		v4l2_info(sd, "SDI 1 format %s: %s@%s\n", sdi_format[(value & 0x60) >> 5],
 						sdi_video[(value & 0x18) >> 3],
 						sdi_fps[value & 0x07]);
 	v4l2_info(sd, "-----Control channels-----\n");
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0);
+	regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN0, &value);
 	v4l2_info(sd, "Channel 0 : Audio %s, Video %s\n", chan_audio[(value & 0x06)>>1],
 							  chan_video[(value & 0x01)]);
-	value = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN1);
+	regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN1, &value);
 	v4l2_info(sd, "Channel 1 : Audio %s, Video %s\n", chan_audio[(value & 0x06)>>1],
 							  chan_video[(value & 0x01)]);
 	return 0;
@@ -184,7 +193,7 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 	struct vbx3_fpga_state *state = to_state(sd);
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct media_link *link;
-	s32 val;
+	unsigned int value;
 
 	if (!flags){
 		dev_dbg(&client->dev, "Deactivating link from %s to %s\n",
@@ -206,11 +215,10 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 				link->source->entity->name);
 			return -EINVAL;
 		}
-		val = i2c_smbus_read_byte_data(client,
-				VBX3_FPGA_REG_CTRL_CHAN0);
-		i2c_smbus_write_byte_data(client,
-					  VBX3_FPGA_REG_CTRL_CHAN0,
-					  val && 0xfe);
+		regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN0, &value);
+		regmap_write(state->regmap,
+			     VBX3_FPGA_REG_CTRL_CHAN0,
+			     value & 0xfe);
 		break;
 	case VBX3_FPGA_INPUT_SDI0:
 
@@ -225,11 +233,10 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 			return -EINVAL;
 		}
 
-		val = i2c_smbus_read_byte_data(client,
-				VBX3_FPGA_REG_CTRL_CHAN0);
-		i2c_smbus_write_byte_data(client,
-					  VBX3_FPGA_REG_CTRL_CHAN0,
-					  val || 0x01);
+		regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN0, &value);
+		regmap_write(state->regmap,
+			     VBX3_FPGA_REG_CTRL_CHAN0,
+			     value | 0x01);
 		break;
 	case VBX3_FPGA_INPUT_SDI1:
 
@@ -244,11 +251,10 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 			return -EINVAL;
 		}
 
-		val = i2c_smbus_read_byte_data(client,
-				VBX3_FPGA_REG_CTRL_CHAN1);
-		i2c_smbus_write_byte_data(client,
-					  VBX3_FPGA_REG_CTRL_CHAN1,
-					  val || 0X01);
+		regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN1, &value);
+		regmap_write(state->regmap,
+			     VBX3_FPGA_REG_CTRL_CHAN1,
+			     value | 0X01);
 		break;
 	case VBX3_FPGA_INPUT_ADV7604_HDMI:
 
@@ -263,11 +269,10 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 			return -EINVAL;
 		}
 
-		val = i2c_smbus_read_byte_data(client,
-				VBX3_FPGA_REG_CTRL_CHAN1);
-		i2c_smbus_write_byte_data(client,
-					  VBX3_FPGA_REG_CTRL_CHAN1,
-					  val && 0xfe);
+		regmap_read(state->regmap, VBX3_FPGA_REG_CTRL_CHAN1, &value);
+		regmap_write(state->regmap,
+			     VBX3_FPGA_REG_CTRL_CHAN1,
+			     value & 0xfe);
 		break;
 	case VBX3_FPGA_OUTPUT_CHANNEL0:
 	case VBX3_FPGA_OUTPUT_CHANNEL1:
@@ -286,9 +291,8 @@ static int vbx3_fpga_g_register(struct v4l2_subdev *sd,
 {
 	int ret;
 	struct vbx3_fpga_state *state = to_state(sd);
-	struct i2c_client *client = state->i2c_client;
 
-	ret = i2c_smbus_read_byte_data(client, reg->reg);
+	regmap_read(state->regmap, reg->reg, &ret);
 	if (ret < 0) {
 		v4l2_info(sd, "Register %03llx not supported\n", reg->reg);
 		return ret;
@@ -305,9 +309,8 @@ static int vbx3_fpga_s_register(struct v4l2_subdev *sd,
 {
 	int ret;
 	struct vbx3_fpga_state *state = to_state(sd);
-	struct i2c_client *client = state->i2c_client;
 
-	ret = i2c_smbus_write_byte_data(client, reg->reg, reg->val);
+	ret = regmap_write(state->regmap, reg->reg, reg->val);
 	if (ret < 0) {
 		v4l2_info(sd, "Register %03llx not supported\n", reg->reg);
 		return ret;
@@ -357,7 +360,24 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	v4l_info(client, "chip found @ 0x%x (%s)\n",
 			client->addr << 1, client->adapter->name);
 
-	version = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_VERSION);
+	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
+	if (state == NULL)
+		return -ENOMEM;
+	state->i2c_client = client;
+
+	/* Configure regmap */
+	state->regmap =	devm_regmap_init_i2c(state->i2c_client,
+					&vbx3_fpga_regmap);
+	if (IS_ERR(state->regmap)) {
+		ret = PTR_ERR(state->regmap);
+		v4l_err(state->i2c_client,
+			"Error initializing regmap with error %d\n",
+			ret);
+		devm_kfree(&client->dev, state);
+		return -EINVAL;
+	}
+
+	regmap_read(state->regmap, VBX3_FPGA_REG_VERSION, &version);
 	if (version < 0) {
 		v4l_err(client, "could not get version of FPGA\n");
 		return -EPROBE_DEFER;
@@ -365,15 +385,12 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 		v4l_info(client, "version read : 0x%x\n", version);
 	}
 
-	i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN0, 0x00);
-	i2c_smbus_write_byte_data(client, VBX3_FPGA_REG_CTRL_CHAN1, 0x00);
-	status = i2c_smbus_read_byte_data(client, VBX3_FPGA_REG_GLOBAL_STATUS);
-	v4l_info(client, "Status : 0x%x\n", status);
+	/* Set default Control Channel values */
+	regmap_write(state->regmap, VBX3_FPGA_REG_CTRL_CHAN0, 0x00);
+	regmap_write(state->regmap, VBX3_FPGA_REG_CTRL_CHAN1, 0x00);
 
-	state = devm_kzalloc(&client->dev, sizeof(*state), GFP_KERNEL);
-	if (state == NULL)
-		return -ENOMEM;
-	state->i2c_client = client;
+	regmap_read(state->regmap, VBX3_FPGA_REG_GLOBAL_STATUS, &status);
+	v4l_info(client, "Status : 0x%x\n", status);
 
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &vbx3_fpga_ops);
