@@ -153,7 +153,6 @@ static struct media_link *find_link_by_sinkpad_index(struct media_entity *entity
 						     unsigned int index)
 {
 	int i = 0;
-	bool found = false;
 	struct media_link *result = NULL;
 
 	while (!result && i < entity->num_links) {
@@ -351,7 +350,6 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 	struct vbx3_fpga_state *state;
 	int version, status;
 	int ret = 0;
-	int pad;
 
 	/* Check if the adapter supports the needed features */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
