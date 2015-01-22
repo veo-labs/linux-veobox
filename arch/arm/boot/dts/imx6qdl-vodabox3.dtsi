@@ -112,15 +112,15 @@
 		status = "okay";
 
 		/* CSI1 */
-		port@0 {
+		port@1 {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			reg = <0>;
+			reg = <1>;
 			/* Parallel bus */
-			csi1: endpoint@0 {
-				reg = <0>;
-				remote-endpoint = <&hdmi1_out>;
-				//remote-endpoint = <&csi1_fpga_out>;
+			csi1: endpoint@1 {
+				reg = <1>;
+				//remote-endpoint = <&hdmi1_out>;
+				remote-endpoint = <&csi1_fpga_out>;
 				bus-width = <16>;
 				//data-shift = <4>; /* Lines 19:4 used */
 			};
@@ -155,7 +155,7 @@
 			IMX_AUDMUX_V2_PDCR_RXDSEL(0)
 		>;
 	};
-	
+
 	ssi2 {
 		fsl,audmux-port = <1>; /* Port 2 on Freescale documentatin */
 		fsl,port-config = <
@@ -178,7 +178,7 @@
 			IMX_AUDMUX_V2_PDCR_RXDSEL(1)
 		>;
 	};
-	
+
 };
 
 &fec {
@@ -329,8 +329,8 @@
 			port@6 {
 				reg = <6>;
 				hdmi1_out: endpoint@6 {
-					//remote-endpoint = <&hdmi1_fpga_in>;
-					remote-endpoint = <&csi1>;
+					remote-endpoint = <&hdmi1_fpga_in>;
+					//remote-endpoint = <&csi1>;
 					bus-width = <16>;
 				};
 			};
@@ -362,10 +362,10 @@
 				};
 			};
 			port@3 {
-				/*reg = <3>;
+				reg = <3>;
 				hdmi1_fpga_in: endpoint {
 					remote-endpoint = <&hdmi1_out>;
-				};*/
+				};
 			};
 			port@4 {
 				reg = <4>;
@@ -375,11 +375,11 @@
 				};
 			};
 			port@5 {
-				/*reg = <5>;
+				reg = <5>;
 				csi1_fpga_out: endpoint {
 					bus-width = <16>;
 					remote-endpoint = <&csi1>;
-				};*/
+				};
 			};
 		};
 	};
