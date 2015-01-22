@@ -977,12 +977,13 @@ static int vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+#if 0
 static int vidioc_enum_fmt_vid_overlay(struct file *file, void *priv,
 				       struct v4l2_fmtdesc *f)
 {
 	return vidioc_enum_fmt_vid_cap(file, priv, f);
 }
-
+#endif
 static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *f)
 {
@@ -993,7 +994,7 @@ static int vidioc_g_fmt_vid_cap(struct file *file, void *priv,
 
 	return 0;
 }
-
+#if 0
 static int vidioc_g_fmt_vid_overlay(struct file *file, void *priv,
 				    struct v4l2_format *f)
 {
@@ -1003,7 +1004,7 @@ static int vidioc_g_fmt_vid_overlay(struct file *file, void *priv,
 	f->fmt.win = dev->win;
 	return 0;
 }
-
+#endif
 #if 1
 static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 				  struct v4l2_format *f)
@@ -1376,9 +1377,8 @@ static int vidioc_s_input(struct file *file, void *priv, unsigned int index)
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
-	struct mx6cam_sensor_input *epinput;
 	struct mx6cam_endpoint *ep;
-	int ret, sensor_input;
+	int ret;
 
 	if (index == dev->current_input)
 		return 0;
@@ -1557,6 +1557,7 @@ static int vidioc_s_crop(struct file *file, void *priv,
 	return 0;
 }
 
+#if 0
 static int vidioc_s_fbuf(struct file *file, void *priv,
 			 const struct v4l2_framebuffer *fbuf)
 {
@@ -1640,6 +1641,7 @@ static int vidioc_overlay(struct file *file, void *priv,
 
 	return ret;
 }
+#endif
 
 static int vidioc_log_status(struct file *file, void *f)
 {
@@ -1763,7 +1765,7 @@ static int vidioc_g_register(struct file *file, void *f,
 	return 0;
 }
 static int vidioc_s_register(struct file *file, void *f,
-				struct v4l2_dbg_register *reg)
+				const struct v4l2_dbg_register *reg)
 {
 	struct video_device *vdev = video_devdata(file);
 	v4l2_device_call_all(vdev->v4l2_dev, 0, core, s_register, reg);
@@ -1773,7 +1775,7 @@ static int vidioc_s_register(struct file *file, void *f,
 
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
-
+#if 1
 	.vidioc_enum_fmt_vid_cap        = vidioc_enum_fmt_vid_cap,
 	.vidioc_g_fmt_vid_cap           = vidioc_g_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap         = vidioc_try_fmt_vid_cap,
@@ -1817,6 +1819,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_streamoff	= vb2_ioctl_streamoff,
 
 /*	.vidioc_overlay         = vidioc_overlay,*/
+
 	.vidioc_log_status      = vidioc_log_status,
 	.vidioc_s_edid          = vidioc_s_edid,
 	.vidioc_g_edid          = vidioc_g_edid,
@@ -1828,6 +1831,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	.vidioc_g_register      = vidioc_g_register,
 	.vidioc_s_register	= vidioc_s_register,
+#endif
 #endif
 };
 
@@ -2059,12 +2063,12 @@ static int mx6cam_release(struct file *file)
 	if (ret)
 		v4l2_err(&dev->v4l2_dev, "sensor power off failed\n");
 
-unlock:
 	mutex_unlock(&dev->mutex);
 	kfree(ctx);
 	return ret;
 }
 
+#if 0
 static unsigned int mx6cam_poll(struct file *file,
 				 struct poll_table_struct *wait)
 {
@@ -2097,6 +2101,7 @@ static int mx6cam_mmap(struct file *file, struct vm_area_struct *vma)
 	mutex_unlock(&dev->mutex);
 	return ret;
 }
+#endif
 
 static const struct v4l2_file_operations mx6cam_fops = {
 	.owner		= THIS_MODULE,
@@ -2115,7 +2120,6 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 				       void *arg)
 {
 	struct mx6cam_dev *dev;
-	bool hotplug = arg ? *((int *)arg) : false;
 
 	if (sd == NULL)
 		return;
@@ -2159,6 +2163,7 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 	}
 }
 
+#if 0
 static int mx6cam_add_sensor(struct mx6cam_dev *dev,
 			     struct device_node *remote,
 			     struct mx6cam_endpoint *ep)
@@ -2208,6 +2213,7 @@ unlock:
 	put_device(sensor_dev);
 	return ret;
 }
+#endif
 
 static int mx6cam_add_csi2_receiver(struct mx6cam_dev *dev)
 {
@@ -2253,6 +2259,7 @@ dev_unlock:
 	return ret;
 }
 
+#if 0
 /* parse inputs property from v4l2_of_endpoint node */
 static int mx6cam_parse_inputs(struct mx6cam_dev *dev,
 			       struct device_node *node,
@@ -2355,11 +2362,13 @@ static int mx6cam_parse_endpoints(struct mx6cam_dev *dev,
 
 	dev->ep = &dev->eplist[0];
 	return 0;
+
 out:
 	of_node_put(remote);
 	of_node_put(epnode);
 	return ret;
 }
+#endif
 
 static void mx6cam_unregister_subdevs(struct mx6cam_dev *dev)
 {
@@ -2482,7 +2491,8 @@ static int mx6cam_graph_build_one(struct mx6cam_dev *camdev,
 		 * the link.
 		 */
 		if (link.local_port >= local->num_pads) {
-			dev_err(camdev->dev, "invalid port number %u on %s\n",
+			dev_err(camdev->dev, "invalid local port number "
+								"%u on %s\n",
 				link.local_port, link.local_node->full_name);
 			v4l2_of_put_link(&link);
 			ret = -EINVAL;
@@ -2511,7 +2521,8 @@ static int mx6cam_graph_build_one(struct mx6cam_dev *camdev,
 		remote = ent->entity;
 
 		if (link.remote_port >= remote->num_pads) {
-			dev_err(camdev->dev, "invalid port number %u on %s\n",
+			dev_err(camdev->dev, "invalid remote port number "
+								"%u on %s\n",
 				link.remote_port, link.remote_node->full_name);
 			v4l2_of_put_link(&link);
 			ret = -EINVAL;
@@ -2553,7 +2564,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 		.format.code = MEDIA_BUS_FMT_YUYV8_1X16,
 	};*/
-	int ret, i;
+	int ret;
 
 	dev_dbg(camdev->dev, "notify complete, all subdevs registered\n");
 
@@ -2856,8 +2867,9 @@ static int mx6cam_probe(struct platform_device *pdev)
 	vfd->lock = &dev->mutex;
 	dev->v4l2_dev.notify = mx6cam_subdev_notification;
 
-	dev->pad.flags = MEDIA_PAD_FL_SINK;
-	ret = media_entity_init(&vfd->entity, 1, &dev->pad, 0);
+	dev->pads[0].flags = MEDIA_PAD_FL_SINK;
+	dev->pads[1].flags = MEDIA_PAD_FL_SINK;
+	ret = media_entity_init(&vfd->entity, 2, dev->pads, 0);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev, "media entity failed with error %d\n", ret);
 		goto unreg_dev;

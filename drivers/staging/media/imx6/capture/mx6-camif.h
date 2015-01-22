@@ -125,7 +125,7 @@ struct mx6cam_dev {
 	struct video_device	vfd;
 	struct device           *dev;
 	struct media_device media_dev;
-	struct media_pad pad;
+	struct media_pad pads[2];
 	struct mx6_camera_pdata *pdata;
 
 	struct v4l2_async_notifier notifier;
