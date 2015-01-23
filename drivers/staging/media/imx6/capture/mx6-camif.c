@@ -1777,7 +1777,6 @@ static int vidioc_s_register(struct file *file, void *f,
 
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
-#if 1
 	.vidioc_enum_fmt_vid_cap        = vidioc_enum_fmt_vid_cap,
 	.vidioc_g_fmt_vid_cap           = vidioc_g_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap         = vidioc_try_fmt_vid_cap,
@@ -1834,7 +1833,8 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_g_register      = vidioc_g_register,
 	.vidioc_s_register	= vidioc_s_register,
 #endif
-#endif
+	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
+	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
 };
 
 
