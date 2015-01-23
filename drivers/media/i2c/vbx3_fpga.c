@@ -320,6 +320,18 @@ static int vbx3_fpga_s_register(struct v4l2_subdev *sd,
 }
 #endif
 
+static int vbx3_fpga_enum_dv_timings(struct v4l2_subdev *sd,
+			struct v4l2_enum_dv_timings *timings)
+{
+	return 0;
+}
+
+static int vbx3_fpga_dv_timings_cap(struct v4l2_subdev *sd,
+			struct v4l2_dv_timings_cap *cap)
+{
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops vbx3_fpga_video_ops = {
 	.s_routing = vbx3_fpga_s_routing,
 };
@@ -332,8 +344,19 @@ static const struct v4l2_subdev_core_ops vbx3_fpga_core_ops = {
 #endif
 };
 
+static const struct v4l2_subdev_pad_ops vbx3_fpga_pad_ops = {
+/*	.enum_mbus_code = adv7604_enum_mbus_code,
+	.get_fmt = adv7604_get_format,
+	.set_fmt = adv7604_set_format,
+	.get_edid = adv7604_get_edid,
+	.set_edid = adv7604_set_edid,*/
+	.dv_timings_cap = vbx3_fpga_dv_timings_cap,
+	.enum_dv_timings = vbx3_fpga_enum_dv_timings,
+};
+
 static const struct v4l2_subdev_ops vbx3_fpga_ops = {
 	.core = &vbx3_fpga_core_ops,
+	.pad = &vbx3_fpga_pad_ops,
 	.video = &vbx3_fpga_video_ops,
 };
 
