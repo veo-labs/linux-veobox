@@ -1946,7 +1946,8 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 		frame = list_entry(dev->buf_list.next,
 				   struct mx6cam_buffer, list);
 		list_del(&frame->list);
-		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_QUEUED);
+		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
+		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 	}
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -2897,7 +2898,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 
 	dev->buffer_queue.type = dev->type;
-	dev->buffer_queue.io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	dev->buffer_queue.io_modes = VB2_MMAP | VB2_DMABUF;/* | VB2_USERPTR;*/
 	dev->buffer_queue.lock = &dev->mutex;
 	dev->buffer_queue.drv_priv = dev;
 	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
