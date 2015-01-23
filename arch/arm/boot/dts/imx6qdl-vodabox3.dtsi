@@ -102,6 +102,7 @@
 			};
 		};
 	};
+#if 0
 	v4l2cap1: v4l2cap@ipu2 {
 		compatible = "fsl,imx6-v4l2-capture";
 		#address-cells = <1>;
@@ -126,6 +127,7 @@
 			};
 		};
 	};
+#endif
 };
 
 &audmux {
@@ -374,12 +376,12 @@
 					remote-endpoint = <&csi0>;
 				};
 			};
-			port@5 {
+			port@5 {/*
 				reg = <5>;
 				csi1_fpga_out: endpoint {
 					bus-width = <16>;
 					remote-endpoint = <&csi1>;
-				};
+				};*/
 			};
 		};
 	};
