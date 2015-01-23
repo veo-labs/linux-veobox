@@ -723,6 +723,7 @@ static int set_stream(struct mx6cam_dev *dev, bool on)
 	int ret = 0;
 
 	if (on) {
+		dev_dbg(dev->dev, "start streaming\n");
 		if (atomic_read(&dev->status_change)) {
 			update_signal_lock_status(dev);
 			update_sensor_std(dev);
@@ -752,6 +753,7 @@ static int set_stream(struct mx6cam_dev *dev, bool on)
 		if (dev->preview_on)
 			start_preview(dev);
 	} else {
+		dev_dbg(dev->dev, "stop streaming\n");
 		ret = stop_encoder(dev);
 	}
 
@@ -1903,6 +1905,7 @@ static void mx6cam_buf_queue(struct vb2_buffer *vb)
 
 	spin_lock_irqsave(&dev->irqlock, flags);
 	list_add_tail(&buf->list, &dev->buf_list);
+	dev_dbg(dev->dev, "buffer %d added to list\n", buf->vb.v4l2_buf.index);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 }
@@ -1925,9 +1928,11 @@ static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
 					   struct mx6cam_buffer, list);
 			list_del(&frame->list);
 			vb2_buffer_done(&frame->vb, VB2_BUF_STATE_QUEUED);
+			dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 		}
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 	}
+	dev_dbg(dev->dev, "streaming started\n");
 	return ret;
 }
 
@@ -1949,6 +1954,7 @@ static void mx6cam_stop_streaming(struct vb2_queue *vq)
 		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
 		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 	}
+	dev_dbg(dev->dev, "streaming stopped\n");
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 }
@@ -1986,7 +1992,6 @@ static int mx6cam_open(struct file *file)
 		ret = -ENODEV;
 		goto unlock;
 	}
-	dev_dbg(dev->dev, "%d subdevs registered\n", dev->num_subdevs);
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
