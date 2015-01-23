@@ -111,7 +111,7 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
-		.codes = {MEDIA_BUS_FMT_YUYV8_2X8},//, MEDIA_BUS_FMT_YUYV8_1X16},
+		.codes = {MEDIA_BUS_FMT_YUYV8_2X8, MEDIA_BUS_FMT_YUYV8_1X16},
 		.depth  = 16,
 	}, {
 		.name	= "4:2:2 packed, UYVY",
@@ -242,7 +242,7 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->subdev_fmt.width = dev->format.width;
 	dev->subdev_fmt.height = dev->format.height;
 	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
-	dev->subdev_fmt.code = MEDIA_BUS_FMT_YUYV8_2X8;
+	dev->subdev_fmt.code = MEDIA_BUS_FMT_YUYV8_1X16;
 	dev->subdev_pixfmt = mx6cam_get_format(0, dev->subdev_fmt.code);
 }
 
