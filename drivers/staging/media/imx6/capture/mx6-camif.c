@@ -9,28 +9,30 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  */
-#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
-#include <linux/timer.h>
+#include <linux/module.h>
+#include <linux/of_platform.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/platform_device.h>
+#include <linux/platform_data/camera-mx6.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/platform_device.h>
-#include <linux/platform_data/camera-mx6.h>
-#include <linux/pinctrl/consumer.h>
-#include <linux/of_platform.h>
+#include <linux/timer.h>
+#include <media/adv7604.h>
+#include <media/imx6.h>
 #include <media/media-device.h>
+#include <media/videobuf2-dma-contig.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
-#include <media/videobuf2-dma-contig.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-of.h>
 #include <media/v4l2-ctrls.h>
+#include <media/v4l2-event.h>
 #include <video/imx-ipu-v3.h>
-#include <media/imx6.h>
+
 #include "mx6-camif.h"
-#include <media/adv7604.h>
 
 /*
  * Min/Max supported width and heights.
