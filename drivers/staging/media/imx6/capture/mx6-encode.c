@@ -241,6 +241,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 				   struct mx6cam_buffer, list);
 		phys = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
+		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 		priv->active_frame[priv->buf_num] = frame;
 	} else {
 		phys = priv->underrun_buf.phys;
@@ -589,6 +590,7 @@ static int encoder_start(struct encoder_priv *priv)
 	list_for_each_entry_safe(frame, tmp, &dev->buf_list, list) {
 		phys[i] = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
+		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 		priv->active_frame[i++] = frame;
 		if (i >= 2)
 			break;
