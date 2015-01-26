@@ -2346,8 +2346,12 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 			(reg_io_0x02 & 0x04) ? "(16-235)" : "(0-255)",
 			((reg_io_0x02 & 0x04) ^ (reg_io_0x02 & 0x01)) ?
 				"enabled" : "disabled");
-	v4l2_info(sd, "Color space conversion: %s\n",
+	if (state->info->type == ADV7604)
+		v4l2_info(sd, "Color space conversion: %s\n",
 			csc_coeff_sel_rb[cp_read(sd, 0xfc) >> 4]);
+	else
+		v4l2_info(sd, "Color space conversion: %s\n",
+			csc_coeff_sel_rb[cp_read(sd, 0xf4) >> 4]);
 
 	if (!is_digital_input(sd))
 		return 0;
