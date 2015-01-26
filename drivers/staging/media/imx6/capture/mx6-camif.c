@@ -1939,22 +1939,18 @@ static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
 static void mx6cam_stop_streaming(struct vb2_queue *vq)
 {
 	struct mx6cam_dev *dev = vb2_get_drv_priv(vq);
-	struct mx6cam_buffer *frame;
+	struct mx6cam_buffer *buf, *nbuf;
 	unsigned long flags;
 
 	set_stream(dev, false);
 
 	spin_lock_irqsave(&dev->irqlock, flags);
 
-	/* release all active buffers */
-	while (!list_empty(&dev->buf_list)) {
-		frame = list_entry(dev->buf_list.next,
-				   struct mx6cam_buffer, list);
-		list_del(&frame->list);
-		vb2_buffer_done(&frame->vb, VB2_BUF_STATE_ERROR);
-		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
+	list_for_each_entry_safe(buf, nbuf, &dev->buf_list, list) {
+		vb2_buffer_done(&buf->vb, VB2_BUF_STATE_ERROR);
+		list_del(&buf->list);
+		dev_dbg(dev->dev, "buffer %d done\n", buf->vb.v4l2_buf.index);
 	}
-	dev_dbg(dev->dev, "streaming stopped\n");
 
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 }
@@ -2058,6 +2054,7 @@ static int mx6cam_release(struct file *file)
 		BUG_ON(dev->io_ctx != ctx);
 
 		vb2_queue_release(&dev->buffer_queue);
+		/* We are no longer owner of the queue */
 
 		if (dev->preview_on) {
 			stop_preview(dev);
@@ -2114,7 +2111,7 @@ static int mx6cam_mmap(struct file *file, struct vm_area_struct *vma)
 static const struct v4l2_file_operations mx6cam_fops = {
 	.owner		= THIS_MODULE,
 	.open		= mx6cam_open,
-	.release	= mx6cam_release,
+	.release	= vb2_fop_release, /*mx6cam_release,*/
 	.poll		= vb2_fop_poll,
 	.unlocked_ioctl	= video_ioctl2,
 	.mmap		= vb2_fop_mmap,
