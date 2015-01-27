@@ -13,22 +13,23 @@
  * Free Software Foundation; either version 2 of the
  * License, or (at your option) any later version
  */
-#include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/interrupt.h>
 #include <linux/fs.h>
-#include <linux/timer.h>
+#include <linux/log2.h>
+#include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/log2.h>
-
-#include <linux/platform_device.h>
-#include <linux/interrupt.h>
-#include <media/v4l2-mem2mem.h>
+#include <linux/timer.h>
+#include <media/imx6.h>
+#include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
+#include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
 #include <video/imx-ipu-v3.h>
-#include <media/imx6.h>
 
 MODULE_DESCRIPTION("i.MX6 Post-Processing mem2mem device");
 MODULE_AUTHOR("Steve Longerbeam <steve_longerbeam@mentor.com>");
@@ -39,11 +40,13 @@ static int instrument;
 module_param(instrument, int, 0);
 MODULE_PARM_DESC(instrument, "1 = enable conversion time measurement");
 
-#define MIN_W     128
-#define MIN_H     128
-#define MAX_W     4096
-#define MAX_H     4096
-#define S_ALIGN    1 /* multiple of  2 pixels */
+#define MIN_W		128
+#define MIN_H		128
+#define MAX_W		4096
+#define MAX_H		4096
+#define DEFAULT_W	1280
+#define DEFAULT_H	720
+#define S_ALIGN		1 /* multiple of  2 pixels */
 
 /*
  * The IC Resizer has a restriction that the output frame from the
@@ -106,20 +109,21 @@ struct m2mx6_seg_off {
 
 /* Per-queue, driver-specific private data */
 struct m2mx6_q_data {
-	unsigned int      width;
-	unsigned int      height;
-	unsigned int      bytesperline;
-	unsigned int      stride;
-	unsigned int      rot_stride;
-	unsigned int      sizeimage;
+	unsigned int	width;
+	unsigned int	height;
+	unsigned int    bytesperline;
+	unsigned int    stride;
+	unsigned int    rot_stride;
+	unsigned int    sizeimage;
 	struct m2mx6_pixfmt *fmt;
 
-	dma_addr_t        phys_start;
+	dma_addr_t      phys_start;
 	struct m2mx6_seg_off seg_off[MAX_SEGMENTS];
 	/* width of each segment */
-	unsigned int      seg_width;
+	unsigned int    seg_width;
 	/* height of each segment */
-	unsigned int      seg_height;
+	unsigned int    seg_height;
+	unsigned int	sequence;
 };
 
 struct m2mx6_dev {
@@ -136,7 +140,10 @@ struct m2mx6_dev {
 };
 
 struct m2mx6_ctx {
+	struct v4l2_fh		fh;
 	struct m2mx6_dev	*dev;
+
+	struct v4l2_ctrl_handler hdl;
 
 	/* the IPU resources this context will need */
 	struct ipuv3_channel    *ipu_mem_pp_ch;
@@ -298,35 +305,6 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 
 #define NUM_FORMATS ARRAY_SIZE(m2mx6_formats)
 
-/* Rotation controls */
-static struct v4l2_queryctrl m2mx6_ctrls[] = {
-	{
-		.id		= V4L2_CID_HFLIP,
-		.type		= V4L2_CTRL_TYPE_BOOLEAN,
-		.name		= "Horizontal Flip",
-		.minimum	= 0,
-		.maximum	= 1,
-		.step		= 1,
-		.default_value	= 0,
-	}, {
-		.id		= V4L2_CID_VFLIP,
-		.type		= V4L2_CTRL_TYPE_BOOLEAN,
-		.name		= "Vertical Flip",
-		.minimum	= 0,
-		.maximum	= 1,
-		.step		= 1,
-		.default_value	= 0,
-	}, {
-		.id		= V4L2_CID_ROTATE,
-		.type		= V4L2_CTRL_TYPE_INTEGER,
-		.name		= "Rotation",
-		.minimum	= 0,
-		.maximum	= 270,
-		.step		= 90,
-		.default_value	= 0,
-	},
-};
-
 static struct m2mx6_pixfmt *m2mx6_get_format(struct v4l2_format *f)
 {
 	struct m2mx6_pixfmt *ret = NULL;
@@ -342,14 +320,14 @@ static struct m2mx6_pixfmt *m2mx6_get_format(struct v4l2_format *f)
 	return ret;
 }
 
-static struct v4l2_queryctrl *m2mx6_get_ctrl(int id)
+static struct m2mx6_pixfmt *m2mx6_get_format_from_fourcc(u32 fourcc)
 {
-	struct v4l2_queryctrl *ret = NULL;
+	struct m2mx6_pixfmt *ret = NULL;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(m2mx6_ctrls); i++) {
-		if (id == m2mx6_ctrls[i].id) {
-			ret = &m2mx6_ctrls[i];
+	for (i = 0; i < NUM_FORMATS; i++) {
+		if (m2mx6_formats[i].fourcc == fourcc) {
+			ret = &m2mx6_formats[i];
 			break;
 		}
 	}
@@ -482,6 +460,33 @@ static void m2mx6_calc_seg_offsets(struct m2mx6_ctx *ctx,
 		m2mx6_calc_seg_offsets_planar(ctx, type);
 	else
 		m2mx6_calc_seg_offsets_packed(ctx, type);
+}
+
+static void set_default_params(struct m2mx6_ctx *ctx)
+{
+	ctx->q_data[V4L2_M2M_SRC].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_YUYV);
+	ctx->q_data[V4L2_M2M_DST].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_NV12);
+	ctx->q_data[V4L2_M2M_SRC].width = DEFAULT_W;
+	ctx->q_data[V4L2_M2M_SRC].height = DEFAULT_H;
+	ctx->q_data[V4L2_M2M_DST].width = DEFAULT_W;
+	ctx->q_data[V4L2_M2M_DST].height = DEFAULT_H;
+
+	ctx->q_data[V4L2_M2M_SRC].bytesperline = DEFAULT_W * 2;
+	ctx->q_data[V4L2_M2M_SRC].sizeimage = DEFAULT_H * DEFAULT_W * 2;
+	ctx->q_data[V4L2_M2M_DST].bytesperline = DEFAULT_W;
+	ctx->q_data[V4L2_M2M_DST].sizeimage = (DEFAULT_W * DEFAULT_H * 3) / 2;
+
+	ctx->num_rows = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].height);
+	ctx->num_cols = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].width);
+	ctx->num_segs = ctx->num_cols * ctx->num_rows;
+
+
+	v4l2_err(&ctx->dev->v4l2_dev, "Input : %s (%d x %d)\n", ctx->q_data[V4L2_M2M_SRC].fmt->name,
+						ctx->q_data[V4L2_M2M_SRC].width,
+						ctx->q_data[V4L2_M2M_SRC].height);
+	v4l2_err(&ctx->dev->v4l2_dev, "Output : %s (%d x %d)\n", ctx->q_data[V4L2_M2M_DST].fmt->name,
+						ctx->q_data[V4L2_M2M_DST].width,
+						ctx->q_data[V4L2_M2M_DST].height);
 }
 
 
@@ -740,8 +745,8 @@ static void m2mx6_device_run(void *priv)
 	struct vb2_buffer *src_buf, *dst_buf;
 	unsigned long flags;
 
-	src_buf = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
-	dst_buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
+	src_buf = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
+	dst_buf = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
 	s_q_data = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
 	d_q_data = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 
@@ -824,8 +829,8 @@ static bool m2mx6_doirq(struct m2mx6_ctx *ctx)
 			m2mx6_norotate_stop(ctx);
 
 		if (!ctx->aborting) {
-			src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-			dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
+			src_vb = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
+			dst_vb = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 
 			v4l2_m2m_buf_done(src_vb, VB2_BUF_STATE_DONE);
 			v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_DONE);
@@ -918,7 +923,7 @@ static irqreturn_t m2mx6_norotate_irq(int irq, void *data)
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	if (done)
-		v4l2_m2m_job_finish(dev->m2m_dev, curr_ctx->m2m_ctx);
+		v4l2_m2m_job_finish(dev->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
 }
@@ -952,7 +957,7 @@ static irqreturn_t m2mx6_rotate_irq(int irq, void *data)
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	if (done)
-		v4l2_m2m_job_finish(dev->m2m_dev, curr_ctx->m2m_ctx);
+		v4l2_m2m_job_finish(dev->m2m_dev, curr_ctx->fh.m2m_ctx);
 
 	return IRQ_HANDLED;
 }
@@ -1154,7 +1159,7 @@ static int m2mx6_g_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	struct vb2_queue *vq;
 	struct m2mx6_q_data *q_data;
 
-	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, f->type);
+	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
 	if (!vq)
 		return -EINVAL;
 
@@ -1166,6 +1171,7 @@ static int m2mx6_g_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	f->fmt.pix.pixelformat	= q_data->fmt->fourcc;
 	f->fmt.pix.bytesperline	= (q_data->width * q_data->fmt->depth) >> 3;
 	f->fmt.pix.sizeimage	= q_data->sizeimage;
+	f->fmt.pix.colorspace	= V4L2_COLORSPACE_REC709;
 
 	return 0;
 }
@@ -1251,12 +1257,17 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	struct m2mx6_ctx *ctx = priv;
 
 	fmt = m2mx6_get_format(f);
-	if (!fmt || !(fmt->types & MEM2MEM_CAPTURE)) {
+	if (!fmt) {
+		f->fmt.pix.pixelformat = m2mx6_formats[0].fourcc;
+		fmt = m2mx6_get_format(f);
+	}
+	if (!(fmt->types & MEM2MEM_CAPTURE)) {
 		v4l2_err(&ctx->dev->v4l2_dev,
 			 "Fourcc format (0x%08x) invalid.\n",
 			 f->fmt.pix.pixelformat);
 		return -EINVAL;
 	}
+	f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
 
 	return m2mx6_try_fmt(ctx, f, fmt);
 }
@@ -1268,12 +1279,19 @@ static int vidioc_try_fmt_vid_out(struct file *file, void *priv,
 	struct m2mx6_ctx *ctx = priv;
 
 	fmt = m2mx6_get_format(f);
-	if (!fmt || !(fmt->types & MEM2MEM_OUTPUT)) {
+	if (!fmt) {
+		f->fmt.pix.pixelformat = m2mx6_formats[0].fourcc;
+		fmt = m2mx6_get_format(f);
+	}
+
+	if (!(fmt->types & MEM2MEM_OUTPUT)) {
 		v4l2_err(&ctx->dev->v4l2_dev,
 			 "Fourcc format (0x%08x) invalid.\n",
 			 f->fmt.pix.pixelformat);
 		return -EINVAL;
 	}
+	if (!f->fmt.pix.colorspace)
+		f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
 
 	return m2mx6_try_fmt(ctx, f, fmt);
 }
@@ -1284,7 +1302,7 @@ static int m2mx6_s_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	struct m2mx6_q_data *q_data;
 	struct vb2_queue *vq;
 
-	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, f->type);
+	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
 	if (!vq)
 		return -EINVAL;
 
@@ -1367,139 +1385,15 @@ static int vidioc_s_fmt_vid_out(struct file *file, void *priv,
 	return m2mx6_s_fmt(priv, f);
 }
 
-static int vidioc_reqbufs(struct file *file, void *priv,
-			  struct v4l2_requestbuffers *reqbufs)
+static int vidioc_s_ctrl(struct v4l2_ctrl *ctrl)
 {
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_reqbufs(file, ctx->m2m_ctx, reqbufs);
-}
-
-static int vidioc_querybuf(struct file *file, void *priv,
-			   struct v4l2_buffer *buf)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_querybuf(file, ctx->m2m_ctx, buf);
-}
-
-static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_qbuf(file, ctx->m2m_ctx, buf);
-}
-
-static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
-}
-
-static int vidioc_expbuf(struct file *file, void *priv,
-			 struct v4l2_exportbuffer *eb)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_expbuf(file, ctx->m2m_ctx, eb);
-}
-
-static int vidioc_streamon(struct file *file, void *priv,
-			   enum v4l2_buf_type type)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_streamon(file, ctx->m2m_ctx, type);
-}
-
-static int vidioc_streamoff(struct file *file, void *priv,
-			    enum v4l2_buf_type type)
-{
-	struct m2mx6_ctx *ctx = priv;
-
-	return v4l2_m2m_streamoff(file, ctx->m2m_ctx, type);
-}
-
-static int vidioc_queryctrl(struct file *file, void *priv,
-			    struct v4l2_queryctrl *qc)
-{
-	struct v4l2_queryctrl *c;
-
-	c = m2mx6_get_ctrl(qc->id);
-	if (!c)
-		return -EINVAL;
-
-	*qc = *c;
-	return 0;
-}
-
-static int vidioc_g_ctrl(struct file *file, void *priv,
-			 struct v4l2_control *ctrl)
-{
-	struct m2mx6_ctx *ctx = priv;
-	int ret = 0;
-
-	switch (ctrl->id) {
-	case V4L2_CID_HFLIP:
-		ctrl->value = ctx->hflip ? 1 : 0;
-		break;
-	case V4L2_CID_VFLIP:
-		ctrl->value = ctx->vflip ? 1 : 0;
-		break;
-	case V4L2_CID_ROTATE:
-		ctrl->value = ctx->rotation;
-		break;
-	default:
-		v4l2_err(&ctx->dev->v4l2_dev, "Invalid control\n");
-		ret = -EINVAL;
-		break;
-	}
-
-	return ret;
-}
-
-static int check_ctrl_val(struct m2mx6_ctx *ctx, struct v4l2_control *ctrl)
-{
-	struct v4l2_queryctrl *c;
-
-	c = m2mx6_get_ctrl(ctrl->id);
-	if (!c)
-		return -EINVAL;
-
-	if (ctrl->value < c->minimum || ctrl->value > c->maximum) {
-		v4l2_err(&ctx->dev->v4l2_dev, "Value out of range\n");
-		return -ERANGE;
-	}
-
-	return 0;
-}
-
-static int vidioc_s_ctrl(struct file *file, void *priv,
-			 struct v4l2_control *ctrl)
-{
-	struct m2mx6_ctx *ctx = priv;
+	struct m2mx6_ctx *ctx =
+		container_of(ctrl->handler, struct m2mx6_ctx, hdl);
 	struct m2mx6_dev *dev = ctx->dev;
-	struct vb2_queue *vq;
 	enum ipu_rotate_mode rot_mode;
 	bool hflip, vflip;
 	int rotation;
 	int ret = 0;
-
-	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
-	if (!vq)
-		return -EINVAL;
-
-	/* can't change rotation mid-streaming */
-	if (vb2_is_streaming(vq)) {
-		v4l2_err(&dev->v4l2_dev, "%s: not allowed while streaming\n",
-			 __func__);
-		return -EBUSY;
-	}
-
-	ret = check_ctrl_val(ctx, ctrl);
-	if (ret)
-		return ret;
 
 	rotation = ctx->rotation;
 	hflip = ctx->hflip;
@@ -1507,13 +1401,13 @@ static int vidioc_s_ctrl(struct file *file, void *priv,
 
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
-		hflip = (ctrl->value == 1);
+		hflip = (ctrl->val == 1);
 		break;
 	case V4L2_CID_VFLIP:
-		vflip = (ctrl->value == 1);
+		vflip = (ctrl->val == 1);
 		break;
 	case V4L2_CID_ROTATE:
-		rotation = ctrl->value;
+		rotation = ctrl->val;
 		break;
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control\n");
@@ -1546,21 +1440,22 @@ static const struct v4l2_ioctl_ops m2mx6_ioctl_ops = {
 	.vidioc_try_fmt_vid_out	= vidioc_try_fmt_vid_out,
 	.vidioc_s_fmt_vid_out	= vidioc_s_fmt_vid_out,
 
-	.vidioc_reqbufs		= vidioc_reqbufs,
-	.vidioc_querybuf	= vidioc_querybuf,
+	.vidioc_create_bufs	= v4l2_m2m_ioctl_create_bufs,
+	.vidioc_reqbufs		= v4l2_m2m_ioctl_reqbufs,
+	.vidioc_querybuf	= v4l2_m2m_ioctl_querybuf,
+	.vidioc_expbuf		= v4l2_m2m_ioctl_expbuf,
+	.vidioc_qbuf		= v4l2_m2m_ioctl_qbuf,
+	.vidioc_dqbuf		= v4l2_m2m_ioctl_dqbuf,
 
-	.vidioc_qbuf		= vidioc_qbuf,
-	.vidioc_dqbuf		= vidioc_dqbuf,
-	.vidioc_expbuf		= vidioc_expbuf,
-
-	.vidioc_streamon	= vidioc_streamon,
-	.vidioc_streamoff	= vidioc_streamoff,
-
-	.vidioc_queryctrl	= vidioc_queryctrl,
-	.vidioc_g_ctrl		= vidioc_g_ctrl,
-	.vidioc_s_ctrl		= vidioc_s_ctrl,
+	.vidioc_streamon	= v4l2_m2m_ioctl_streamon,
+	.vidioc_streamoff	= v4l2_m2m_ioctl_streamoff,
+	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
+	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
 };
 
+static const struct v4l2_ctrl_ops m2mx6_ctrl_ops = {
+	.s_ctrl = vidioc_s_ctrl,
+};
 
 /*
  * Queue operations
@@ -1588,6 +1483,8 @@ static int m2mx6_queue_setup(struct vb2_queue *vq,
 
 	alloc_ctxs[0] = ctx->dev->alloc_ctx;
 
+	dprintk(ctx->dev, "get %d buffer(s) of size %d each.\n", count, size);
+
 	return 0;
 }
 
@@ -1597,7 +1494,19 @@ static int m2mx6_buf_prepare(struct vb2_buffer *vb)
 	struct m2mx6_dev *dev = ctx->dev;
 	struct m2mx6_q_data *q_data;
 
+	dprintk(ctx->dev, "type: %d\n", vb->vb2_queue->type);
+
 	q_data = get_q_data(ctx, vb->vb2_queue->type);
+
+	if (V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+		if (vb->v4l2_buf.field == V4L2_FIELD_ANY)
+			vb->v4l2_buf.field = V4L2_FIELD_NONE;
+		if (vb->v4l2_buf.field != V4L2_FIELD_NONE) {
+			dprintk(ctx->dev, "%s field isn't supported\n",
+					__func__);
+			return -EINVAL;
+		}
+	}
 
 	if (vb2_plane_size(vb, 0) < q_data->sizeimage) {
 		v4l2_err(&dev->v4l2_dev,
@@ -1615,24 +1524,13 @@ static int m2mx6_buf_prepare(struct vb2_buffer *vb)
 static void m2mx6_buf_queue(struct vb2_buffer *vb)
 {
 	struct m2mx6_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
-	v4l2_m2m_buf_queue(ctx->m2m_ctx, vb);
-}
-
-static void m2mx6_wait_prepare(struct vb2_queue *q)
-{
-	struct m2mx6_ctx *ctx = vb2_get_drv_priv(q);
-	m2mx6_unlock(ctx);
-}
-
-static void m2mx6_wait_finish(struct vb2_queue *q)
-{
-	struct m2mx6_ctx *ctx = vb2_get_drv_priv(q);
-	m2mx6_lock(ctx);
+	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vb);
 }
 
 static int m2mx6_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct m2mx6_ctx *ctx = vb2_get_drv_priv(q);
+	struct m2mx6_q_data *q_data = get_q_data(ctx, q->type);
 	int ret;
 
 	if (!ctx->ipu_mem_pp_ch) {
@@ -1648,6 +1546,8 @@ static int m2mx6_start_streaming(struct vb2_queue *q, unsigned int count)
 			goto relres;
 	}
 
+	q_data->sequence = 0;
+
 	return 0;
 relres:
 	m2mx6_release_ipu_resources(ctx);
@@ -1657,17 +1557,30 @@ relres:
 static void m2mx6_stop_streaming(struct vb2_queue *q)
 {
 	struct m2mx6_ctx *ctx = vb2_get_drv_priv(q);
+	struct vb2_buffer *vb;
+	unsigned long flags;
 
 	m2mx6_release_ipu_resources(ctx);
 	free_rot_intermediate_buffer(ctx);
+	for (;;) {
+		if (V4L2_TYPE_IS_OUTPUT(q->type))
+			vb = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
+		else
+			vb = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
+		if (vb == NULL)
+			return;
+		spin_lock_irqsave(&ctx->dev->irqlock, flags);
+		v4l2_m2m_buf_done(vb, VB2_BUF_STATE_ERROR);
+		spin_unlock_irqrestore(&ctx->dev->irqlock, flags);
+	}
 }
 
 static struct vb2_ops m2mx6_qops = {
 	.queue_setup	 = m2mx6_queue_setup,
 	.buf_prepare	 = m2mx6_buf_prepare,
 	.buf_queue	 = m2mx6_buf_queue,
-	.wait_prepare	 = m2mx6_wait_prepare,
-	.wait_finish	 = m2mx6_wait_finish,
+	.wait_prepare	 = vb2_ops_wait_prepare,
+	.wait_finish	 = vb2_ops_wait_finish,
 	.start_streaming = m2mx6_start_streaming,
 	.stop_streaming  = m2mx6_stop_streaming,
 };
@@ -1712,6 +1625,7 @@ static int m2mx6_open(struct file *file)
 {
 	struct m2mx6_dev *dev = video_drvdata(file);
 	struct m2mx6_ctx *ctx;
+	struct v4l2_ctrl_handler *hdl;
 	int ret = 0;
 
 	if (mutex_lock_interruptible(&dev->dev_mutex))
@@ -1723,21 +1637,37 @@ static int m2mx6_open(struct file *file)
 		goto unlock;
 	}
 
-	file->private_data = ctx;
+	v4l2_fh_init(&ctx->fh, video_devdata(file));
+	file->private_data = &ctx->fh;
 	ctx->dev = dev;
-
-	ctx->q_data[V4L2_M2M_SRC].fmt = &m2mx6_formats[0];
-	ctx->q_data[V4L2_M2M_DST].fmt = &m2mx6_formats[0];
+	hdl = &ctx->hdl;
+	v4l2_ctrl_handler_init(hdl, 3);
+	v4l2_ctrl_new_std(hdl, &m2mx6_ctrl_ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
+	v4l2_ctrl_new_std(hdl, &m2mx6_ctrl_ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
+	v4l2_ctrl_new_std(hdl, &m2mx6_ctrl_ops, V4L2_CID_ROTATE, 0, 270, 90, 0);
+	if (hdl->error) {
+		ret = hdl->error;
+		v4l2_ctrl_handler_free(hdl);
+		goto unlock;
+	}
+	ctx->fh.ctrl_handler = hdl;
+	dprintk(dev, "Setup handler: %p\n", hdl);
+	v4l2_ctrl_handler_setup(hdl);
 
 	ctx->pp_mem_irq = ctx->rot_pp_mem_irq = -1;
 
-	ctx->m2m_ctx = v4l2_m2m_ctx_init(dev->m2m_dev, ctx, &queue_init);
+	set_default_params(ctx);
+	ctx->fh.m2m_ctx = v4l2_m2m_ctx_init(dev->m2m_dev, ctx, &queue_init);
 
-	if (IS_ERR(ctx->m2m_ctx)) {
-		ret = PTR_ERR(ctx->m2m_ctx);
+	if (IS_ERR(ctx->fh.m2m_ctx)) {
+		ret = PTR_ERR(ctx->fh.m2m_ctx);
+		v4l2_ctrl_handler_free(hdl);
 		kfree(ctx);
 		goto unlock;
 	}
+
+	v4l2_fh_add(&ctx->fh);
+	dprintk(dev, "Created instance: %p, m2m_ctx: %p\n", ctx, ctx->fh.m2m_ctx);
 
 unlock:
 	mutex_unlock(&dev->dev_mutex);
@@ -1750,6 +1680,10 @@ static int m2mx6_release(struct file *file)
 	struct m2mx6_dev *dev = video_drvdata(file);
 	struct m2mx6_ctx *ctx = file->private_data;
 
+	dprintk(dev, "Releasing instance %p\n", ctx);
+
+	v4l2_fh_del(&ctx->fh);
+	v4l2_fh_exit(&ctx->fh);
 	mutex_lock(&dev->dev_mutex);
 
 	/*
@@ -1760,51 +1694,20 @@ static int m2mx6_release(struct file *file)
 
 	free_rot_intermediate_buffer(ctx);
 
-	v4l2_m2m_ctx_release(ctx->m2m_ctx);
+	v4l2_m2m_ctx_release(ctx->fh.m2m_ctx);
 	kfree(ctx);
 
 	mutex_unlock(&dev->dev_mutex);
 	return 0;
 }
 
-static unsigned int m2mx6_poll(struct file *file,
-				 struct poll_table_struct *wait)
-{
-	struct m2mx6_dev *dev = video_drvdata(file);
-	struct m2mx6_ctx *ctx = file->private_data;
-	int ret;
-
-	if (mutex_lock_interruptible(&dev->dev_mutex))
-		return -ERESTARTSYS;
-
-	ret = v4l2_m2m_poll(file, ctx->m2m_ctx, wait);
-
-	mutex_unlock(&dev->dev_mutex);
-	return ret;
-}
-
-static int m2mx6_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	struct m2mx6_dev *dev = video_drvdata(file);
-	struct m2mx6_ctx *ctx = file->private_data;
-	int ret;
-
-	if (mutex_lock_interruptible(&dev->dev_mutex))
-		return -ERESTARTSYS;
-
-	ret = v4l2_m2m_mmap(file, ctx->m2m_ctx, vma);
-
-	mutex_unlock(&dev->dev_mutex);
-	return ret;
-}
-
 static const struct v4l2_file_operations m2mx6_fops = {
 	.owner		= THIS_MODULE,
 	.open		= m2mx6_open,
 	.release	= m2mx6_release,
-	.poll		= m2mx6_poll,
+	.poll		= v4l2_m2m_fop_poll,
 	.unlocked_ioctl	= video_ioctl2,
-	.mmap		= m2mx6_mmap,
+	.mmap		= v4l2_m2m_fop_mmap,
 };
 
 static struct video_device m2mx6_videodev = {
