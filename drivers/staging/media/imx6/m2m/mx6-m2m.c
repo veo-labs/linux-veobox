@@ -758,6 +758,23 @@ static void m2mx6_device_run(void *priv)
 		return;
 	}
 
+	dst_buf->v4l2_buf.sequence = d_q_data->sequence++;
+	src_buf->v4l2_buf.sequence = s_q_data->sequence++;
+
+	memcpy(&dst_buf->v4l2_buf.timestamp,
+		&src_buf->v4l2_buf.timestamp,
+		sizeof(struct timeval));
+	if (src_buf->v4l2_buf.flags & V4L2_BUF_FLAG_TIMECODE)
+		memcpy(&dst_buf->v4l2_buf.timecode, &src_buf->v4l2_buf.timecode,
+			sizeof(struct v4l2_timecode));
+	dst_buf->v4l2_buf.field = src_buf->v4l2_buf.field;
+	dst_buf->v4l2_buf.flags = src_buf->v4l2_buf.flags &
+		(V4L2_BUF_FLAG_TIMECODE |
+		V4L2_BUF_FLAG_KEYFRAME |
+		V4L2_BUF_FLAG_PFRAME |
+		V4L2_BUF_FLAG_BFRAME |
+		V4L2_BUF_FLAG_TSTAMP_SRC_MASK);
+
 	spin_lock_irqsave(&dev->irqlock, flags);
 
 	if (instrument)
@@ -1591,9 +1608,8 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	struct m2mx6_ctx *ctx = priv;
 	int ret;
 
-	memset(src_vq, 0, sizeof(*src_vq));
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	src_vq->io_modes = VB2_MMAP | VB2_DMABUF;
+	src_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	src_vq->drv_priv = ctx;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->ops = &m2mx6_qops;
@@ -1605,9 +1621,8 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	if (ret)
 		return ret;
 
-	memset(dst_vq, 0, sizeof(*dst_vq));
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	dst_vq->io_modes = VB2_MMAP | VB2_DMABUF;
+	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	dst_vq->ops = &m2mx6_qops;
