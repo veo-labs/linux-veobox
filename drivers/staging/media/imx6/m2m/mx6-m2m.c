@@ -464,29 +464,75 @@ static void m2mx6_calc_seg_offsets(struct m2mx6_ctx *ctx,
 
 static void set_default_params(struct m2mx6_ctx *ctx)
 {
-	ctx->q_data[V4L2_M2M_SRC].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_YUYV);
+	/* Prepare DST format */
 	ctx->q_data[V4L2_M2M_DST].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_NV12);
-	ctx->q_data[V4L2_M2M_SRC].width = DEFAULT_W;
-	ctx->q_data[V4L2_M2M_SRC].height = DEFAULT_H;
 	ctx->q_data[V4L2_M2M_DST].width = DEFAULT_W;
 	ctx->q_data[V4L2_M2M_DST].height = DEFAULT_H;
-
-	ctx->q_data[V4L2_M2M_SRC].bytesperline = DEFAULT_W * 2;
-	ctx->q_data[V4L2_M2M_SRC].sizeimage = DEFAULT_H * DEFAULT_W * 2;
 	ctx->q_data[V4L2_M2M_DST].bytesperline = DEFAULT_W;
 	ctx->q_data[V4L2_M2M_DST].sizeimage = (DEFAULT_W * DEFAULT_H * 3) / 2;
-
 	ctx->num_rows = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].height);
 	ctx->num_cols = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].width);
 	ctx->num_segs = ctx->num_cols * ctx->num_rows;
+	if (ctx->q_data[V4L2_M2M_DST].fmt->y_depth) {
+		ctx->q_data[V4L2_M2M_DST].stride  = (ctx->q_data[V4L2_M2M_DST].fmt->y_depth * ctx->q_data[V4L2_M2M_DST].width) >> 3;
+		ctx->q_data[V4L2_M2M_DST].rot_stride =
+			(ctx->q_data[V4L2_M2M_DST].fmt->y_depth * ctx->q_data[V4L2_M2M_DST].height) >> 3;
+	} else {
+		ctx->q_data[V4L2_M2M_DST].stride  = ctx->q_data[V4L2_M2M_DST].bytesperline;
+		ctx->q_data[V4L2_M2M_DST].rot_stride =
+			(ctx->q_data[V4L2_M2M_DST].fmt->depth * ctx->q_data[V4L2_M2M_DST].height) >> 3;
+	}
+
+	ctx->q_data[V4L2_M2M_DST].sizeimage = ctx->q_data[V4L2_M2M_DST].bytesperline * ctx->q_data[V4L2_M2M_DST].height;
+
+	ctx->q_data[V4L2_M2M_DST].seg_height = ctx->q_data[V4L2_M2M_DST].height / ctx->num_rows;
+	ctx->q_data[V4L2_M2M_DST].seg_width = ctx->q_data[V4L2_M2M_DST].width / ctx->num_cols;
+
+	m2mx6_calc_seg_offsets(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+
+	v4l2_info(&ctx->dev->v4l2_dev,
+		  "Default capture format: %dx%d (%d %dx%d segments), %c%c%c%c\n",
+		  ctx->q_data[V4L2_M2M_DST].width, ctx->q_data[V4L2_M2M_DST].height,
+		  ctx->num_segs, ctx->q_data[V4L2_M2M_DST].seg_width, ctx->q_data[V4L2_M2M_DST].seg_height,
+		  ctx->q_data[V4L2_M2M_DST].fmt->fourcc & 0xff,
+		  (ctx->q_data[V4L2_M2M_DST].fmt->fourcc >> 8) & 0xff,
+		  (ctx->q_data[V4L2_M2M_DST].fmt->fourcc >> 16) & 0xff,
+		  (ctx->q_data[V4L2_M2M_DST].fmt->fourcc >> 24) & 0xff);
 
 
-	v4l2_err(&ctx->dev->v4l2_dev, "Input : %s (%d x %d)\n", ctx->q_data[V4L2_M2M_SRC].fmt->name,
-						ctx->q_data[V4L2_M2M_SRC].width,
-						ctx->q_data[V4L2_M2M_SRC].height);
-	v4l2_err(&ctx->dev->v4l2_dev, "Output : %s (%d x %d)\n", ctx->q_data[V4L2_M2M_DST].fmt->name,
-						ctx->q_data[V4L2_M2M_DST].width,
-						ctx->q_data[V4L2_M2M_DST].height);
+	/* Now, go for SRC format */
+	ctx->q_data[V4L2_M2M_SRC].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_YUYV);
+	ctx->q_data[V4L2_M2M_SRC].width = DEFAULT_W;
+	ctx->q_data[V4L2_M2M_SRC].height = DEFAULT_H;
+	ctx->q_data[V4L2_M2M_SRC].bytesperline = DEFAULT_W * 2;
+	ctx->q_data[V4L2_M2M_SRC].sizeimage = DEFAULT_H * DEFAULT_W * 2;
+
+	if (ctx->q_data[V4L2_M2M_SRC].fmt->y_depth) {
+		ctx->q_data[V4L2_M2M_SRC].stride  = (ctx->q_data[V4L2_M2M_SRC].fmt->y_depth * ctx->q_data[V4L2_M2M_SRC].width) >> 3;
+		ctx->q_data[V4L2_M2M_SRC].rot_stride =
+			(ctx->q_data[V4L2_M2M_SRC].fmt->y_depth * ctx->q_data[V4L2_M2M_SRC].height) >> 3;
+	} else {
+		ctx->q_data[V4L2_M2M_SRC].stride  = ctx->q_data[V4L2_M2M_SRC].bytesperline;
+		ctx->q_data[V4L2_M2M_SRC].rot_stride =
+			(ctx->q_data[V4L2_M2M_SRC].fmt->depth * ctx->q_data[V4L2_M2M_SRC].height) >> 3;
+	}
+
+	ctx->q_data[V4L2_M2M_SRC].sizeimage = ctx->q_data[V4L2_M2M_SRC].bytesperline * ctx->q_data[V4L2_M2M_SRC].height;
+
+	ctx->q_data[V4L2_M2M_SRC].seg_height = ctx->q_data[V4L2_M2M_SRC].height / ctx->num_rows;
+	ctx->q_data[V4L2_M2M_SRC].seg_width = ctx->q_data[V4L2_M2M_SRC].width / ctx->num_cols;
+
+	m2mx6_calc_seg_offsets(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+
+	v4l2_info(&ctx->dev->v4l2_dev,
+		  "Default output format: %dx%d (%d %dx%d segments), %c%c%c%c\n",
+		  ctx->q_data[V4L2_M2M_SRC].width, ctx->q_data[V4L2_M2M_SRC].height,
+		  ctx->num_segs, ctx->q_data[V4L2_M2M_SRC].seg_width, ctx->q_data[V4L2_M2M_SRC].seg_height,
+		  ctx->q_data[V4L2_M2M_SRC].fmt->fourcc & 0xff,
+		  (ctx->q_data[V4L2_M2M_SRC].fmt->fourcc >> 8) & 0xff,
+		  (ctx->q_data[V4L2_M2M_SRC].fmt->fourcc >> 16) & 0xff,
+		  (ctx->q_data[V4L2_M2M_SRC].fmt->fourcc >> 24) & 0xff);
+
 }
 
 
@@ -500,20 +546,6 @@ static void m2mx6_job_abort(void *priv)
 
 	/* Will cancel the transaction in the next interrupt handler */
 	ctx->aborting = 1;
-}
-
-static void m2mx6_lock(void *priv)
-{
-	struct m2mx6_ctx *ctx = priv;
-	struct m2mx6_dev *dev = ctx->dev;
-	mutex_lock(&dev->dev_mutex);
-}
-
-static void m2mx6_unlock(void *priv)
-{
-	struct m2mx6_ctx *ctx = priv;
-	struct m2mx6_dev *dev = ctx->dev;
-	mutex_unlock(&dev->dev_mutex);
 }
 
 /* hold spinlock when calling */
@@ -920,7 +952,7 @@ static irqreturn_t m2mx6_norotate_irq(int irq, void *data)
 	bool done;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
-
+	dprintk(dev, "IRQ called\n");
 	curr_ctx = v4l2_m2m_get_curr_priv(dev->m2m_dev);
 	if (curr_ctx == NULL) {
 		v4l2_err(&dev->v4l2_dev,
@@ -1443,6 +1475,13 @@ static int vidioc_s_ctrl(struct v4l2_ctrl *ctrl)
 	return 0;
 }
 
+static int vidioc_qbuf(struct file *file, void *priv,
+			struct v4l2_buffer *buf)
+{
+	struct m2mx6_ctx *ctx = container_of(priv, struct m2mx6_ctx, fh);
+	return v4l2_m2m_qbuf(file, ctx->fh.m2m_ctx, buf);
+}
+
 
 static const struct v4l2_ioctl_ops m2mx6_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
@@ -1457,11 +1496,11 @@ static const struct v4l2_ioctl_ops m2mx6_ioctl_ops = {
 	.vidioc_try_fmt_vid_out	= vidioc_try_fmt_vid_out,
 	.vidioc_s_fmt_vid_out	= vidioc_s_fmt_vid_out,
 
-	.vidioc_create_bufs	= v4l2_m2m_ioctl_create_bufs,
+/*	.vidioc_create_bufs	= v4l2_m2m_ioctl_create_bufs,*/
 	.vidioc_reqbufs		= v4l2_m2m_ioctl_reqbufs,
 	.vidioc_querybuf	= v4l2_m2m_ioctl_querybuf,
 	.vidioc_expbuf		= v4l2_m2m_ioctl_expbuf,
-	.vidioc_qbuf		= v4l2_m2m_ioctl_qbuf,
+	.vidioc_qbuf		= vidioc_qbuf,/*v4l2_m2m_ioctl_qbuf,*/
 	.vidioc_dqbuf		= v4l2_m2m_ioctl_dqbuf,
 
 	.vidioc_streamon	= v4l2_m2m_ioctl_streamon,
@@ -1616,6 +1655,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	src_vq->mem_ops = &vb2_dma_contig_memops;
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &ctx->dev->dev_mutex;
+	src_vq->io_flags = VB2_FILEIO_ALLOW_ZERO_BYTESUSED;
 
 	ret = vb2_queue_init(src_vq);
 	if (ret)
@@ -1628,7 +1668,8 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	dst_vq->ops = &m2mx6_qops;
 	dst_vq->mem_ops = &vb2_dma_contig_memops;
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
-	src_vq->lock = &ctx->dev->dev_mutex;
+	dst_vq->lock = &ctx->dev->dev_mutex;
+	dst_vq->io_flags = VB2_FILEIO_ALLOW_ZERO_BYTESUSED;
 
 	return vb2_queue_init(dst_vq);
 }
@@ -1699,6 +1740,8 @@ static int m2mx6_release(struct file *file)
 
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
+	v4l2_ctrl_handler_free(&ctx->hdl);
+
 	mutex_lock(&dev->dev_mutex);
 
 	/*
@@ -1710,9 +1753,9 @@ static int m2mx6_release(struct file *file)
 	free_rot_intermediate_buffer(ctx);
 
 	v4l2_m2m_ctx_release(ctx->fh.m2m_ctx);
+	mutex_unlock(&dev->dev_mutex);
 	kfree(ctx);
 
-	mutex_unlock(&dev->dev_mutex);
 	return 0;
 }
 
@@ -1737,8 +1780,6 @@ static struct video_device m2mx6_videodev = {
 static struct v4l2_m2m_ops m2m_ops = {
 	.device_run	= m2mx6_device_run,
 	.job_abort	= m2mx6_job_abort,
-	.lock		= m2mx6_lock,
-	.unlock		= m2mx6_unlock,
 };
 
 static int of_dev_node_match(struct device *dev, void *data)
