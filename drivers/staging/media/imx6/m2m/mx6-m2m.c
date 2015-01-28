@@ -468,8 +468,8 @@ static void set_default_params(struct m2mx6_ctx *ctx)
 	ctx->q_data[V4L2_M2M_DST].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_NV12);
 	ctx->q_data[V4L2_M2M_DST].width = DEFAULT_W;
 	ctx->q_data[V4L2_M2M_DST].height = DEFAULT_H;
-	ctx->q_data[V4L2_M2M_DST].bytesperline = DEFAULT_W;
-	ctx->q_data[V4L2_M2M_DST].sizeimage = (DEFAULT_W * DEFAULT_H * 3) / 2;
+	ctx->q_data[V4L2_M2M_DST].bytesperline = (ctx->q_data[V4L2_M2M_DST].width * ctx->q_data[V4L2_M2M_DST].fmt->depth) >> 3;
+	ctx->q_data[V4L2_M2M_DST].sizeimage = ctx->q_data[V4L2_M2M_DST].height * ctx->q_data[V4L2_M2M_DST].bytesperline;
 	ctx->num_rows = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].height);
 	ctx->num_cols = m2mx6_num_stripes(ctx->q_data[V4L2_M2M_DST].width);
 	ctx->num_segs = ctx->num_cols * ctx->num_rows;
@@ -502,8 +502,8 @@ static void set_default_params(struct m2mx6_ctx *ctx)
 	ctx->q_data[V4L2_M2M_SRC].fmt = m2mx6_get_format_from_fourcc(V4L2_PIX_FMT_YUYV);
 	ctx->q_data[V4L2_M2M_SRC].width = DEFAULT_W;
 	ctx->q_data[V4L2_M2M_SRC].height = DEFAULT_H;
-	ctx->q_data[V4L2_M2M_SRC].bytesperline = DEFAULT_W * 2;
-	ctx->q_data[V4L2_M2M_SRC].sizeimage = DEFAULT_H * DEFAULT_W * 2;
+	ctx->q_data[V4L2_M2M_SRC].bytesperline = (ctx->q_data[V4L2_M2M_SRC].width * ctx->q_data[V4L2_M2M_SRC].fmt->depth) >> 3;
+	ctx->q_data[V4L2_M2M_SRC].sizeimage = ctx->q_data[V4L2_M2M_SRC].height * ctx->q_data[V4L2_M2M_SRC].bytesperline;
 
 	if (ctx->q_data[V4L2_M2M_SRC].fmt->y_depth) {
 		ctx->q_data[V4L2_M2M_SRC].stride  = (ctx->q_data[V4L2_M2M_SRC].fmt->y_depth * ctx->q_data[V4L2_M2M_SRC].width) >> 3;
@@ -948,7 +948,6 @@ static irqreturn_t m2mx6_norotate_irq(int irq, void *data)
 	bool done;
 
 	spin_lock_irqsave(&dev->irqlock, flags);
-	dprintk(dev, "IRQ called\n");
 	curr_ctx = v4l2_m2m_get_curr_priv(dev->m2m_dev);
 	if (curr_ctx == NULL) {
 		v4l2_err(&dev->v4l2_dev,
@@ -1215,7 +1214,7 @@ static int m2mx6_g_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	f->fmt.pix.field	= V4L2_FIELD_NONE;
 	f->fmt.pix.pixelformat	= q_data->fmt->fourcc;
 	f->fmt.pix.bytesperline	= (q_data->width * q_data->fmt->depth) >> 3;
-	f->fmt.pix.sizeimage	= q_data->sizeimage;
+	f->fmt.pix.sizeimage	= q_data->bytesperline * q_data->height;
 	f->fmt.pix.colorspace	= V4L2_COLORSPACE_REC709;
 
 	return 0;
@@ -1545,8 +1544,6 @@ static int m2mx6_buf_prepare(struct vb2_buffer *vb)
 	struct m2mx6_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 	struct m2mx6_dev *dev = ctx->dev;
 	struct m2mx6_q_data *q_data;
-
-	dprintk(ctx->dev, "type: %d\n", vb->vb2_queue->type);
 
 	q_data = get_q_data(ctx, vb->vb2_queue->type);
 
