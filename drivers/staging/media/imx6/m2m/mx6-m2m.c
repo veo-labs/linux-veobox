@@ -483,8 +483,6 @@ static void set_default_params(struct m2mx6_ctx *ctx)
 			(ctx->q_data[V4L2_M2M_DST].fmt->depth * ctx->q_data[V4L2_M2M_DST].height) >> 3;
 	}
 
-	ctx->q_data[V4L2_M2M_DST].sizeimage = ctx->q_data[V4L2_M2M_DST].bytesperline * ctx->q_data[V4L2_M2M_DST].height;
-
 	ctx->q_data[V4L2_M2M_DST].seg_height = ctx->q_data[V4L2_M2M_DST].height / ctx->num_rows;
 	ctx->q_data[V4L2_M2M_DST].seg_width = ctx->q_data[V4L2_M2M_DST].width / ctx->num_cols;
 
@@ -516,8 +514,6 @@ static void set_default_params(struct m2mx6_ctx *ctx)
 		ctx->q_data[V4L2_M2M_SRC].rot_stride =
 			(ctx->q_data[V4L2_M2M_SRC].fmt->depth * ctx->q_data[V4L2_M2M_SRC].height) >> 3;
 	}
-
-	ctx->q_data[V4L2_M2M_SRC].sizeimage = ctx->q_data[V4L2_M2M_SRC].bytesperline * ctx->q_data[V4L2_M2M_SRC].height;
 
 	ctx->q_data[V4L2_M2M_SRC].seg_height = ctx->q_data[V4L2_M2M_SRC].height / ctx->num_rows;
 	ctx->q_data[V4L2_M2M_SRC].seg_width = ctx->q_data[V4L2_M2M_SRC].width / ctx->num_cols;
@@ -1648,7 +1644,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	int ret;
 
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-	src_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	src_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	src_vq->drv_priv = ctx;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	src_vq->ops = &m2mx6_qops;
@@ -1662,7 +1658,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 		return ret;
 
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
+	dst_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
 	dst_vq->ops = &m2mx6_qops;
