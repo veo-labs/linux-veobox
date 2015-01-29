@@ -40,7 +40,7 @@
 		led0-green {
 			label = "led0-green";
 			gpios = <&gpio6 14 GPIO_ACTIVE_HIGH>;
-			default-state = "on";
+			default-state = "off";
 		};
 		led1-red {
 			label = "led1-red";
@@ -50,7 +50,7 @@
 		led1-green {
 			label = "led1-green";
 			gpios = <&gpio6 16 GPIO_ACTIVE_HIGH>;
-			default-state = "on";
+			default-state = "off";
 		};
 	};
 
