@@ -134,50 +134,6 @@ struct adv7604_chip_info {
  *
  **********************************************************************
  */
-
-struct adv7604_state {
-	const struct adv7604_chip_info *info;
-	struct adv7604_platform_data pdata;
-
-	struct gpio_desc *hpd_gpio[4];
-
-	struct v4l2_subdev sd;
-	struct media_pad pads[ADV7604_PAD_MAX];
-	unsigned int source_pad;
-
-	struct v4l2_ctrl_handler hdl;
-
-	enum adv7604_pad selected_input;
-
-	struct v4l2_dv_timings timings;
-	const struct adv7604_format_info *format;
-
-	struct {
-		u8 edid[256];
-		u32 present;
-		unsigned blocks;
-	} edid;
-	u16 spa_port_a[2];
-	struct v4l2_fract aspect_ratio;
-	u32 rgb_quantization_range;
-	struct workqueue_struct *work_queues;
-	struct delayed_work delayed_work_enable_hotplug;
-	bool restart_stdi_once;
-
-	/* i2c clients */
-	struct i2c_client *i2c_clients[ADV7604_PAGE_MAX];
-
-	/* Regmaps */
-	struct regmap *regmap[ADV7604_PAGE_MAX];
-
-	/* controls */
-	struct v4l2_ctrl *detect_tx_5v_ctrl;
-	struct v4l2_ctrl *analog_sampling_phase_ctrl;
-	struct v4l2_ctrl *free_run_color_manual_ctrl;
-	struct v4l2_ctrl *free_run_color_ctrl;
-	struct v4l2_ctrl *rgb_quantization_range_ctrl;
-};
-
 static bool adv7604_has_afe(struct adv7604_state *state)
 {
 	return state->info->has_afe;
