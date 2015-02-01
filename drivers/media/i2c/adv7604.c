@@ -119,6 +119,7 @@ struct adv7604_chip_info {
 	void (*setup_irqs)(struct v4l2_subdev *sd);
 	unsigned int (*read_hdmi_pixelclock)(struct v4l2_subdev *sd);
 	unsigned int (*read_cable_det)(struct v4l2_subdev *sd);
+	int (*init_core)(struct v4l2_subdev *sd);
 
 	/* 0 = AFE, 1 = HDMI */
 	const struct adv7604_reg_seq *recommended_settings[2];
@@ -2368,6 +2369,62 @@ static const struct v4l2_ctrl_config adv7604_ctrl_free_run_color = {
 };
 
 /* ----------------------------------------------------------------------- */
+static int adv7611_core_init(struct v4l2_subdev *sd)
+{
+	struct adv7604_state *state = to_state(sd);
+	const struct adv7604_chip_info *info = state->info;
+	struct adv7604_platform_data *pdata = &state->pdata;
+
+	hdmi_write(sd, 0x48,(pdata->disable_cable_det_rst ? 0x40 : 0));
+
+	disable_input(sd);
+
+	if (pdata->default_input >= 0 &&
+			pdata->default_input < state->source_pad) {
+
+		state->selected_input = pdata->default_input;
+		select_input(sd);
+		enable_input(sd);
+	}
+
+	/* power */
+	io_write(sd, 0x0c, 0x42);   /* Power up part and power down VDP */
+
+	/* video format */
+	io_write_clr_set(sd, 0x02, 0x0f,
+			pdata->alt_gamma << 3 |
+			pdata->op_656_range << 2 |
+			pdata->alt_data_sat << 0);
+	io_write_clr_set(sd, 0x05, 0x0e, pdata->blank_data << 3 |
+			pdata->insert_av_codes << 2 |
+			pdata->replicate_av_codes << 1);
+	adv7604_setup_format(state);
+
+	cp_write(sd, 0x69, 0x10);   /* Enable CP CSC */
+
+	/* VS, HS polarities */
+	io_write(sd, 0x06, 0xa0 | pdata->inv_vs_pol << 2 |
+			pdata->inv_hs_pol << 1 | pdata->inv_llc_pol);
+
+	/* Adjust drive strength */
+	io_write(sd, 0x14, 0x40 | pdata->dr_str_data << 4 |
+			pdata->dr_str_clk << 2 |
+			pdata->dr_str_sync);
+
+	cp_write(sd, 0xba, (pdata->hdmi_free_run_mode << 1) | 0x01); /* HDMI free run */
+	cp_write(sd, 0xf3, 0xdc); /* Low threshold to enter/exit free run mode */
+	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
+					     for digital formats */
+
+	/* interrupts */
+	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
+	io_write(sd, 0x46, 0x98); /* Enable SSPD, STDI and CP unlocked interrupts */
+	io_write(sd, 0x6e, info->fmt_change_digital_mask); /* Enable V_LOCKED and DE_REGEN_LCK interrupts */
+	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
+	info->setup_irqs(sd);
+
+	return v4l2_ctrl_handler_setup(sd->ctrl_handler);
+}
 
 static int adv7604_core_init(struct v4l2_subdev *sd)
 {
@@ -2422,14 +2479,6 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 				      ADI recommended setting [REF_01, c. 2.3.3] */
 	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
 				     for digital formats */
-
-	/* HDMI audio */
-	hdmi_write_clr_set(sd, 0x15, 0x03, 0x03); /* Mute on FIFO over-/underflow [REF_01, c. 1.2.18] */
-	hdmi_write_clr_set(sd, 0x1a, 0x0e, 0x08); /* Wait 1 s before unmute */
-	hdmi_write_clr_set(sd, 0x68, 0x06, 0x06); /* FIFO reset on over-/underflow [REF_01, c. 1.2.19] */
-
-	/* TODO from platform data */
-	afe_write(sd, 0xb5, 0x01);  /* Setting MCLK to 256Fs */
 
 	if (adv7604_has_afe(state)) {
 		afe_write(sd, 0x02, pdata->ain_sel); /* Select analog input muxing mode */
@@ -2576,6 +2625,7 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_EDID) | BIT(ADV7604_PAGE_HDMI) |
 			BIT(ADV7604_PAGE_TEST) | BIT(ADV7604_PAGE_CP) |
 			BIT(ADV7604_PAGE_VDP),
+		.init_core = adv7604_core_init,
 	},
 	[ADV7611] = {
 		.type = ADV7611,
@@ -2604,6 +2654,7 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_INFOFRAME) | BIT(ADV7604_PAGE_AFE) |
 			BIT(ADV7604_PAGE_REP) |  BIT(ADV7604_PAGE_EDID) |
 			BIT(ADV7604_PAGE_HDMI) | BIT(ADV7604_PAGE_CP),
+		.init_core = adv7611_core_init,
 	},
 };
 
@@ -3101,7 +3152,7 @@ static int adv7604_probe(struct i2c_client *client,
 	if (err)
 		goto err_entity;
 
-	err = adv7604_core_init(sd);
+	err = state->info->init_core(sd);
 	if (err)
 		goto err_entity;
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
