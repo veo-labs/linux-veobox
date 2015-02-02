@@ -545,7 +545,7 @@ static inline int edid_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
+	return regmap_read_check(state, ADV7604_PAGE_EDID, reg);
 }
 
 static inline int edid_write(struct v4l2_subdev *sd, u8 reg, u8 val)
