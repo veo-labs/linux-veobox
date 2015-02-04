@@ -2558,6 +2558,99 @@ static int mx6cam_graph_build_one(struct mx6cam_dev *camdev,
 	return ret;
 }
 
+static int mx6cam_probe_complete(struct mx6cam_dev *dev)
+{
+	struct platform_device *pdev = container_of(dev->dev, struct platform_device, dev);
+	struct video_device *vfd;
+	struct pinctrl *pinctrl;
+	int ret;
+
+	/* Create device node */
+	vfd = &dev->vfd;
+	strlcpy(vfd->name, "mx6-camera", sizeof(vfd->name));
+	vfd->fops = &mx6cam_fops;
+	vfd->ioctl_ops = &mx6cam_ioctl_ops;
+	vfd->release = video_device_release_empty;
+	vfd->v4l2_dev = &dev->v4l2_dev;
+	vfd->queue = &dev->buffer_queue;
+
+	/*
+	 * Provide a mutex to v4l2 core. It will be used to protect
+	 * all fops and v4l2 ioctls.
+	 */
+	vfd->lock = &dev->mutex;
+	dev->v4l2_dev.notify = mx6cam_subdev_notification;
+
+	snprintf(vfd->name, sizeof(vfd->name), "%s", dev->dev->of_node->name);
+
+	/* Get any pins needed */
+	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
+
+	/* setup some defaults */
+	dev->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	atomic_set(&dev->status_change, 1);
+	dev->signal_locked = 0;
+
+	/* Initialize the buffer queues */
+	vfd->queue = &dev->buffer_queue;
+	dev->alloc_ctx = vb2_dma_contig_init_ctx(dev->dev);
+	if (IS_ERR(dev->alloc_ctx)) {
+		v4l2_err(&dev->v4l2_dev, "Failed to alloc vb2 context\n");
+		goto unreg_vdev;
+	}
+
+	dev->buffer_queue.type = dev->type;
+	dev->buffer_queue.io_modes = VB2_MMAP | VB2_DMABUF;/* | VB2_USERPTR;*/
+	dev->buffer_queue.lock = &dev->mutex;
+	dev->buffer_queue.drv_priv = dev;
+	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
+	dev->buffer_queue.ops = &mx6cam_qops;
+	dev->buffer_queue.mem_ops = &vb2_dma_contig_memops;
+	dev->buffer_queue.min_buffers_needed = 2;
+	dev->buffer_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
+			| V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
+	ret = vb2_queue_init(&dev->buffer_queue);
+	if (ret < 0) {
+		v4l2_err(&dev->v4l2_dev, "Failed to init vb2 queue: %d\n", ret);
+		goto cleanup_ctx;
+	}
+
+	INIT_LIST_HEAD(&dev->buf_list);
+	INIT_WORK(&dev->restart_work, restart_work_handler);
+	init_timer(&dev->restart_timer);
+	dev->restart_timer.data = (unsigned long)dev;
+	dev->restart_timer.function = mx6cam_restart_timeout;
+
+	/* init our controls */
+	ret = mx6cam_init_controls(dev);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "init controls failed\n");
+		goto unreg_vdev;
+	}
+
+	video_set_drvdata(vfd, dev);
+	ret = video_register_device(vfd, VFL_TYPE_GRABBER, -1);
+	if (ret) {
+		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
+		goto unreg_vdev;
+	}
+
+	platform_set_drvdata(pdev, dev);
+
+	v4l2_info(&dev->v4l2_dev, "Media entity: %s\n", vfd->entity.name);
+	v4l2_info(&dev->v4l2_dev,
+		  "Device registered as %s, on ipu%d\n",
+		  video_device_node_name(vfd), ipu_get_num(dev->ipu));
+	return 0;
+
+cleanup_ctx:
+	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
+		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
+unreg_vdev:
+	video_unregister_device(&dev->vfd);
+	return ret;
+}
+
 static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 {
 	struct mx6cam_dev *camdev =
@@ -2604,6 +2697,7 @@ static int mx6cam_graph_notify_complete(struct v4l2_async_notifier *notifier)
 		camdev->dv_timings_cap = timings;
 		update_format_from_timings(camdev, &timings);*/
 	}
+	ret = mx6cam_probe_complete(camdev);
 	return ret;
 }
 
@@ -2647,7 +2741,7 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 	struct mx6cam_graph_entity *entity;
 	struct device_node *remote;
 	struct device_node *ep = NULL;
-	struct v4l2_of_endpoint v4l2_ep;
+//	struct v4l2_of_endpoint v4l2_ep;
 	struct device_node *next;
 	int ret = 0;
 
@@ -2663,8 +2757,7 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 
 		dev_dbg(camdev->dev, "handling endpoint %s\n", ep->full_name);
 
-		v4l2_of_parse_endpoint(ep, &v4l2_ep);
-
+//		v4l2_of_parse_endpoint(ep, &v4l2_ep);
 		remote = of_graph_get_remote_port_parent(ep);
 		if (remote == NULL) {
 			ret = -EINVAL;
@@ -2807,7 +2900,6 @@ static int mx6cam_probe(struct platform_device *pdev)
 	struct device_node *node = pdev->dev.of_node;
 	struct mx6cam_dev *dev;
 	struct video_device *vfd;
-	struct pinctrl *pinctrl;
 	int ret;
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
@@ -2856,78 +2948,15 @@ static int mx6cam_probe(struct platform_device *pdev)
 		goto unreg_dev;
 	}
 
-	/* Create device node */
 	vfd = &dev->vfd;
-	strlcpy(vfd->name, "mx6-camera", sizeof(vfd->name));
-	vfd->fops = &mx6cam_fops;
-	vfd->ioctl_ops = &mx6cam_ioctl_ops;
-	vfd->release = video_device_release_empty;
-	vfd->v4l2_dev = &dev->v4l2_dev;
-	vfd->queue = &dev->buffer_queue;
-
-	/*
-	 * Provide a mutex to v4l2 core. It will be used to protect
-	 * all fops and v4l2 ioctls.
-	 */
-	vfd->lock = &dev->mutex;
-	dev->v4l2_dev.notify = mx6cam_subdev_notification;
-
+	INIT_LIST_HEAD(&dev->entities);
+	dev->ep = NULL;
 	dev->pads[0].flags = MEDIA_PAD_FL_SINK;
 	dev->pads[1].flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_init(&vfd->entity, 2, dev->pads, 0);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev, "media entity failed with error %d\n", ret);
 		goto unreg_dev;
-	}
-	snprintf(vfd->name, sizeof(vfd->name), "%s", dev->dev->of_node->name);
-
-	v4l2_info(&dev->v4l2_dev, "Media entity: %s\n", vfd->entity.name);
-
-	/* Get any pins needed */
-	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
-
-	/* setup some defaults */
-	dev->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	atomic_set(&dev->status_change, 1);
-	dev->signal_locked = 0;
-
-	/* Initialize the buffer queues */
-	vfd->queue = &dev->buffer_queue;
-	dev->alloc_ctx = vb2_dma_contig_init_ctx(dev->dev);
-	if (IS_ERR(dev->alloc_ctx)) {
-		v4l2_err(&dev->v4l2_dev, "Failed to alloc vb2 context\n");
-		goto unreg_vdev;
-	}
-
-	dev->buffer_queue.type = dev->type;
-	dev->buffer_queue.io_modes = VB2_MMAP | VB2_DMABUF;/* | VB2_USERPTR;*/
-	dev->buffer_queue.lock = &dev->mutex;
-	dev->buffer_queue.drv_priv = dev;
-	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
-	dev->buffer_queue.ops = &mx6cam_qops;
-	dev->buffer_queue.mem_ops = &vb2_dma_contig_memops;
-	dev->buffer_queue.min_buffers_needed = 2;
-	dev->buffer_queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
-			| V4L2_BUF_FLAG_TSTAMP_SRC_EOF;
-	ret = vb2_queue_init(&dev->buffer_queue);
-	if (ret < 0) {
-		v4l2_err(&dev->v4l2_dev, "Failed to init vb2 queue: %d\n", ret);
-		goto cleanup_ctx;
-	}
-
-	INIT_LIST_HEAD(&dev->buf_list);
-	INIT_WORK(&dev->restart_work, restart_work_handler);
-	init_timer(&dev->restart_timer);
-	dev->restart_timer.data = (unsigned long)dev;
-	dev->restart_timer.function = mx6cam_restart_timeout;
-
-	INIT_LIST_HEAD(&dev->entities);
-	dev->ep = NULL;
-	/* init our controls */
-	ret = mx6cam_init_controls(dev);
-	if (ret) {
-		v4l2_err(&dev->v4l2_dev, "init controls failed\n");
-		goto unreg_vdev;
 	}
 
 	/* find and register mipi csi2 receiver subdev */
@@ -2991,33 +3020,14 @@ static int mx6cam_probe(struct platform_device *pdev)
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->vdic_sd->name);
 
-
-	video_set_drvdata(vfd, dev);
-	ret = video_register_device(vfd, VFL_TYPE_GRABBER, -1);
-	if (ret) {
-		v4l2_err(&dev->v4l2_dev, "Failed to register video device\n");
-		goto unreg_vdev;
-	}
-
-	platform_set_drvdata(pdev, dev);
-
-	v4l2_info(&dev->v4l2_dev,
-		  "Device registered as %s, on ipu%d\n",
-		  video_device_node_name(vfd), ipu_get_num(dev->ipu));
-
 	return 0;
 
-unreg_dev:
-	v4l2_device_unregister(&dev->v4l2_dev);
 unreg_subdevs:
 	mx6cam_unregister_subdevs(dev);
 free_ctrls:
 	v4l2_ctrl_handler_free(&dev->ctrl_hdlr);
-cleanup_ctx:
-	if (!IS_ERR_OR_NULL(dev->alloc_ctx))
-		vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
-unreg_vdev:
-	video_unregister_device(&dev->vfd);
+unreg_dev:
+	v4l2_device_unregister(&dev->v4l2_dev);
 	return ret;
 }
 
