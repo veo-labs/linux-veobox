@@ -1272,6 +1272,10 @@ static inline bool no_lock_cp(struct v4l2_subdev *sd)
 	if (!adv7604_has_afe(state))
 		return false;
 
+	/* If chip is in free run mode, consider CP locked */
+	if (cp_read(sd, 0xff) & 0x10)
+		return false;
+
 	/* CP has detected a non standard number of lines on the incoming
 	   video compared to what it is configured to receive by s_dv_timings */
 	return io_read(sd, 0x12) & 0x01;
