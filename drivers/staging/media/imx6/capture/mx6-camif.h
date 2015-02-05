@@ -128,6 +128,8 @@ struct mx6cam_dev {
 	struct media_pad pads[2];
 	struct mx6_camera_pdata *pdata;
 
+	int csi_id;
+
 	struct v4l2_async_notifier notifier;
 	struct list_head entities;
 	unsigned int num_subdevs;
