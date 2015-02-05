@@ -699,15 +699,25 @@ config VIDEO_M52790
 	 module will be called m52790.
 
 config VIDEO_VBX3_FPGA
-	tristate "Vodalys FPGA driver for video switching"
+	tristate "Vodalys FPGA driver"
 	depends on VIDEO_V4L2 && I2C && LATTICE_ECP3_CONFIG
+	---help---
+	 Support for the Vodalys FPGA based on Lattice ECP3-35
+	 for audio/video switching.
+	 Will create a basic subdev controler
+
+	 To compile this driver as a module, choose M here: the
+	 module will be called vbx3_fpga.
+
+config VIDEO_VBX3_FPGA_VSWITCH
+	tristate "Vodalys FPGA driver for video switching"
+	depends on VIDEO_VBX3_FPGA
 	---help---
 	 Support for the Vodalys FPGA based on Lattice ECP3-35
 	 for video switching
 
 	 To compile this driver as a module, choose M here: the
-	 module will be called vbx3_fpga.
-
+	 module will be called vbx3_fpga_vswitch.
 endmenu
 
 menu "Sensors used on soc_camera driver"
