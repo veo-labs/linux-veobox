@@ -20,15 +20,16 @@
  */
 
 
-#include <linux/module.h>
-#include <linux/types.h>
-#include <linux/slab.h>
-#include <linux/ioctl.h>
 #include <asm/uaccess.h>
 #include <linux/i2c.h>
+#include <linux/ioctl.h>
+#include <linux/module.h>
+#include <linux/of_platform.h>
+#include <linux/regmap.h>
+#include <linux/slab.h>
+#include <linux/types.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-device.h>
-#include <linux/regmap.h>
 
 MODULE_DESCRIPTION("i2c device driver for VBX3 fpga source switch");
 MODULE_AUTHOR("Jean-Michel Hautbois");
@@ -441,8 +442,11 @@ static int vbx3_fpga_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	v4l_info(client, "device probed\n");
+	ret = of_platform_populate(client->dev.of_node, NULL, NULL, &client->dev);
+	if (ret < 0)
+		v4l_err(client, "Could not populate switches : %d\n", ret);
 
+	v4l_info(client, "device probed\n");
 	return ret;
 }
 

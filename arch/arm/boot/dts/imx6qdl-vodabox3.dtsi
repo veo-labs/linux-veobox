@@ -102,7 +102,7 @@
 			};
 		};
 	};
-#if 0
+
 	v4l2cap1: v4l2cap@ipu2 {
 		compatible = "fsl,imx6-v4l2-capture";
 		#address-cells = <1>;
@@ -127,7 +127,6 @@
 			};
 		};
 	};
-#endif
 };
 
 &audmux {
@@ -342,46 +341,62 @@
 	vbx3_fpga@51 {
 		compatible = "vbx,vbx3_fpga";
 		reg = <0x51>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			port@0 {
-				reg = <0>;
-				sdi0_fpga_in: endpoint {
-					remote-endpoint = <&sdi0_out0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		vbx_video_switch@0 {
+			compatible = "vbx,vswitch";
+			reg = <0>;
+			status = "okay";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					sdi0_fpga_in: endpoint {
+						remote-endpoint = <&sdi0_out0>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					hdmi0_fpga_in: endpoint {
+						remote-endpoint = <&hdmi0_out>;
+					};
+				};
+				port@2 {
+					reg = <2>;
+					csi0_fpga_out: endpoint {
+						bus-width = <16>;
+						remote-endpoint = <&csi0>;
+					};
 				};
 			};
-			port@1 {
-				reg = <1>;
-				hdmi0_fpga_in: endpoint {
-					remote-endpoint = <&hdmi0_out>;
+		};
+		vbx_video_switch@1 {
+			compatible = "vbx,vswitch";
+			reg = <1>;
+			status = "okay";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					sdi1_fpga_in: endpoint {
+						remote-endpoint = <&sdi1_out0>;
+					};
 				};
-			};
-			port@2 {
-				reg = <2>;
-				sdi1_fpga_in: endpoint {
-					remote-endpoint = <&sdi1_out0>;
+				port@1 {
+					reg = <1>;
+					hdmi1_fpga_in: endpoint {
+						remote-endpoint = <&hdmi1_out>;
+					};
 				};
-			};
-			port@3 {
-				reg = <3>;
-				hdmi1_fpga_in: endpoint {
-					remote-endpoint = <&hdmi1_out>;
+				port@2 {
+					reg = <2>;
+					csi1_fpga_out: endpoint {
+						bus-width = <16>;
+						remote-endpoint = <&csi1>;
+					};
 				};
-			};
-			port@4 {
-				reg = <4>;
-				csi0_fpga_out: endpoint {
-					bus-width = <16>;
-					remote-endpoint = <&csi0>;
-				};
-			};
-			port@5 {/*
-				reg = <5>;
-				csi1_fpga_out: endpoint {
-					bus-width = <16>;
-					remote-endpoint = <&csi1>;
-				};*/
 			};
 		};
 	};
