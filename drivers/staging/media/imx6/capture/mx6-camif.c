@@ -2756,6 +2756,13 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 		ep = next;
 
 		dev_dbg(camdev->dev, "handling endpoint %s\n", ep->full_name);
+		if (camdev->csi_id == -1) {
+			ret = of_property_read_u32(ep, "reg", &camdev->csi_id);
+			if (!ret)
+				dev_dbg(camdev->dev, "add CSI %d\n", camdev->csi_id);
+			else
+				dev_dbg(camdev->dev, "Could not find reg property : %d\n", ret);
+		}
 
 //		v4l2_of_parse_endpoint(ep, &v4l2_ep);
 		remote = of_graph_get_remote_port_parent(ep);
@@ -2778,8 +2785,6 @@ static int mx6cam_graph_parse_one(struct mx6cam_dev *camdev,
 			entity->subdev = NULL;
 			entity->entity = &camdev->vfd.entity;
 			list_add_tail(&entity->list, &camdev->entities);
-			dev_dbg(camdev->dev, "add root node in entities : %s\n",
-				remote->full_name);
 			continue;
 		}
 
@@ -2951,6 +2956,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	vfd = &dev->vfd;
 	INIT_LIST_HEAD(&dev->entities);
 	dev->ep = NULL;
+	dev->csi_id = -1;
 	dev->pads[0].flags = MEDIA_PAD_FL_SINK;
 	dev->pads[1].flags = MEDIA_PAD_FL_SINK;
 	ret = media_entity_init(&vfd->entity, 2, dev->pads, 0);

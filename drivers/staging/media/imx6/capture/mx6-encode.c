@@ -68,7 +68,7 @@ struct encoder_priv {
 static void encoder_setup_csi(struct encoder_priv *priv)
 {
 	struct mx6cam_dev *dev = priv->dev;
-	int csi_id = dev->ep->ep.base.port;
+	int csi_id = dev->csi_id;
 	int ipu_id = ipu_get_num(dev->ipu);
 	bool is_csi2 = dev->ep->ep.bus_type == V4L2_MBUS_CSI2;
 
@@ -124,7 +124,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 	struct mx6cam_dev *dev = priv->dev;
 	int csi_id, csi_ch_num, err;
 
-	csi_id = dev->ep->ep.base.port;
+	csi_id = dev->csi_id;
 	priv->csi = ipu_csi_get(dev->ipu, csi_id);
 	if (IS_ERR(priv->csi)) {
 		v4l2_err(&priv->sd, "failed to get CSI %d\n", csi_id);
@@ -377,7 +377,7 @@ static void encoder_setup_channel(struct encoder_priv *priv,
 	ipu_cpmem_set_burstsize(channel, burst_size);
 
 	if (!dev->using_ic) {
-		int csi_id = dev->ep->ep.base.port;
+		int csi_id = dev->csi_id;
 		bool passthrough;
 
 		/*
