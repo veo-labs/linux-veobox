@@ -1777,6 +1777,20 @@ static int vidioc_s_register(struct file *file, void *f,
 }
 #endif
 
+static int vidioc_subscribe_event(struct v4l2_fh *fh,
+				const struct v4l2_event_subscription *sub)
+{
+	switch (sub->type) {
+		case V4L2_EVENT_CTRL:
+			return v4l2_ctrl_subscribe_event(fh, sub);
+		case V4L2_EVENT_SOURCE_CHANGE:
+			return v4l2_src_change_event_subscribe(fh, sub);
+		default:
+			break;
+	}
+	return -EINVAL;
+};
+
 static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
 	.vidioc_enum_fmt_vid_cap        = vidioc_enum_fmt_vid_cap,
@@ -1835,7 +1849,7 @@ static const struct v4l2_ioctl_ops mx6cam_ioctl_ops = {
 	.vidioc_g_register      = vidioc_g_register,
 	.vidioc_s_register	= vidioc_s_register,
 #endif
-	.vidioc_subscribe_event = v4l2_ctrl_subscribe_event,
+	.vidioc_subscribe_event = vidioc_subscribe_event,
 	.vidioc_unsubscribe_event = v4l2_event_unsubscribe,
 };
 
