@@ -813,16 +813,12 @@ static int vdic_start(struct vdic_priv *priv)
 	priv->in_pixfmt = dev->subdev_pixfmt->fourcc;
 	priv->inf.width = dev->crop.width;
 	priv->inf.height = dev->crop.height;
-	priv->in_stride = dev->subdev_pixfmt->y_depth ?
-		(priv->inf.width * dev->subdev_pixfmt->y_depth) >> 3 :
-		(priv->inf.width * dev->subdev_pixfmt->depth) >> 3;
+	priv->in_stride = priv->inf.width * dev->subdev_pixfmt->ybpp;
 	priv->in_cs = ipu_mbus_code_to_colorspace(priv->inf.code);
 
 	priv->outf = dev->format;
 	priv->out_cs = ipu_pixelformat_to_colorspace(priv->outf.pixelformat);
-	priv->out_stride = dev->user_pixfmt->y_depth ?
-		(priv->outf.width * dev->user_pixfmt->y_depth) >> 3 :
-		(priv->outf.width * dev->user_pixfmt->depth) >> 3;
+	priv->out_stride = priv->outf.width * dev->user_pixfmt->ybpp;
 
 	setup_csi(priv);
 

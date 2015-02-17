@@ -287,9 +287,7 @@ static void preview_setup_channel(struct preview_priv *priv,
 		width = priv->outf.width;
 		height = priv->outf.height;
 	}
-	stride = dev->fbuf_pixfmt->y_depth ?
-		(width * dev->fbuf_pixfmt->y_depth) >> 3 :
-		(width * dev->fbuf_pixfmt->depth) >> 3;
+	stride = width * dev->fbuf_pixfmt->ybpp;
 
 	ipu_cpmem_zero(channel);
 

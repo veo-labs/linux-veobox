@@ -352,9 +352,7 @@ static void encoder_setup_channel(struct encoder_priv *priv,
 		height = priv->outf.height;
 	}
 
-	stride = dev->user_pixfmt->y_depth ?
-		(width * dev->user_pixfmt->y_depth) >> 3 :
-		(width * dev->user_pixfmt->depth) >> 3;
+	stride = width * dev->user_pixfmt->ybpp;
 
 	ipu_cpmem_zero(channel);
 

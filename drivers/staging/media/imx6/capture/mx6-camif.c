@@ -89,60 +89,67 @@ static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 		.fourcc	= V4L2_PIX_FMT_RGB565,
 		.codes  = {MEDIA_BUS_FMT_RGB565_2X8_LE},
 		.depth  = 16,
+		.ybpp	= 2,
 	}, {
 		.name	= "RGB24",
 		.fourcc	= V4L2_PIX_FMT_RGB24,
 		.codes  = {MEDIA_BUS_FMT_RGB888_1X24,
 			   MEDIA_BUS_FMT_RGB888_2X12_LE},
 		.depth  = 24,
+		.ybpp	= 3,
 	}, {
 		.name	= "BGR24",
 		.fourcc	= V4L2_PIX_FMT_BGR24,
 		.depth  = 24,
+		.ybpp	= 3,
 	}, {
 		.name	= "RGB32",
 		.fourcc	= V4L2_PIX_FMT_RGB32,
 		.codes = {MEDIA_BUS_FMT_ARGB8888_1X32},
 		.depth  = 32,
+		.ybpp	= 4,
 	}, {
 		.name	= "BGR32",
 		.fourcc	= V4L2_PIX_FMT_BGR32,
 		.depth  = 32,
+		.ybpp	= 4,
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
 		.codes = {MEDIA_BUS_FMT_YUYV8_2X8, MEDIA_BUS_FMT_YUYV8_1X16},
 		.depth  = 16,
+		.ybpp	= 2,
 	}, {
 		.name	= "4:2:2 packed, UYVY",
 		.fourcc	= V4L2_PIX_FMT_UYVY,
 		.codes = {MEDIA_BUS_FMT_UYVY8_2X8, MEDIA_BUS_FMT_UYVY8_1X16},
 		.depth  = 16,
+		.ybpp	= 2,
 	}, {
 		.name	= "4:2:0 planar, YUV",
 		.fourcc	= V4L2_PIX_FMT_YUV420,
 		.depth  = 12,
-		.y_depth = 8,
+		.ybpp	= 1,
 	}, {
 		.name   = "4:2:0 planar, YVU",
 		.fourcc = V4L2_PIX_FMT_YVU420,
 		.depth  = 12,
-		.y_depth = 8,
+		.ybpp	= 1,
 	}, {
 		.name   = "4:2:2 planar, YUV",
 		.fourcc = V4L2_PIX_FMT_YUV422P,
 		.depth  = 16,
-		.y_depth = 8,
+		.ybpp	= 1,
 	}, {
 		.name   = "4:2:0 planar, Y/CbCr",
 		.fourcc = V4L2_PIX_FMT_NV12,
 		.depth  = 12,
-		.y_depth = 8,
+		.ybpp	= 1,
 	}, {
 		.name   = "4:2:2 planar, Y/CbCr",
 		.fourcc = V4L2_PIX_FMT_NV16,
 		.depth  = 16,
-		.y_depth = 8,
+		.ybpp	= 1,
 	},
 };
 #define NUM_FORMATS ARRAY_SIZE(mx6cam_pixformats)
@@ -434,8 +441,8 @@ static void adjust_user_fmt(struct mx6cam_dev *dev,
 
 	fmt = mx6cam_get_format(uf->pixelformat, 0);
 
-	uf->bytesperline = (uf->width * fmt->depth) >> 3;
-	uf->sizeimage = uf->height * uf->bytesperline;
+	uf->bytesperline = uf->width * fmt->ybpp;
+	uf->sizeimage = (uf->width * uf->height * fmt->depth) / 8;
 }
 
 /*
@@ -1028,8 +1035,8 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	pix->field = V4L2_FIELD_NONE;
 	pix->width = clamp(pix->width, MIN_W, MAX_W);
 	pix->height = clamp(pix->height, MIN_H, MAX_H);
-	pix->bytesperline = (pix->width * info->depth) >> 3;
-	pix->sizeimage = pix->bytesperline * pix->height;
+	pix->bytesperline = pix->width * info->ybpp;
+	pix->sizeimage = (pix->width * pix->height * info->depth) / 8;
 
 	return 0;
 }
