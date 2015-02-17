@@ -57,7 +57,7 @@ struct mx6cam_pixfmt {
 	u32	fourcc;
 	u32     codes[4];
 	int     depth;   /* total bpp */
-	int     y_depth; /* depth of first Y plane for planar formats */
+	int     ybpp; /* depth of first Y plane for planar formats */
 };
 
 struct mx6cam_dma_buf {
