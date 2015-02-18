@@ -1879,10 +1879,10 @@ static int mx6cam_queue_setup(struct vb2_queue *vq,
 		return -EINVAL;
 
 	/* Check sufficient buffer numbers have been allocated
-	 * 3 is a good minimum
+	 * 4 is a good minimum
 	 */
-	if (vq->num_buffers + *nbuffers < 3)
-		*nbuffers = 3 - vq->num_buffers;
+	if (vq->num_buffers + *nbuffers < 4)
+		*nbuffers = 4 - vq->num_buffers;
 
 	if (fmt && fmt->fmt.pix.sizeimage < dev->format.sizeimage)
 		return -EINVAL;
