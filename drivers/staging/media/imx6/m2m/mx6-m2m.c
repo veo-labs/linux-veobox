@@ -90,12 +90,13 @@ MODULE_PARM_DESC(instrument, "1 = enable conversion time measurement");
 struct m2mx6_pixfmt {
 	char	*name;
 	u32	fourcc;
-	int     depth;         /* total bpp */
-	int     y_depth;       /* depth of Y plane for planar formats */
-	int     uv_width_dec;  /* decimation in width for U/V planes */
-	int     uv_height_dec; /* decimation in height for U/V planes */
-	bool    uv_packed;     /* partial planar (U and V in same plane) */
-	u32	types;         /* Types the format can be used for */
+	int     depth;		/* total bpp */
+	int     y_depth;	/* depth of Y plane for planar formats */
+	int     ybpp;		/* bpp of Y plane for planar formats */
+	int     uv_width_dec;	/* decimation in width for U/V planes */
+	int     uv_height_dec;	/* decimation in height for U/V planes */
+	bool    uv_packed;	/* partial planar (U and V in same plane) */
+	u32	types;		/* Types the format can be used for */
 };
 
 struct m2mx6_seg_off {
@@ -205,31 +206,37 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name	= "RGB565",
 		.fourcc	= V4L2_PIX_FMT_RGB565,
 		.depth  = 16,
+		.ybpp	= 2,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
 		.name	= "RGB24",
 		.fourcc	= V4L2_PIX_FMT_RGB24,
 		.depth  = 24,
+		.ybpp	= 3,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
 		.name	= "BGR24",
 		.fourcc	= V4L2_PIX_FMT_BGR24,
 		.depth  = 24,
+		.ybpp	= 3,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
 		.name	= "RGB32",
 		.fourcc	= V4L2_PIX_FMT_RGB32,
 		.depth  = 32,
+		.ybpp	= 4,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
 		.name	= "BGR32",
 		.fourcc	= V4L2_PIX_FMT_BGR32,
 		.depth  = 32,
+		.ybpp	= 4,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
 		.name	= "4:2:2 packed, YUYV",
 		.fourcc	= V4L2_PIX_FMT_YUYV,
 		.depth  = 16,
+		.ybpp	= 2,
 		.uv_width_dec = 2,
 		.uv_height_dec = 1,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
@@ -237,6 +244,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name	= "4:2:2 packed, UYVY",
 		.fourcc	= V4L2_PIX_FMT_UYVY,
 		.depth  = 16,
+		.ybpp	= 2,
 		.uv_width_dec = 2,
 		.uv_height_dec = 1,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
@@ -244,7 +252,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name	= "4:2:0 planar, YUV",
 		.fourcc	= V4L2_PIX_FMT_YUV420,
 		.depth  = 12,
-		.y_depth = 8,
+		.ybpp	= 1,
 		.uv_width_dec = 2,
 		.uv_height_dec = 2,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
@@ -252,7 +260,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name	= "4:2:0 planar, YVU",
 		.fourcc	= V4L2_PIX_FMT_YVU420,
 		.depth  = 12,
-		.y_depth = 8,
+		.ybpp	= 1,
 		.uv_width_dec = 2,
 		.uv_height_dec = 2,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
@@ -260,6 +268,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name   = "4:2:0 partial planar, NV12",
 		.fourcc = V4L2_PIX_FMT_NV12,
 		.depth  = 12,
+		.ybpp	= 1,
 		.y_depth = 8,
 		.uv_width_dec = 2,
 		.uv_height_dec = 2,
@@ -269,6 +278,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name   = "4:2:0 partial planar, NV21",
 		.fourcc = V4L2_PIX_FMT_NV21,
 		.depth  = 12,
+		.ybpp	= 1,
 		.y_depth = 8,
 		.uv_width_dec = 2,
 		.uv_height_dec = 2,
@@ -278,6 +288,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name   = "4:2:2 planar, YUV",
 		.fourcc = V4L2_PIX_FMT_YUV422P,
 		.depth  = 16,
+		.ybpp	= 1,
 		.y_depth = 8,
 		.uv_width_dec = 2,
 		.uv_height_dec = 1,
@@ -286,6 +297,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name   = "4:2:2 partial planar, NV16",
 		.fourcc = V4L2_PIX_FMT_NV16,
 		.depth  = 16,
+		.ybpp	= 1,
 		.y_depth = 8,
 		.uv_width_dec = 2,
 		.uv_height_dec = 1,
@@ -295,6 +307,7 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.name   = "4:2:2 partial planar, NV61",
 		.fourcc = V4L2_PIX_FMT_NV61,
 		.depth  = 16,
+		.ybpp	= 1,
 		.y_depth = 8,
 		.uv_width_dec = 2,
 		.uv_height_dec = 1,
@@ -1288,8 +1301,8 @@ static int m2mx6_try_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f,
 			      &f->fmt.pix.height, MIN_H, MAX_H, h_align,
 			      S_ALIGN);
 
-	f->fmt.pix.bytesperline = (f->fmt.pix.width * fmt->depth) >> 3;
-	f->fmt.pix.sizeimage = f->fmt.pix.height * f->fmt.pix.bytesperline;
+	f->fmt.pix.bytesperline = f->fmt.pix.width * fmt->ybpp;
+	f->fmt.pix.sizeimage = (f->fmt.pix.height * f->fmt.pix.width * fmt->depth) >> 3;
 
 	return 0;
 }
