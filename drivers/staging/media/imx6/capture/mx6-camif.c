@@ -1941,7 +1941,7 @@ static int mx6cam_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->sequence = 0;
 
 	ret = set_stream(dev, true);
-	if (!ret) {
+	if (ret) {
 		spin_lock_irqsave(&dev->irqlock, flags);
 		/* release all active buffers */
 		while (!list_empty(&dev->buf_list)) {
