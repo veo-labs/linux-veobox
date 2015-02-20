@@ -1383,6 +1383,7 @@ static int m2mx6_s_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	q_data->width		= f->fmt.pix.width;
 	q_data->height		= f->fmt.pix.height;
 	q_data->bytesperline    = f->fmt.pix.bytesperline;
+	q_data->sizeimage	= f->fmt.pix.sizeimage;
 	if (q_data->fmt->y_depth) {
 		q_data->stride  = (q_data->fmt->y_depth * q_data->width) >> 3;
 		q_data->rot_stride =
@@ -1392,8 +1393,6 @@ static int m2mx6_s_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 		q_data->rot_stride =
 			(q_data->fmt->depth * q_data->height) >> 3;
 	}
-
-	q_data->sizeimage = q_data->bytesperline * q_data->height;
 
 	q_data->seg_height = q_data->height / ctx->num_rows;
 	q_data->seg_width = q_data->width / ctx->num_cols;
