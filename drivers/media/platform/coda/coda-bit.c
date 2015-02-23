@@ -36,6 +36,8 @@
 #define CODA_DEFAULT_GAMMA	4096
 #define CODA9_DEFAULT_GAMMA	24576	/* 0.75 * 32768 */
 
+static void coda_free_bitstream_buffer(struct coda_ctx *ctx);
+
 static inline int coda_is_initialized(struct coda_dev *dev)
 {
 	return coda_read(dev, CODA_REG_BIT_CUR_PC) != 0;
@@ -1322,6 +1324,7 @@ static void coda_bit_release(struct coda_ctx *ctx)
 	mutex_lock(&ctx->buffer_mutex);
 	coda_free_framebuffers(ctx);
 	coda_free_context_buffers(ctx);
+	coda_free_bitstream_buffer(ctx);
 	mutex_unlock(&ctx->buffer_mutex);
 }
 
