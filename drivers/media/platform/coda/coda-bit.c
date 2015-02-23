@@ -711,6 +711,27 @@ err_clk_per:
  * Encoder context operations
  */
 
+static int coda_encoder_reqbufs(struct coda_ctx *ctx,
+				struct v4l2_requestbuffers *rb)
+{
+	struct coda_q_data *q_data_src;
+	int ret;
+
+	if (rb->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		return 0;
+
+	if (rb->count) {
+		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+		ret = coda_alloc_context_buffers(ctx, q_data_src);
+		if (ret < 0)
+			return ret;
+	} else {
+		coda_free_context_buffers(ctx);
+	}
+
+	return 0;
+}
+
 static int coda_start_encoding(struct coda_ctx *ctx)
 {
 	struct coda_dev *dev = ctx->dev;
@@ -726,11 +747,6 @@ static int coda_start_encoding(struct coda_ctx *ctx)
 	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
 	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 	dst_fourcc = q_data_dst->fourcc;
-
-	/* Allocate per-instance buffers */
-	ret = coda_alloc_context_buffers(ctx, q_data_src);
-	if (ret < 0)
-		return ret;
 
 	buf = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
 	bitstream_buf = vb2_dma_contig_plane_dma_addr(buf, 0);
@@ -1313,7 +1329,6 @@ static void coda_seq_end_work(struct work_struct *work)
 		ctx->bitstream.vaddr, ctx->bitstream.size);
 
 	coda_free_framebuffers(ctx);
-	coda_free_context_buffers(ctx);
 
 	mutex_unlock(&dev->coda_mutex);
 	mutex_unlock(&ctx->buffer_mutex);
@@ -1330,6 +1345,7 @@ static void coda_bit_release(struct coda_ctx *ctx)
 
 const struct coda_context_ops coda_bit_encode_ops = {
 	.queue_init = coda_encoder_queue_init,
+	.reqbufs = coda_encoder_reqbufs,
 	.start_streaming = coda_start_encoding,
 	.prepare_run = coda_prepare_encode,
 	.finish_run = coda_finish_encode,
@@ -1340,6 +1356,27 @@ const struct coda_context_ops coda_bit_encode_ops = {
 /*
  * Decoder context operations
  */
+
+static int coda_decoder_reqbufs(struct coda_ctx *ctx,
+				struct v4l2_requestbuffers *rb)
+{
+	struct coda_q_data *q_data_src;
+	int ret;
+
+	if (rb->type != V4L2_BUF_TYPE_VIDEO_OUTPUT)
+		return 0;
+
+	if (rb->count) {
+		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+		ret = coda_alloc_context_buffers(ctx, q_data_src);
+		if (ret < 0)
+			return ret;
+	} else {
+		coda_free_context_buffers(ctx);
+	}
+
+	return 0;
+}
 
 static int __coda_start_decoding(struct coda_ctx *ctx)
 {
@@ -1358,11 +1395,6 @@ static int __coda_start_decoding(struct coda_ctx *ctx)
 	bitstream_size = ctx->bitstream.size;
 	src_fourcc = q_data_src->fourcc;
 	dst_fourcc = q_data_dst->fourcc;
-
-	/* Allocate per-instance buffers */
-	ret = coda_alloc_context_buffers(ctx, q_data_src);
-	if (ret < 0)
-		return ret;
 
 	coda_write(dev, ctx->parabuf.paddr, CODA_REG_BIT_PARA_BUF_ADDR);
 
@@ -1909,6 +1941,7 @@ static void coda_finish_decode(struct coda_ctx *ctx)
 
 const struct coda_context_ops coda_bit_decode_ops = {
 	.queue_init = coda_decoder_queue_init,
+	.reqbufs = coda_decoder_reqbufs,
 	.start_streaming = coda_start_decoding,
 	.prepare_run = coda_prepare_decode,
 	.finish_run = coda_finish_decode,
