@@ -72,6 +72,10 @@ module_param(v4l2src_compat, int, 0644);
 MODULE_PARM_DESC(v4l2src_compat,
 		 "Gstreamer v4l2src plugin compatibility (default: 1)");
 
+static int v4l2src_num_buffers = 8;
+module_param(v4l2src_num_buffers, int, 0644);
+MODULE_PARM_DESC(v4l2src_num_buffers,
+		 "Number of buffers to allocate for GStreamer (default: 8)");
 static inline struct mx6cam_dev *sd2dev(struct v4l2_subdev *sd)
 {
 	return container_of(sd->v4l2_dev, struct mx6cam_dev, v4l2_dev);
@@ -1881,8 +1885,8 @@ static int mx6cam_queue_setup(struct vb2_queue *vq,
 	/* Check sufficient buffer numbers have been allocated
 	 * 4 is a good minimum
 	 */
-	if (vq->num_buffers + *nbuffers < 4)
-		*nbuffers = 4 - vq->num_buffers;
+	if (vq->num_buffers + *nbuffers < v4l2src_num_buffers)
+		*nbuffers = v4l2src_num_buffers - vq->num_buffers;
 
 	if (fmt && fmt->fmt.pix.sizeimage < dev->format.sizeimage)
 		return -EINVAL;

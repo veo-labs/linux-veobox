@@ -219,9 +219,9 @@
 			};
 			port@1 {
 				reg = <1>;
-				sdi0_out0: endpoint {
+/*				sdi0_out0: endpoint {
 					remote-endpoint = <&sdi0_fpga_in>;
-				};
+				};*/
 			};
 			port@2 {
 				reg = <2>;
@@ -240,9 +240,9 @@
 			};
 			port@1 {
 				reg = <1>;
-				sdi1_out0: endpoint {
+/*				sdi1_out0: endpoint {
 					remote-endpoint = <&sdi1_fpga_in>;
-				};
+				};*/
 			};
 			port@2 {
 				reg = <2>;
@@ -352,9 +352,9 @@
 				#size-cells = <0>;
 				port@0 {
 					reg = <0>;
-					sdi0_fpga_in: endpoint {
+					/*sdi0_fpga_in: endpoint {
 						remote-endpoint = <&sdi0_out0>;
-					};
+					};*/
 				};
 				port@1 {
 					reg = <1>;
@@ -380,9 +380,9 @@
 				#size-cells = <0>;
 				port@0 {
 					reg = <0>;
-					sdi1_fpga_in: endpoint {
+					/*sdi1_fpga_in: endpoint {
 						remote-endpoint = <&sdi1_out0>;
-					};
+					};*/
 				};
 				port@1 {
 					reg = <1>;
