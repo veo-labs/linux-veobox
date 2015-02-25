@@ -215,6 +215,4 @@ void tegra_output_exit(struct tegra_output *output)
 
 	if (output->panel)
 		drm_panel_detach(output->panel);
-
-	return 0;
 }

@@ -401,8 +401,7 @@ struct intel_pipe_wm {
 };
 
 struct intel_mmio_flip {
-	u32 seqno;
-	struct intel_engine_cs *ring;
+	struct drm_i915_gem_request *req;
 	struct work_struct work;
 };
 
@@ -410,6 +409,32 @@ struct skl_pipe_wm {
 	struct skl_wm_level wm[8];
 	struct skl_wm_level trans_wm;
 	uint32_t linetime;
+};
+
+/*
+ * Tracking of operations that need to be performed at the beginning/end of an
+ * atomic commit, outside the atomic section where interrupts are disabled.
+ * These are generally operations that grab mutexes or might otherwise sleep
+ * and thus can't be run with interrupts disabled.
+ */
+struct intel_crtc_atomic_commit {
+	/* vblank evasion */
+	bool evade;
+	unsigned start_vbl_count;
+
+	/* Sleepable operations to perform before commit */
+	bool wait_for_flips;
+	bool disable_fbc;
+	bool pre_disable_primary;
+	bool update_wm;
+	unsigned disabled_planes;
+
+	/* Sleepable operations to perform after commit */
+	unsigned fb_bits;
+	bool wait_vblank;
+	bool update_fbc;
+	bool post_enable_primary;
+	unsigned update_sprite_watermarks;
 };
 
 struct intel_crtc {
@@ -779,6 +804,7 @@ void gen6_disable_pm_irq(struct drm_i915_private *dev_priv, uint32_t mask);
 void gen6_reset_rps_interrupts(struct drm_device *dev);
 void gen6_enable_rps_interrupts(struct drm_device *dev);
 void gen6_disable_rps_interrupts(struct drm_device *dev);
+u32 gen6_sanitize_rps_pm_mask(struct drm_i915_private *dev_priv, u32 mask);
 void intel_runtime_pm_disable_interrupts(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_enable_interrupts(struct drm_i915_private *dev_priv);
 static inline bool intel_irqs_enabled(struct drm_i915_private *dev_priv)
@@ -860,6 +886,8 @@ void intel_fb_obj_flush(struct drm_i915_gem_object *obj, bool retire);
 void intel_init_audio(struct drm_device *dev);
 void intel_audio_codec_enable(struct intel_encoder *encoder);
 void intel_audio_codec_disable(struct intel_encoder *encoder);
+void i915_audio_component_init(struct drm_i915_private *dev_priv);
+void i915_audio_component_cleanup(struct drm_i915_private *dev_priv);
 
 /* intel_display.c */
 extern const struct drm_plane_funcs intel_plane_funcs;
@@ -1001,7 +1029,6 @@ void intel_edp_backlight_off(struct intel_dp *intel_dp);
 void intel_edp_panel_vdd_on(struct intel_dp *intel_dp);
 void intel_edp_panel_on(struct intel_dp *intel_dp);
 void intel_edp_panel_off(struct intel_dp *intel_dp);
-void intel_dp_set_drrs_state(struct drm_device *dev, int refresh_rate);
 void intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connector);
 void intel_dp_mst_suspend(struct drm_device *dev);
 void intel_dp_mst_resume(struct drm_device *dev);
@@ -1135,7 +1162,6 @@ void intel_backlight_unregister(struct drm_device *dev);
 
 
 /* intel_psr.c */
-bool intel_psr_is_enabled(struct drm_device *dev);
 void intel_psr_enable(struct intel_dp *intel_dp);
 void intel_psr_disable(struct intel_dp *intel_dp);
 void intel_psr_invalidate(struct drm_device *dev,

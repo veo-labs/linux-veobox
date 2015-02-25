@@ -467,8 +467,8 @@ void intel_detect_pch(struct drm_device *dev)
 			} else if (id == INTEL_PCH_LPT_LP_DEVICE_ID_TYPE) {
 				dev_priv->pch_type = PCH_LPT;
 				DRM_DEBUG_KMS("Found LynxPoint LP PCH\n");
-				WARN_ON(!IS_HASWELL(dev));
-				WARN_ON(!IS_HSW_ULT(dev));
+				WARN_ON(!IS_HASWELL(dev) && !IS_BROADWELL(dev));
+				WARN_ON(!IS_HSW_ULT(dev) && !IS_BDW_ULT(dev));
 			} else if (id == INTEL_PCH_SPT_DEVICE_ID_TYPE) {
 				dev_priv->pch_type = PCH_SPT;
 				DRM_DEBUG_KMS("Found SunrisePoint PCH\n");
@@ -965,8 +965,7 @@ static int i915_pm_resume_early(struct device *dev)
 
 static int i915_pm_resume(struct device *dev)
 {
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	struct drm_device *drm_dev = dev_to_i915(dev)->dev;
 
 	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
 		return 0;
@@ -1584,7 +1583,7 @@ static struct drm_driver driver = {
 	.gem_prime_import = i915_gem_prime_import,
 
 	.dumb_create = i915_gem_dumb_create,
-	.dumb_map_offset = i915_gem_dumb_map_offset,
+	.dumb_map_offset = i915_gem_mmap_gtt,
 	.dumb_destroy = drm_gem_dumb_destroy,
 	.ioctls = i915_ioctls,
 	.fops = &i915_driver_fops,

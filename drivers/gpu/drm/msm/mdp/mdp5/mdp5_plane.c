@@ -276,6 +276,155 @@ static void set_scanout_locked(struct drm_plane *plane,
 	plane->fb = fb;
 }
 
+/* Note: mdp5_plane->pipe_lock must be locked */
+static void csc_disable(struct mdp5_kms *mdp5_kms, enum mdp5_pipe pipe)
+{
+	uint32_t value = mdp5_read(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe)) &
+			 ~MDP5_PIPE_OP_MODE_CSC_1_EN;
+
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe), value);
+}
+
+/* Note: mdp5_plane->pipe_lock must be locked */
+static void csc_enable(struct mdp5_kms *mdp5_kms, enum mdp5_pipe pipe,
+		struct csc_cfg *csc)
+{
+	uint32_t  i, mode = 0; /* RGB, no CSC */
+	uint32_t *matrix;
+
+	if (unlikely(!csc))
+		return;
+
+	if ((csc->type == CSC_YUV2RGB) || (CSC_YUV2YUV == csc->type))
+		mode |= MDP5_PIPE_OP_MODE_CSC_SRC_DATA_FORMAT(DATA_FORMAT_YUV);
+	if ((csc->type == CSC_RGB2YUV) || (CSC_YUV2YUV == csc->type))
+		mode |= MDP5_PIPE_OP_MODE_CSC_DST_DATA_FORMAT(DATA_FORMAT_YUV);
+	mode |= MDP5_PIPE_OP_MODE_CSC_1_EN;
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_OP_MODE(pipe), mode);
+
+	matrix = csc->matrix;
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_0(pipe),
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_0_COEFF_11(matrix[0]) |
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_0_COEFF_12(matrix[1]));
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_1(pipe),
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_1_COEFF_13(matrix[2]) |
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_1_COEFF_21(matrix[3]));
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_2(pipe),
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_2_COEFF_22(matrix[4]) |
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_2_COEFF_23(matrix[5]));
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_3(pipe),
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_3_COEFF_31(matrix[6]) |
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_3_COEFF_32(matrix[7]));
+	mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_MATRIX_COEFF_4(pipe),
+			MDP5_PIPE_CSC_1_MATRIX_COEFF_4_COEFF_33(matrix[8]));
+
+	for (i = 0; i < ARRAY_SIZE(csc->pre_bias); i++) {
+		uint32_t *pre_clamp = csc->pre_clamp;
+		uint32_t *post_clamp = csc->post_clamp;
+
+		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_PRE_CLAMP(pipe, i),
+			MDP5_PIPE_CSC_1_PRE_CLAMP_REG_HIGH(pre_clamp[2*i+1]) |
+			MDP5_PIPE_CSC_1_PRE_CLAMP_REG_LOW(pre_clamp[2*i]));
+
+		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_POST_CLAMP(pipe, i),
+			MDP5_PIPE_CSC_1_POST_CLAMP_REG_HIGH(post_clamp[2*i+1]) |
+			MDP5_PIPE_CSC_1_POST_CLAMP_REG_LOW(post_clamp[2*i]));
+
+		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_PRE_BIAS(pipe, i),
+			MDP5_PIPE_CSC_1_PRE_BIAS_REG_VALUE(csc->pre_bias[i]));
+
+		mdp5_write(mdp5_kms, REG_MDP5_PIPE_CSC_1_POST_BIAS(pipe, i),
+			MDP5_PIPE_CSC_1_POST_BIAS_REG_VALUE(csc->post_bias[i]));
+	}
+}
+
+#define PHASE_STEP_SHIFT	21
+#define DOWN_SCALE_RATIO_MAX	32	/* 2^(26-21) */
+
+static int calc_phase_step(uint32_t src, uint32_t dst, uint32_t *out_phase)
+{
+	uint32_t unit;
+
+	if (src == 0 || dst == 0)
+		return -EINVAL;
+
+	/*
+	 * PHASE_STEP_X/Y is coded on 26 bits (25:0),
+	 * where 2^21 represents the unity "1" in fixed-point hardware design.
+	 * This leaves 5 bits for the integer part (downscale case):
+	 *	-> maximum downscale ratio = 0b1_1111 = 31
+	 */
+	if (src > (dst * DOWN_SCALE_RATIO_MAX))
+		return -EOVERFLOW;
+
+	unit = 1 << PHASE_STEP_SHIFT;
+	*out_phase = mult_frac(unit, src, dst);
+
+	return 0;
+}
+
+static int calc_scalex_steps(uint32_t pixel_format, uint32_t src, uint32_t dest,
+		uint32_t phasex_steps[2])
+{
+	uint32_t phasex_step;
+	unsigned int hsub;
+	int ret;
+
+	ret = calc_phase_step(src, dest, &phasex_step);
+	if (ret)
+		return ret;
+
+	hsub = drm_format_horz_chroma_subsampling(pixel_format);
+
+	phasex_steps[0] = phasex_step;
+	phasex_steps[1] = phasex_step / hsub;
+
+	return 0;
+}
+
+static int calc_scaley_steps(uint32_t pixel_format, uint32_t src, uint32_t dest,
+		uint32_t phasey_steps[2])
+{
+	uint32_t phasey_step;
+	unsigned int vsub;
+	int ret;
+
+	ret = calc_phase_step(src, dest, &phasey_step);
+	if (ret)
+		return ret;
+
+	vsub = drm_format_vert_chroma_subsampling(pixel_format);
+
+	phasey_steps[0] = phasey_step;
+	phasey_steps[1] = phasey_step / vsub;
+
+	return 0;
+}
+
+static uint32_t get_scalex_config(uint32_t src, uint32_t dest)
+{
+	uint32_t filter;
+
+	filter = (src <= dest) ? SCALE_FILTER_BIL : SCALE_FILTER_PCMN;
+
+	return  MDP5_PIPE_SCALE_CONFIG_SCALEX_EN |
+		MDP5_PIPE_SCALE_CONFIG_SCALEX_MIN_FILTER(filter) |
+		MDP5_PIPE_SCALE_CONFIG_SCALEX_CR_FILTER(filter)  |
+		MDP5_PIPE_SCALE_CONFIG_SCALEX_MAX_FILTER(filter);
+}
+
+static uint32_t get_scaley_config(uint32_t src, uint32_t dest)
+{
+	uint32_t filter;
+
+	filter = (src <= dest) ? SCALE_FILTER_BIL : SCALE_FILTER_PCMN;
+
+	return  MDP5_PIPE_SCALE_CONFIG_SCALEY_EN |
+		MDP5_PIPE_SCALE_CONFIG_SCALEY_MIN_FILTER(filter) |
+		MDP5_PIPE_SCALE_CONFIG_SCALEY_CR_FILTER(filter)  |
+		MDP5_PIPE_SCALE_CONFIG_SCALEY_MAX_FILTER(filter);
+}
+
 static int mdp5_plane_mode_set(struct drm_plane *plane,
 		struct drm_crtc *crtc, struct drm_framebuffer *fb,
 		int crtc_x, int crtc_y,
@@ -292,6 +441,7 @@ static int mdp5_plane_mode_set(struct drm_plane *plane,
 	/* below array -> index 0: comp 0/3 ; index 1: comp 1/2 */
 	uint32_t phasex_step[2] = {0,}, phasey_step[2] = {0,};
 	uint32_t hdecm = 0, vdecm = 0;
+	uint32_t pix_format;
 	unsigned long flags;
 	int ret;
 

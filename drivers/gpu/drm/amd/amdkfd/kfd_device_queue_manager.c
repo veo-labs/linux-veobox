@@ -73,61 +73,7 @@ static inline unsigned int get_pipes_num_cpsch(void)
 	return PIPE_PER_ME_CP_SCHEDULING;
 }
 
-static inline unsigned int
-get_sh_mem_bases_nybble_64(struct kfd_process_device *pdd)
-{
-	uint32_t nybble;
-
-	nybble = (pdd->lds_base >> 60) & 0x0E;
-
-	return nybble;
-
-}
-
-static inline unsigned int get_sh_mem_bases_32(struct kfd_process_device *pdd)
-{
-	unsigned int shared_base;
-
-	shared_base = (pdd->lds_base >> 16) & 0xFF;
-
-	return shared_base;
-}
-
-static uint32_t compute_sh_mem_bases_64bit(unsigned int top_address_nybble);
-static void init_process_memory(struct device_queue_manager *dqm,
-				struct qcm_process_device *qpd)
-{
-	struct kfd_process_device *pdd;
-	unsigned int temp;
-
-	BUG_ON(!dqm || !qpd);
-
-	pdd = qpd_to_pdd(qpd);
-
-	/* check if sh_mem_config register already configured */
-	if (qpd->sh_mem_config == 0) {
-		qpd->sh_mem_config =
-			ALIGNMENT_MODE(SH_MEM_ALIGNMENT_MODE_UNALIGNED) |
-			DEFAULT_MTYPE(MTYPE_NONCACHED) |
-			APE1_MTYPE(MTYPE_NONCACHED);
-		qpd->sh_mem_ape1_limit = 0;
-		qpd->sh_mem_ape1_base = 0;
-	}
-
-	if (qpd->pqm->process->is_32bit_user_mode) {
-		temp = get_sh_mem_bases_32(pdd);
-		qpd->sh_mem_bases = SHARED_BASE(temp);
-		qpd->sh_mem_config |= PTR32;
-	} else {
-		temp = get_sh_mem_bases_nybble_64(pdd);
-		qpd->sh_mem_bases = compute_sh_mem_bases_64bit(temp);
-	}
-
-	pr_debug("kfd: is32bit process: %d sh_mem_bases nybble: 0x%X and register 0x%X\n",
-		qpd->pqm->process->is_32bit_user_mode, temp, qpd->sh_mem_bases);
-}
-
-static void program_sh_mem_settings(struct device_queue_manager *dqm,
+void program_sh_mem_settings(struct device_queue_manager *dqm,
 					struct qcm_process_device *qpd)
 {
 	return kfd2kgd->program_sh_mem_settings(dqm->dev->kgd, qpd->vmid,
@@ -166,6 +112,9 @@ static void deallocate_vmid(struct device_queue_manager *dqm,
 				struct queue *q)
 {
 	int bit = qpd->vmid - KFD_VMID_START_OFFSET;
+
+	/* Release the vmid mapping */
+	set_pasid_vmid_mapping(dqm, 0, qpd->vmid);
 
 	set_bit(bit, (unsigned long *)&dqm->vmid_bitmap);
 	qpd->vmid = 0;
@@ -300,6 +249,18 @@ static int create_compute_queue_nocpsch(struct device_queue_manager *dqm,
 		return retval;
 	}
 
+	pr_debug("kfd: loading mqd to hqd on pipe (%d) queue (%d)\n",
+			q->pipe,
+			q->queue);
+
+	retval = mqd->load_mqd(mqd, q->mqd, q->pipe,
+			q->queue, (uint32_t __user *) q->properties.write_ptr);
+	if (retval != 0) {
+		deallocate_hqd(dqm, q);
+		mqd->uninit_mqd(mqd, q->mqd, q->mqd_mem_obj);
+		return retval;
+	}
+
 	return 0;
 }
 
@@ -373,6 +334,7 @@ static int update_queue(struct device_queue_manager *dqm, struct queue *q)
 {
 	int retval;
 	struct mqd_manager *mqd;
+	bool prev_active = false;
 
 	BUG_ON(!dqm || !q || !q->mqd);
 
@@ -384,10 +346,18 @@ static int update_queue(struct device_queue_manager *dqm, struct queue *q)
 		return -ENOMEM;
 	}
 
-	retval = mqd->update_mqd(mqd, q->mqd, &q->properties);
 	if (q->properties.is_active == true)
+		prev_active = true;
+
+	/*
+	 *
+	 * check active state vs. the previous state
+	 * and modify counter accordingly
+	 */
+	retval = mqd->update_mqd(mqd, q->mqd, &q->properties);
+	if ((q->properties.is_active == true) && (prev_active == false))
 		dqm->queue_count++;
-	else
+	else if ((q->properties.is_active == false) && (prev_active == true))
 		dqm->queue_count--;
 
 	if (sched_policy != KFD_SCHED_POLICY_NO_HWS)

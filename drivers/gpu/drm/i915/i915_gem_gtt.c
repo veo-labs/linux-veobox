@@ -132,7 +132,10 @@ static int sanitize_enable_ppgtt(struct drm_device *dev, int enable_ppgtt)
 		return 0;
 	}
 
-	return has_aliasing_ppgtt ? 1 : 0;
+	if (INTEL_INFO(dev)->gen >= 8 && i915.enable_execlists)
+		return 2;
+	else
+		return has_aliasing_ppgtt ? 1 : 0;
 }
 
 

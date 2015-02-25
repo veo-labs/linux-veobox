@@ -257,7 +257,6 @@ int drm_gem_cma_dumb_create(struct drm_file *file_priv,
 			    struct drm_device *drm,
 			    struct drm_mode_create_dumb *args)
 {
-	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 	struct drm_gem_cma_object *cma_obj;
 
 	args->pitch = DIV_ROUND_UP(args->width * args->bpp, 8);

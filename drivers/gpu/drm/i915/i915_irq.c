@@ -296,6 +296,23 @@ void gen6_enable_rps_interrupts(struct drm_device *dev)
 	spin_unlock_irq(&dev_priv->irq_lock);
 }
 
+u32 gen6_sanitize_rps_pm_mask(struct drm_i915_private *dev_priv, u32 mask)
+{
+	/*
+	 * SNB,IVB can while VLV,CHV may hard hang on looping batchbuffer
+	 * if GEN6_PM_UP_EI_EXPIRED is masked.
+	 *
+	 * TODO: verify if this can be reproduced on VLV,CHV.
+	 */
+	if (INTEL_INFO(dev_priv)->gen <= 7 && !IS_HASWELL(dev_priv))
+		mask &= ~GEN6_PM_RP_UP_EI_EXPIRED;
+
+	if (INTEL_INFO(dev_priv)->gen >= 8)
+		mask &= ~GEN8_PMINTR_REDIRECT_TO_NON_DISP;
+
+	return mask;
+}
+
 void gen6_disable_rps_interrupts(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
@@ -308,8 +325,7 @@ void gen6_disable_rps_interrupts(struct drm_device *dev)
 
 	spin_lock_irq(&dev_priv->irq_lock);
 
-	I915_WRITE(GEN6_PMINTRMSK, INTEL_INFO(dev_priv)->gen >= 8 ?
-		   ~GEN8_PMINTR_REDIRECT_TO_NON_DISP : ~0);
+	I915_WRITE(GEN6_PMINTRMSK, gen6_sanitize_rps_pm_mask(dev_priv, ~0));
 
 	__gen6_disable_pm_irq(dev_priv, dev_priv->pm_rps_events);
 	I915_WRITE(gen6_pm_ier(dev_priv), I915_READ(gen6_pm_ier(dev_priv)) &
@@ -3080,11 +3096,13 @@ void i915_queue_hangcheck(struct drm_device *dev)
 	if (!i915.enable_hangcheck)
 		return;
 
-	/* Don't continually defer the hangcheck, but make sure it is active */
-	if (timer_pending(timer))
-		return;
-	mod_timer(timer,
-		  round_jiffies_up(jiffies + DRM_I915_HANGCHECK_JIFFIES));
+	/* Don't continually defer the hangcheck so that it is always run at
+	 * least once after work has been scheduled on any ring. Otherwise,
+	 * we will ignore a hung ring if a second ring is kept busy.
+	 */
+
+	queue_delayed_work(e->hangcheck_wq, &e->hangcheck_work,
+			   round_jiffies_up_relative(DRM_I915_HANGCHECK_JIFFIES));
 }
 
 static void ibx_irq_reset(struct drm_device *dev)
@@ -3208,6 +3226,8 @@ static void gen8_irq_reset(struct drm_device *dev)
 
 void gen8_irq_power_well_post_enable(struct drm_i915_private *dev_priv)
 {
+	uint32_t extra_ier = GEN8_PIPE_VBLANK | GEN8_PIPE_FIFO_UNDERRUN;
+
 	spin_lock_irq(&dev_priv->irq_lock);
 	GEN8_IRQ_INIT_NDX(DE_PIPE, PIPE_B, dev_priv->de_irq_mask[PIPE_B],
 			  ~dev_priv->de_irq_mask[PIPE_B] | extra_ier);

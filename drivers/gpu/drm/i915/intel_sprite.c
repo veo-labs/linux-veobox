@@ -256,7 +256,7 @@ skl_update_plane(struct drm_plane *drm_plane, struct drm_crtc *crtc,
 	default:
 		BUG();
 	}
-	if (intel_plane->rotation == BIT(DRM_ROTATE_180))
+	if (drm_plane->state->rotation == BIT(DRM_ROTATE_180))
 		plane_ctl |= PLANE_CTL_ROTATE_180;
 
 	plane_ctl |= PLANE_CTL_ENABLE;
@@ -1075,7 +1075,7 @@ intel_check_sprite_plane(struct drm_plane *plane,
 {
 	struct intel_crtc *intel_crtc = to_intel_crtc(state->base.crtc);
 	struct intel_plane *intel_plane = to_intel_plane(plane);
-	struct drm_framebuffer *fb = state->fb;
+	struct drm_framebuffer *fb = state->base.fb;
 	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
 	int crtc_x, crtc_y;
 	unsigned int crtc_w, crtc_h;
@@ -1247,36 +1247,18 @@ finish:
 		!colorkey_enabled(intel_plane);
 	WARN_ON(state->hides_primary && !state->visible && intel_crtc->active);
 
-static int
-intel_prepare_sprite_plane(struct drm_plane *plane,
-			   struct intel_plane_state *state)
-{
-	struct drm_device *dev = plane->dev;
-	struct drm_crtc *crtc = state->crtc;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	enum pipe pipe = intel_crtc->pipe;
-	struct drm_framebuffer *fb = state->fb;
-	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
-	struct drm_i915_gem_object *old_obj = intel_plane->obj;
-	int ret;
+	if (intel_crtc->active) {
+		if (intel_crtc->primary_enabled == state->hides_primary)
+			intel_crtc->atomic.wait_for_flips = true;
 
-	if (old_obj != obj) {
-		mutex_lock(&dev->struct_mutex);
+		if (intel_crtc->primary_enabled && state->hides_primary)
+			intel_crtc->atomic.pre_disable_primary = true;
 
-		/* Note that this will apply the VT-d workaround for scanouts,
-		 * which is more restrictive than required for sprites. (The
-		 * primary plane requires 256KiB alignment with 64 PTE padding,
-		 * the sprite planes only require 128KiB alignment and 32 PTE
-		 * padding.
-		 */
-		ret = intel_pin_and_fence_fb_obj(plane, fb, NULL);
-		if (ret == 0)
-			i915_gem_track_fb(old_obj, obj,
-					  INTEL_FRONTBUFFER_SPRITE(pipe));
-		mutex_unlock(&dev->struct_mutex);
-		if (ret)
-			return ret;
+		intel_crtc->atomic.fb_bits |=
+			INTEL_FRONTBUFFER_SPRITE(intel_crtc->pipe);
+
+		if (!intel_crtc->primary_enabled && !state->hides_primary)
+			intel_crtc->atomic.post_enable_primary = true;
 	}
 
 	return 0;
@@ -1286,36 +1268,19 @@ static void
 intel_commit_sprite_plane(struct drm_plane *plane,
 			  struct intel_plane_state *state)
 {
-	struct drm_device *dev = plane->dev;
-	struct drm_crtc *crtc = state->crtc;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
+	struct drm_crtc *crtc = state->base.crtc;
+	struct intel_crtc *intel_crtc;
 	struct intel_plane *intel_plane = to_intel_plane(plane);
-	enum pipe pipe = intel_crtc->pipe;
-	struct drm_framebuffer *fb = state->fb;
+	struct drm_framebuffer *fb = state->base.fb;
 	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
-	struct drm_i915_gem_object *old_obj = intel_plane->obj;
 	int crtc_x, crtc_y;
 	unsigned int crtc_w, crtc_h;
 	uint32_t src_x, src_y, src_w, src_h;
-	struct drm_rect *dst = &state->dst;
-	const struct drm_rect *clip = &state->clip;
-	bool primary_enabled;
 
-	/*
-	 * If the sprite is completely covering the primary plane,
-	 * we can disable the primary and save power.
-	 */
-	primary_enabled = !drm_rect_equals(dst, clip) || colorkey_enabled(intel_plane);
-	WARN_ON(!primary_enabled && !state->visible && intel_crtc->active);
+	crtc = crtc ? crtc : plane->crtc;
+	intel_crtc = to_intel_crtc(crtc);
 
-	intel_plane->crtc_x = state->orig_dst.x1;
-	intel_plane->crtc_y = state->orig_dst.y1;
-	intel_plane->crtc_w = drm_rect_width(&state->orig_dst);
-	intel_plane->crtc_h = drm_rect_height(&state->orig_dst);
-	intel_plane->src_x = state->orig_src.x1;
-	intel_plane->src_y = state->orig_src.y1;
-	intel_plane->src_w = drm_rect_width(&state->orig_src);
-	intel_plane->src_h = drm_rect_height(&state->orig_src);
+	plane->fb = state->base.fb;
 	intel_plane->obj = obj;
 
 	if (intel_crtc->active) {
@@ -1337,103 +1302,6 @@ intel_commit_sprite_plane(struct drm_plane *plane,
 			intel_plane->disable_plane(plane, crtc);
 		}
 	}
-}
-
-static int
-intel_update_plane(struct drm_plane *plane, struct drm_crtc *crtc,
-		   struct drm_framebuffer *fb, int crtc_x, int crtc_y,
-		   unsigned int crtc_w, unsigned int crtc_h,
-		   uint32_t src_x, uint32_t src_y,
-		   uint32_t src_w, uint32_t src_h)
-{
-	struct intel_plane_state state;
-	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
-	int ret;
-
-	state.crtc = crtc;
-	state.fb = fb;
-
-	/* sample coordinates in 16.16 fixed point */
-	state.src.x1 = src_x;
-	state.src.x2 = src_x + src_w;
-	state.src.y1 = src_y;
-	state.src.y2 = src_y + src_h;
-
-	/* integer pixels */
-	state.dst.x1 = crtc_x;
-	state.dst.x2 = crtc_x + crtc_w;
-	state.dst.y1 = crtc_y;
-	state.dst.y2 = crtc_y + crtc_h;
-
-	state.clip.x1 = 0;
-	state.clip.y1 = 0;
-	state.clip.x2 = intel_crtc->active ? intel_crtc->config.pipe_src_w : 0;
-	state.clip.y2 = intel_crtc->active ? intel_crtc->config.pipe_src_h : 0;
-	state.orig_src = state.src;
-	state.orig_dst = state.dst;
-
-	ret = intel_check_sprite_plane(plane, &state);
-	if (ret)
-		return ret;
-
-	ret = intel_prepare_sprite_plane(plane, &state);
-	if (ret)
-		return ret;
-
-	intel_commit_sprite_plane(plane, &state);
-	return 0;
-}
-
-static int
-intel_disable_plane(struct drm_plane *plane)
-{
-	struct drm_device *dev = plane->dev;
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	struct intel_crtc *intel_crtc;
-	enum pipe pipe;
-
-	if (!plane->fb)
-		return 0;
-
-	if (WARN_ON(!plane->crtc))
-		return -EINVAL;
-
-	intel_crtc = to_intel_crtc(plane->crtc);
-	pipe = intel_crtc->pipe;
-
-	if (intel_crtc->active) {
-		bool primary_was_enabled = intel_crtc->primary_enabled;
-
-		intel_crtc->primary_enabled = true;
-
-		intel_plane->disable_plane(plane, plane->crtc);
-
-		if (!primary_was_enabled && intel_crtc->primary_enabled)
-			intel_post_enable_primary(plane->crtc);
-	}
-
-	if (intel_plane->obj) {
-		if (intel_crtc->active)
-			intel_wait_for_vblank(dev, intel_plane->pipe);
-
-		mutex_lock(&dev->struct_mutex);
-		intel_unpin_fb_obj(intel_plane->obj);
-		i915_gem_track_fb(intel_plane->obj, NULL,
-				  INTEL_FRONTBUFFER_SPRITE(pipe));
-		mutex_unlock(&dev->struct_mutex);
-
-		intel_plane->obj = NULL;
-	}
-
-	return 0;
-}
-
-static void intel_destroy_plane(struct drm_plane *plane)
-{
-	struct intel_plane *intel_plane = to_intel_plane(plane);
-	intel_disable_plane(plane);
-	drm_plane_cleanup(plane);
-	kfree(intel_plane);
 }
 
 int intel_sprite_set_colorkey(struct drm_device *dev, void *data,

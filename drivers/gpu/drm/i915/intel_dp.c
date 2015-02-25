@@ -3680,7 +3680,6 @@ int intel_dp_sink_crc(struct intel_dp *intel_dp, u8 *crc)
 	if (drm_dp_dpcd_writeb(&intel_dp->aux, DP_TEST_SINK,
 				buf | DP_TEST_SINK_START) < 0)
 		return -EIO;
-	test_crc_count = buf & DP_TEST_COUNT_MASK;
 
 	if (drm_dp_dpcd_readb(&intel_dp->aux, DP_TEST_SINK_MISC, &buf) < 0)
 		return -EIO;

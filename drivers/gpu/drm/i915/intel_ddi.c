@@ -1179,9 +1179,11 @@ bool intel_ddi_pll_select(struct intel_crtc *intel_crtc,
 	int clock = crtc_state->port_clock;
 
 	if (IS_SKYLAKE(dev))
-		return skl_ddi_pll_select(intel_crtc, intel_encoder, clock);
+		return skl_ddi_pll_select(intel_crtc, crtc_state,
+					  intel_encoder, clock);
 	else
-		return hsw_ddi_pll_select(intel_crtc, intel_encoder, clock);
+		return hsw_ddi_pll_select(intel_crtc, crtc_state,
+					  intel_encoder, clock);
 }
 
 void intel_ddi_set_pipe_settings(struct drm_crtc *crtc)
@@ -1500,7 +1502,7 @@ static void intel_ddi_pre_enable(struct intel_encoder *intel_encoder)
 			val &= ~(DPLL_CTRL1_HDMI_MODE(dpll) |
 				 DPLL_CTRL1_SSC(dpll) |
 				 DPLL_CRTL1_LINK_RATE_MASK(dpll));
-			val |= crtc->config.dpll_hw_state.ctrl1 << (dpll * 6);
+			val |= crtc->config->dpll_hw_state.ctrl1 << (dpll * 6);
 
 			I915_WRITE(DPLL_CTRL1, val);
 			POSTING_READ(DPLL_CTRL1);

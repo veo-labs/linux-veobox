@@ -811,7 +811,7 @@ static int intel_lr_context_pin(struct intel_engine_cs *ring,
 		ret = i915_gem_obj_ggtt_pin(ctx_obj,
 				GEN8_LR_CONTEXT_ALIGN, 0);
 		if (ret)
-			goto reset_unpin_count;
+			goto reset_pin_count;
 
 		ret = intel_pin_and_map_ringbuffer_obj(ring->dev, ringbuf);
 		if (ret)
@@ -822,8 +822,8 @@ static int intel_lr_context_pin(struct intel_engine_cs *ring,
 
 unpin_ctx_obj:
 	i915_gem_object_ggtt_unpin(ctx_obj);
-reset_unpin_count:
-	ctx->engine[ring->id].unpin_count = 0;
+reset_pin_count:
+	ctx->engine[ring->id].pin_count = 0;
 
 	return ret;
 }
@@ -836,7 +836,7 @@ void intel_lr_context_unpin(struct intel_engine_cs *ring,
 
 	if (ctx_obj) {
 		WARN_ON(!mutex_is_locked(&ring->dev->struct_mutex));
-		if (--ctx->engine[ring->id].unpin_count == 0) {
+		if (--ctx->engine[ring->id].pin_count == 0) {
 			intel_unpin_ringbuffer_obj(ringbuf);
 			i915_gem_object_ggtt_unpin(ctx_obj);
 		}
@@ -1753,6 +1753,7 @@ void intel_lr_context_free(struct intel_context *ctx)
 				intel_unpin_ringbuffer_obj(ringbuf);
 				i915_gem_object_ggtt_unpin(ctx_obj);
 			}
+			WARN_ON(ctx->engine[ring->id].pin_count);
 			intel_destroy_ringbuffer_obj(ringbuf);
 			kfree(ringbuf);
 			drm_gem_object_unreference(&ctx_obj->base);
@@ -1895,8 +1896,7 @@ int intel_lr_context_deferred_create(struct intel_context *ctx,
 
 	if (ctx == ring->default_context)
 		lrc_setup_hardware_status_page(ring, ctx_obj);
-
-	if (ring->id == RCS && !ctx->rcs_initialized) {
+	else if (ring->id == RCS && !ctx->rcs_initialized) {
 		if (ring->init_context) {
 			ret = ring->init_context(ring, ctx);
 			if (ret) {

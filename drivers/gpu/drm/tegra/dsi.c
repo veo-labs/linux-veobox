@@ -591,8 +591,8 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 
 		/* set SOL delay */
 		if (dsi->master || dsi->slave) {
-			unsigned int lanes = tegra_dsi_get_lanes(dsi);
 			unsigned long delay, bclk, bclk_ganged;
+			unsigned int lanes = state->lanes;
 
 			/* SOL to valid, valid to FIFO and FIFO write delay */
 			delay = 4 + 4 + 2;
@@ -612,9 +612,7 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 	}
 
 	if (dsi->slave) {
-		err = tegra_dsi_configure(dsi->slave, pipe, mode);
-		if (err < 0)
-			return err;
+		tegra_dsi_configure(dsi->slave, pipe, mode);
 
 		/*
 		 * TODO: Support modes other than symmetrical left-right
@@ -624,49 +622,6 @@ static void tegra_dsi_configure(struct tegra_dsi *dsi, unsigned int pipe,
 		tegra_dsi_ganged_enable(dsi->slave, mode->hdisplay / 2,
 					mode->hdisplay / 2);
 	}
-
-	return 0;
-}
-
-static int tegra_output_dsi_enable(struct tegra_output *output)
-{
-	struct tegra_dc *dc = to_tegra_dc(output->encoder.crtc);
-	const struct drm_display_mode *mode = &dc->base.mode;
-	struct tegra_dsi *dsi = to_dsi(output);
-	u32 value;
-	int err;
-
-	if (dsi->enabled)
-		return 0;
-
-	err = tegra_dsi_configure(dsi, dc->pipe, mode);
-	if (err < 0)
-		return err;
-
-	/* enable display controller */
-	value = tegra_dc_readl(dc, DC_DISP_DISP_WIN_OPTIONS);
-	value |= DSI_ENABLE;
-	tegra_dc_writel(dc, value, DC_DISP_DISP_WIN_OPTIONS);
-
-	value = tegra_dc_readl(dc, DC_CMD_DISPLAY_COMMAND);
-	value &= ~DISP_CTRL_MODE_MASK;
-	value |= DISP_CTRL_MODE_C_DISPLAY;
-	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_COMMAND);
-
-	value = tegra_dc_readl(dc, DC_CMD_DISPLAY_POWER_CONTROL);
-	value |= PW0_ENABLE | PW1_ENABLE | PW2_ENABLE | PW3_ENABLE |
-		 PW4_ENABLE | PM0_ENABLE | PM1_ENABLE;
-	tegra_dc_writel(dc, value, DC_CMD_DISPLAY_POWER_CONTROL);
-
-	tegra_dc_writel(dc, GENERAL_ACT_REQ << 8, DC_CMD_STATE_CONTROL);
-	tegra_dc_writel(dc, GENERAL_ACT_REQ, DC_CMD_STATE_CONTROL);
-
-	/* enable DSI controller */
-	tegra_dsi_enable(dsi);
-
-	dsi->enabled = true;
-
-	return 0;
 }
 
 static int tegra_dsi_wait_idle(struct tegra_dsi *dsi, unsigned long timeout)
@@ -909,34 +864,14 @@ static void tegra_dsi_encoder_disable(struct drm_encoder *encoder)
 	if (err < 0)
 		dev_dbg(dsi->dev, "failed to idle DSI: %d\n", err);
 
+	tegra_dsi_soft_reset(dsi);
+
+	if (output->panel)
+		drm_panel_unprepare(output->panel);
+
 	tegra_dsi_disable(dsi);
 
-	dsi->enabled = false;
-
-	return 0;
-}
-
-static void tegra_dsi_set_timeout(struct tegra_dsi *dsi, unsigned long bclk,
-				  unsigned int vrefresh)
-{
-	unsigned int timeout;
-	u32 value;
-
-	/* one frame high-speed transmission timeout */
-	timeout = (bclk / vrefresh) / 512;
-	value = DSI_TIMEOUT_LRX(0x2000) | DSI_TIMEOUT_HTX(timeout);
-	tegra_dsi_writel(dsi, value, DSI_TIMEOUT_0);
-
-	/* 2 ms peripheral timeout for panel */
-	timeout = 2 * bclk / 512 * 1000;
-	value = DSI_TIMEOUT_PR(timeout) | DSI_TIMEOUT_TA(0x2000);
-	tegra_dsi_writel(dsi, value, DSI_TIMEOUT_1);
-
-	value = DSI_TALLY_TA(0) | DSI_TALLY_LRX(0) | DSI_TALLY_HTX(0);
-	tegra_dsi_writel(dsi, value, DSI_TO_TALLY);
-
-	if (dsi->slave)
-		tegra_dsi_set_timeout(dsi->slave, bclk, vrefresh);
+	return;
 }
 
 static int
@@ -948,8 +883,8 @@ tegra_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	struct tegra_dsi_state *state = to_dsi_state(conn_state);
 	struct tegra_dc *dc = to_tegra_dc(conn_state->crtc);
 	struct tegra_dsi *dsi = to_dsi(output);
-	unsigned int mul, div, vrefresh, lanes;
-	unsigned long bclk, plld;
+	unsigned int scdiv;
+	unsigned long plld;
 	int err;
 
 	state->pclk = crtc_state->mode.clock * 1000;
@@ -1010,24 +945,14 @@ tegra_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 	 */
 	scdiv = ((8 * state->mul) / (state->div * state->lanes)) - 2;
 
-	err = tegra_dsi_set_phy_timing(dsi);
-	if (err < 0)
+	err = tegra_dc_state_setup_clock(dc, crtc_state, dsi->clk_parent,
+					 plld, scdiv);
+	if (err < 0) {
+		dev_err(output->dev, "failed to setup CRTC state: %d\n", err);
 		return err;
+	}
 
-	return 0;
-}
-
-static int tegra_output_dsi_check_mode(struct tegra_output *output,
-				       struct drm_display_mode *mode,
-				       enum drm_mode_status *status)
-{
-	/*
-	 * FIXME: For now, always assume that the mode is okay.
-	 */
-
-	*status = MODE_OK;
-
-	return 0;
+	return err;
 }
 
 static const struct drm_encoder_helper_funcs tegra_dsi_encoder_helper_funcs = {
@@ -1629,12 +1554,6 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	if (IS_ERR(dsi->mipi)) {
 		err = PTR_ERR(dsi->mipi);
 		goto disable_vdd;
-	}
-
-	err = tegra_dsi_pad_calibrate(dsi);
-	if (err < 0) {
-		dev_err(dsi->dev, "MIPI calibration failed: %d\n", err);
-		goto mipi_free;
 	}
 
 	dsi->host.ops = &tegra_dsi_host_ops;

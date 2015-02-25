@@ -262,28 +262,6 @@ static void submit_packet(struct kernel_queue *kq)
 				kq->pending_wptr);
 }
 
-static int sync_with_hw(struct kernel_queue *kq, unsigned long timeout_ms)
-{
-	unsigned long org_timeout_ms;
-
-	BUG_ON(!kq);
-
-	org_timeout_ms = timeout_ms;
-	timeout_ms += jiffies * 1000 / HZ;
-	while (*kq->wptr_kernel != *kq->rptr_kernel) {
-		if (time_after(jiffies * 1000 / HZ, timeout_ms)) {
-			pr_err("kfd: kernel_queue %s timeout expired %lu\n",
-				__func__, org_timeout_ms);
-			pr_err("kfd: wptr: %d rptr: %d\n",
-				*kq->wptr_kernel, *kq->rptr_kernel);
-			return -ETIME;
-		}
-		schedule();
-	}
-
-	return 0;
-}
-
 static void rollback_packet(struct kernel_queue *kq)
 {
 	BUG_ON(!kq);

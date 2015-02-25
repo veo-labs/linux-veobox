@@ -145,6 +145,16 @@ static void complete_flip(struct drm_crtc *crtc, struct drm_file *file)
 	}
 }
 
+static void unref_cursor_worker(struct drm_flip_work *work, void *val)
+{
+	struct mdp5_crtc *mdp5_crtc =
+		container_of(work, struct mdp5_crtc, unref_cursor_work);
+	struct mdp5_kms *mdp5_kms = get_kms(&mdp5_crtc->base);
+
+	msm_gem_put_iova(val, mdp5_kms->id);
+	drm_gem_object_unreference_unlocked(val);
+}
+
 static void mdp5_crtc_destroy(struct drm_crtc *crtc)
 {
 	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
@@ -285,6 +295,9 @@ static void mdp5_crtc_enable(struct drm_crtc *crtc)
 
 	crtc_flush_all(crtc);
 
+	mdp5_crtc->enabled = true;
+}
+
 struct plane_state {
 	struct drm_plane *plane;
 	struct mdp5_plane_state *state;
@@ -308,11 +321,6 @@ static int mdp5_crtc_atomic_check(struct drm_crtc *crtc,
 	int cnt = 0, i;
 
 	DBG("%s: check", mdp5_crtc->name);
-
-	if (mdp5_crtc->event) {
-		dev_err(dev->dev, "already pending flip!\n");
-		return -EBUSY;
-	}
 
 	/* request a free CTL, if none is already allocated for this CRTC */
 	if (state->enable && !mdp5_crtc->ctl) {
@@ -370,7 +378,7 @@ static void mdp5_crtc_atomic_flush(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	unsigned long flags;
 
-	DBG("%s: flush", mdp5_crtc->name);
+	DBG("%s: event: %p", mdp5_crtc->name, crtc->state->event);
 
 	WARN_ON(mdp5_crtc->event);
 
@@ -536,10 +544,8 @@ static const struct drm_crtc_funcs mdp5_crtc_funcs = {
 static const struct drm_crtc_helper_funcs mdp5_crtc_helper_funcs = {
 	.mode_fixup = mdp5_crtc_mode_fixup,
 	.mode_set_nofb = mdp5_crtc_mode_set_nofb,
-	.mode_set = drm_helper_crtc_mode_set,
-	.mode_set_base = drm_helper_crtc_mode_set_base,
-	.prepare = mdp5_crtc_prepare,
-	.commit = mdp5_crtc_commit,
+	.prepare = mdp5_crtc_disable,
+	.commit = mdp5_crtc_enable,
 	.atomic_check = mdp5_crtc_atomic_check,
 	.atomic_begin = mdp5_crtc_atomic_begin,
 	.atomic_flush = mdp5_crtc_atomic_flush,
@@ -597,10 +603,6 @@ void mdp5_crtc_set_intf(struct drm_crtc *crtc, int intf,
 	mdp5_crtc->err.irqmask = intf2err(intf);
 	mdp5_crtc->vblank.irqmask = intf2vblank(intf);
 	mdp_irq_update(&mdp5_kms->base);
-
-	/* when called from modeset_init(), skip the rest until later: */
-	if (!mdp5_kms)
-		return;
 
 	spin_lock_irqsave(&mdp5_kms->resource_lock, flags);
 	intf_sel = mdp5_read(mdp5_kms, REG_MDP5_DISP_INTF_SEL);

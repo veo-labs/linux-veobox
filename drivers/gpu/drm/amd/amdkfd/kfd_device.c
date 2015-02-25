@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include "kfd_priv.h"
 #include "kfd_device_queue_manager.h"
+#include "kfd_pm4_headers.h"
 
 #define MQD_SIZE_ALIGNED 768
 
@@ -182,18 +183,40 @@ bool kgd2kfd_device_init(struct kfd_dev *kfd,
 	kfd->shared_resources = *gpu_resources;
 
 	/* calculate max size of mqds needed for queues */
-	size = max_num_of_processes *
-		max_num_of_queues_per_process *
-		kfd->device_info->mqd_size_aligned;
+	size = max_num_of_queues_per_device *
+			kfd->device_info->mqd_size_aligned;
 
-	/* add another 512KB for all other allocations on gart */
+	/*
+	 * calculate max size of runlist packet.
+	 * There can be only 2 packets at once
+	 */
+	size += (KFD_MAX_NUM_OF_PROCESSES * sizeof(struct pm4_map_process) +
+		max_num_of_queues_per_device *
+		sizeof(struct pm4_map_queues) + sizeof(struct pm4_runlist)) * 2;
+
+	/* Add size of HIQ & DIQ */
+	size += KFD_KERNEL_QUEUE_SIZE * 2;
+
+	/* add another 512KB for all other allocations on gart (HPD, fences) */
 	size += 512 * 1024;
 
-	if (kfd2kgd->init_sa_manager(kfd->kgd, size)) {
+	if (kfd2kgd->init_gtt_mem_allocation(kfd->kgd, size, &kfd->gtt_mem,
+			&kfd->gtt_start_gpu_addr, &kfd->gtt_start_cpu_ptr)) {
 		dev_err(kfd_device,
-			"Error initializing sa manager for device (%x:%x)\n",
-			kfd->pdev->vendor, kfd->pdev->device);
+			"Could not allocate %d bytes for device (%x:%x)\n",
+			size, kfd->pdev->vendor, kfd->pdev->device);
 		goto out;
+	}
+
+	dev_info(kfd_device,
+		"Allocated %d bytes on gart for device(%x:%x)\n",
+		size, kfd->pdev->vendor, kfd->pdev->device);
+
+	/* Initialize GTT sa with 512 byte chunk size */
+	if (kfd_gtt_sa_init(kfd, size, 512) != 0) {
+		dev_err(kfd_device,
+			"Error initializing gtt sub-allocator\n");
+		goto kfd_gtt_sa_init_error;
 	}
 
 	kfd_doorbell_init(kfd);
@@ -203,13 +226,6 @@ bool kgd2kfd_device_init(struct kfd_dev *kfd,
 			"Error adding device (%x:%x) to topology\n",
 			kfd->pdev->vendor, kfd->pdev->device);
 		goto kfd_topology_add_device_error;
-	}
-
-	if (kfd_interrupt_init(kfd)) {
-		dev_err(kfd_device,
-			"Error initializing interrupts for device (%x:%x)\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto kfd_interrupt_error;
 	}
 
 	if (!device_iommu_pasid_init(kfd)) {
@@ -229,7 +245,7 @@ bool kgd2kfd_device_init(struct kfd_dev *kfd,
 		goto device_queue_manager_error;
 	}
 
-	if (kfd->dqm->start(kfd->dqm) != 0) {
+	if (kfd->dqm->ops.start(kfd->dqm) != 0) {
 		dev_err(kfd_device,
 			"Error starting queuen manager for device (%x:%x)\n",
 			kfd->pdev->vendor, kfd->pdev->device);
@@ -250,11 +266,11 @@ dqm_start_error:
 device_queue_manager_error:
 	amd_iommu_free_device(kfd->pdev);
 device_iommu_pasid_error:
-	kfd_interrupt_exit(kfd);
-kfd_interrupt_error:
 	kfd_topology_remove_device(kfd);
 kfd_topology_add_device_error:
-	kfd2kgd->fini_sa_manager(kfd->kgd);
+	kfd_gtt_sa_fini(kfd);
+kfd_gtt_sa_init_error:
+	kfd2kgd->free_gtt_mem(kfd->kgd, kfd->gtt_mem);
 	dev_err(kfd_device,
 		"device (%x:%x) NOT added due to errors\n",
 		kfd->pdev->vendor, kfd->pdev->device);
@@ -267,8 +283,9 @@ void kgd2kfd_device_exit(struct kfd_dev *kfd)
 	if (kfd->init_complete) {
 		device_queue_manager_uninit(kfd->dqm);
 		amd_iommu_free_device(kfd->pdev);
-		kfd_interrupt_exit(kfd);
 		kfd_topology_remove_device(kfd);
+		kfd_gtt_sa_fini(kfd);
+		kfd2kgd->free_gtt_mem(kfd->kgd, kfd->gtt_mem);
 	}
 
 	kfree(kfd);
@@ -279,7 +296,7 @@ void kgd2kfd_suspend(struct kfd_dev *kfd)
 	BUG_ON(kfd == NULL);
 
 	if (kfd->init_complete) {
-		kfd->dqm->stop(kfd->dqm);
+		kfd->dqm->ops.stop(kfd->dqm);
 		amd_iommu_set_invalidate_ctx_cb(kfd->pdev, NULL);
 		amd_iommu_free_device(kfd->pdev);
 	}
@@ -300,7 +317,7 @@ int kgd2kfd_resume(struct kfd_dev *kfd)
 			return -ENXIO;
 		amd_iommu_set_invalidate_ctx_cb(kfd->pdev,
 						iommu_pasid_shutdown_callback);
-		kfd->dqm->start(kfd->dqm);
+		kfd->dqm->ops.start(kfd->dqm);
 	}
 
 	return 0;
@@ -309,15 +326,7 @@ int kgd2kfd_resume(struct kfd_dev *kfd)
 /* This is called directly from KGD at ISR. */
 void kgd2kfd_interrupt(struct kfd_dev *kfd, const void *ih_ring_entry)
 {
-	if (kfd->init_complete) {
-		spin_lock(&kfd->interrupt_lock);
-
-		if (kfd->interrupts_active
-		    && enqueue_ih_ring_entry(kfd, ih_ring_entry))
-			schedule_work(&kfd->interrupt_work);
-
-		spin_unlock(&kfd->interrupt_lock);
-	}
+	/* Process interrupts / schedule work as necessary */
 }
 
 static int kfd_gtt_sa_init(struct kfd_dev *kfd, unsigned int buf_size,

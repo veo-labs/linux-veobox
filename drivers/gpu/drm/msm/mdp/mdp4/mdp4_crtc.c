@@ -315,20 +315,8 @@ static void mdp4_crtc_enable(struct drm_crtc *crtc)
 
 	crtc_flush(crtc);
 
-static int mdp4_crtc_atomic_check(struct drm_crtc *crtc,
-		struct drm_crtc_state *state)
-{
-	struct mdp4_crtc *mdp4_crtc = to_mdp4_crtc(crtc);
-	struct drm_device *dev = crtc->dev;
-
-	DBG("%s: check", mdp4_crtc->name);
-
-	if (mdp4_crtc->event) {
-		dev_err(dev->dev, "already pending flip!\n");
-		return -EBUSY;
-	}
-
-	// TODO anything else to check?
+	mdp4_crtc->enabled = true;
+}
 
 static int mdp4_crtc_atomic_check(struct drm_crtc *crtc,
 		struct drm_crtc_state *state)
@@ -351,7 +339,7 @@ static void mdp4_crtc_atomic_flush(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	unsigned long flags;
 
-	DBG("%s: flush", mdp4_crtc->name);
+	DBG("%s: event: %p", mdp4_crtc->name, crtc->state->event);
 
 	WARN_ON(mdp4_crtc->event);
 
@@ -513,10 +501,8 @@ static const struct drm_crtc_funcs mdp4_crtc_funcs = {
 static const struct drm_crtc_helper_funcs mdp4_crtc_helper_funcs = {
 	.mode_fixup = mdp4_crtc_mode_fixup,
 	.mode_set_nofb = mdp4_crtc_mode_set_nofb,
-	.mode_set = drm_helper_crtc_mode_set,
-	.mode_set_base = drm_helper_crtc_mode_set_base,
-	.prepare = mdp4_crtc_prepare,
-	.commit = mdp4_crtc_commit,
+	.disable = mdp4_crtc_disable,
+	.enable = mdp4_crtc_enable,
 	.atomic_check = mdp4_crtc_atomic_check,
 	.atomic_begin = mdp4_crtc_atomic_begin,
 	.atomic_flush = mdp4_crtc_atomic_flush,

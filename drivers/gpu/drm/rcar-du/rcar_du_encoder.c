@@ -193,20 +193,14 @@ int rcar_du_encoder_init(struct rcar_du_device *rcdu,
 	}
 
 	if (type == RCAR_DU_ENCODER_HDMI) {
-		if (renc->lvds) {
-			dev_err(rcdu->dev,
-				"Chaining LVDS and HDMI encoders not supported\n");
-			return -EINVAL;
-		}
-
 		ret = rcar_du_hdmienc_init(rcdu, renc, enc_node);
 		if (ret < 0)
-			return ret;
+			goto done;
 	} else {
 		ret = drm_encoder_init(rcdu->ddev, encoder, &encoder_funcs,
 				       encoder_type);
 		if (ret < 0)
-			return ret;
+			goto done;
 
 		drm_encoder_helper_add(encoder, &encoder_helper_funcs);
 	}

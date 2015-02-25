@@ -55,10 +55,51 @@
 
 #define DRIVER_NAME		"i915"
 #define DRIVER_DESC		"Intel Graphics"
-#define DRIVER_DATE		"20141121"
+#define DRIVER_DATE		"20150130"
 
 #undef WARN_ON
-#define WARN_ON(x)		WARN(x, "WARN_ON(" #x ")")
+/* Many gcc seem to no see through this and fall over :( */
+#if 0
+#define WARN_ON(x) ({ \
+	bool __i915_warn_cond = (x); \
+	if (__builtin_constant_p(__i915_warn_cond)) \
+		BUILD_BUG_ON(__i915_warn_cond); \
+	WARN(__i915_warn_cond, "WARN_ON(" #x ")"); })
+#else
+#define WARN_ON(x) WARN((x), "WARN_ON(" #x ")")
+#endif
+
+#define MISSING_CASE(x) WARN(1, "Missing switch case (%lu) in %s\n", \
+			     (long) (x), __func__);
+
+/* Use I915_STATE_WARN(x) and I915_STATE_WARN_ON() (rather than WARN() and
+ * WARN_ON()) for hw state sanity checks to check for unexpected conditions
+ * which may not necessarily be a user visible problem.  This will either
+ * WARN() or DRM_ERROR() depending on the verbose_checks moduleparam, to
+ * enable distros and users to tailor their preferred amount of i915 abrt
+ * spam.
+ */
+#define I915_STATE_WARN(condition, format...) ({			\
+	int __ret_warn_on = !!(condition);				\
+	if (unlikely(__ret_warn_on)) {					\
+		if (i915.verbose_state_checks)				\
+			WARN(1, format);				\
+		else 							\
+			DRM_ERROR(format);				\
+	}								\
+	unlikely(__ret_warn_on);					\
+})
+
+#define I915_STATE_WARN_ON(condition) ({				\
+	int __ret_warn_on = !!(condition);				\
+	if (unlikely(__ret_warn_on)) {					\
+		if (i915.verbose_state_checks)				\
+			WARN(1, "WARN_ON(" #condition ")\n");		\
+		else 							\
+			DRM_ERROR("WARN_ON(" #condition ")\n");		\
+	}								\
+	unlikely(__ret_warn_on);					\
+})
 
 enum pipe {
 	INVALID_PIPE = -1,
@@ -501,10 +542,11 @@ struct drm_i915_display_funcs {
 	/* Returns the active state of the crtc, and if the crtc is active,
 	 * fills out the pipe-config with the hw state. */
 	bool (*get_pipe_config)(struct intel_crtc *,
-				struct intel_crtc_config *);
-	void (*get_plane_config)(struct intel_crtc *,
-				 struct intel_plane_config *);
-	int (*crtc_compute_clock)(struct intel_crtc *crtc);
+				struct intel_crtc_state *);
+	void (*get_initial_plane_config)(struct intel_crtc *,
+					 struct intel_initial_plane_config *);
+	int (*crtc_compute_clock)(struct intel_crtc *crtc,
+				  struct intel_crtc_state *crtc_state);
 	void (*crtc_enable)(struct drm_crtc *crtc);
 	void (*crtc_disable)(struct drm_crtc *crtc);
 	void (*off)(struct drm_crtc *crtc);
@@ -1847,8 +1889,6 @@ struct drm_i915_private {
 	 */
 	struct workqueue_struct *dp_wq;
 
-	uint32_t bios_vgacntr;
-
 	/* Abstract the submission mechanism (legacy ringbuffer or execlists) away */
 	struct {
 		int (*do_execbuf)(struct drm_device *dev, struct drm_file *file,
@@ -2691,9 +2731,8 @@ void i915_vma_move_to_active(struct i915_vma *vma,
 int i915_gem_dumb_create(struct drm_file *file_priv,
 			 struct drm_device *dev,
 			 struct drm_mode_create_dumb *args);
-int i915_gem_dumb_map_offset(struct drm_file *file_priv,
-			     struct drm_device *dev, uint32_t handle,
-			     uint64_t *offset);
+int i915_gem_mmap_gtt(struct drm_file *file_priv, struct drm_device *dev,
+		      uint32_t handle, uint64_t *offset);
 /**
  * Returns true if seq1 is later than seq2.
  */

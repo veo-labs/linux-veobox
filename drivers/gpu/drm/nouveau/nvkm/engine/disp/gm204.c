@@ -32,17 +32,17 @@
 
 static struct nvkm_oclass
 gm204_disp_sclass[] = {
-	{ GM204_DISP_CORE_CHANNEL_DMA, &nvd0_disp_core_ofuncs.base },
-	{ GK110_DISP_BASE_CHANNEL_DMA, &nvd0_disp_base_ofuncs.base },
-	{ GK104_DISP_OVERLAY_CONTROL_DMA, &nvd0_disp_ovly_ofuncs.base },
-	{ GK104_DISP_OVERLAY, &nvd0_disp_oimm_ofuncs.base },
-	{ GK104_DISP_CURSOR, &nvd0_disp_curs_ofuncs.base },
+	{ GM204_DISP_CORE_CHANNEL_DMA, &gf110_disp_core_ofuncs.base },
+	{ GK110_DISP_BASE_CHANNEL_DMA, &gf110_disp_base_ofuncs.base },
+	{ GK104_DISP_OVERLAY_CONTROL_DMA, &gf110_disp_ovly_ofuncs.base },
+	{ GK104_DISP_OVERLAY, &gf110_disp_oimm_ofuncs.base },
+	{ GK104_DISP_CURSOR, &gf110_disp_curs_ofuncs.base },
 	{}
 };
 
-static struct nouveau_oclass
+static struct nvkm_oclass
 gm204_disp_main_oclass[] = {
-	{ GM204_DISP, &nvd0_disp_main_ofuncs },
+	{ GM204_DISP, &gf110_disp_main_ofuncs },
 	{}
 };
 
@@ -80,8 +80,8 @@ gm204_disp_ctor(struct nvkm_object *parent, struct nvkm_object *engine,
 	priv->dac.power = nv50_dac_power;
 	priv->dac.sense = nv50_dac_sense;
 	priv->sor.power = nv50_sor_power;
-	priv->sor.hda_eld = nvd0_hda_eld;
-	priv->sor.hdmi = nvd0_hdmi_ctrl;
+	priv->sor.hda_eld = gf110_hda_eld;
+	priv->sor.hdmi = gf110_hdmi_ctrl;
 	priv->sor.magic = gm204_sor_magic;
 	return 0;
 }
@@ -103,9 +103,9 @@ gm204_disp_oclass = &(struct nv50_disp_impl) {
 	},
 	.base.vblank = &gf110_disp_vblank_func,
 	.base.outp =  gm204_disp_outp_sclass,
-	.mthd.core = &nve0_disp_core_mthd_chan,
-	.mthd.base = &nvd0_disp_base_mthd_chan,
-	.mthd.ovly = &nve0_disp_ovly_mthd_chan,
+	.mthd.core = &gk104_disp_core_mthd_chan,
+	.mthd.base = &gf110_disp_base_mthd_chan,
+	.mthd.ovly = &gk104_disp_ovly_mthd_chan,
 	.mthd.prev = -0x020000,
-	.head.scanoutpos = nvd0_disp_main_scanoutpos,
+	.head.scanoutpos = gf110_disp_main_scanoutpos,
 }.base.base;

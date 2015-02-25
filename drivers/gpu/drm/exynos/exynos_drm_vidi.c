@@ -47,7 +47,6 @@ struct vidi_win_data {
 };
 
 struct vidi_context {
-	struct exynos_drm_manager	manager;
 	struct exynos_drm_display	display;
 	struct platform_device		*pdev;
 	struct drm_device		*drm_dev;
@@ -67,11 +66,6 @@ struct vidi_context {
 	struct mutex			lock;
 	int				pipe;
 };
-
-static inline struct vidi_context *manager_to_vidi(struct exynos_drm_manager *m)
-{
-	return container_of(m, struct vidi_context, manager);
-}
 
 static inline struct vidi_context *display_to_vidi(struct exynos_drm_display *d)
 {
@@ -549,7 +543,6 @@ static int vidi_bind(struct device *dev, struct device *master, void *data)
 {
 	struct vidi_context *ctx = dev_get_drvdata(dev);
 	struct drm_device *drm_dev = data;
-	struct drm_crtc *crtc = ctx->crtc;
 	int ret;
 
 	vidi_ctx_initialize(ctx, drm_dev);
@@ -590,15 +583,13 @@ static int vidi_probe(struct platform_device *pdev)
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->manager.type = EXYNOS_DISPLAY_TYPE_VIDI;
-	ctx->manager.ops = &vidi_manager_ops;
 	ctx->display.type = EXYNOS_DISPLAY_TYPE_VIDI;
 	ctx->display.ops = &vidi_display_ops;
 	ctx->default_win = 0;
 	ctx->pdev = pdev;
 
 	ret = exynos_drm_component_add(&pdev->dev, EXYNOS_DEVICE_TYPE_CRTC,
-					ctx->manager.type);
+					EXYNOS_DISPLAY_TYPE_VIDI);
 	if (ret)
 		return ret;
 

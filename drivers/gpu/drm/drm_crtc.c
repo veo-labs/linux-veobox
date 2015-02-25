@@ -1192,6 +1192,19 @@ int drm_universal_plane_init(struct drm_device *dev, struct drm_plane *plane,
 				   config->plane_type_property,
 				   plane->type);
 
+	if (drm_core_check_feature(dev, DRIVER_ATOMIC)) {
+		drm_object_attach_property(&plane->base, config->prop_fb_id, 0);
+		drm_object_attach_property(&plane->base, config->prop_crtc_id, 0);
+		drm_object_attach_property(&plane->base, config->prop_crtc_x, 0);
+		drm_object_attach_property(&plane->base, config->prop_crtc_y, 0);
+		drm_object_attach_property(&plane->base, config->prop_crtc_w, 0);
+		drm_object_attach_property(&plane->base, config->prop_crtc_h, 0);
+		drm_object_attach_property(&plane->base, config->prop_src_x, 0);
+		drm_object_attach_property(&plane->base, config->prop_src_y, 0);
+		drm_object_attach_property(&plane->base, config->prop_src_w, 0);
+		drm_object_attach_property(&plane->base, config->prop_src_h, 0);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_universal_plane_init);
@@ -2121,8 +2134,6 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 		ret = -ENOENT;
 		goto out;
 	}
-
-	props_count = connector->properties.count;
 
 	for (i = 0; i < DRM_CONNECTOR_MAX_ENCODER; i++)
 		if (connector->encoder_ids[i] != 0)
@@ -4383,26 +4394,41 @@ bool drm_property_change_valid_get(struct drm_property *property,
 		/* Only the driver knows */
 		return true;
 	} else if (drm_property_type_is(property, DRM_MODE_PROP_OBJECT)) {
-		struct drm_mode_object *obj;
-
 		/* a zero value for an object property translates to null: */
 		if (value == 0)
 			return true;
-		/*
-		 * NOTE: use _object_find() directly to bypass restriction on
-		 * looking up refcnt'd objects (ie. fb's).  For a refcnt'd
-		 * object this could race against object finalization, so it
-		 * simply tells us that the object *was* valid.  Which is good
-		 * enough.
-		 */
-		obj = _object_find(property->dev, value, property->values[0]);
-		return obj != NULL;
+
+		/* handle refcnt'd objects specially: */
+		if (property->values[0] == DRM_MODE_OBJECT_FB) {
+			struct drm_framebuffer *fb;
+			fb = drm_framebuffer_lookup(property->dev, value);
+			if (fb) {
+				*ref = &fb->base;
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			return _object_find(property->dev, value, property->values[0]) != NULL;
+		}
 	}
 
 	for (i = 0; i < property->num_values; i++)
 		if (property->values[i] == value)
 			return true;
 	return false;
+}
+
+void drm_property_change_valid_put(struct drm_property *property,
+		struct drm_mode_object *ref)
+{
+	if (!ref)
+		return;
+
+	if (drm_property_type_is(property, DRM_MODE_PROP_OBJECT)) {
+		if (property->values[0] == DRM_MODE_OBJECT_FB)
+			drm_framebuffer_unreference(obj_to_fb(ref));
+	}
 }
 
 /**

@@ -605,7 +605,7 @@ nouveau_display_resume(struct drm_device *dev, bool runtime)
 			continue;
 
 		ret = nouveau_bo_pin(nv_crtc->cursor.nvbo, TTM_PL_FLAG_VRAM, true);
-		if (!ret)
+		if (!ret && nv_crtc->cursor.set_offset)
 			ret = nouveau_bo_map(nv_crtc->cursor.nvbo);
 		if (ret)
 			NV_ERROR(drm, "Could not pin/map cursor.\n");
@@ -638,7 +638,9 @@ nouveau_display_resume(struct drm_device *dev, bool runtime)
 
 		if (!nv_crtc->cursor.nvbo)
 			continue;
-		nv_crtc->cursor.set_offset(nv_crtc, nv_crtc->cursor.nvbo->bo.offset);
+
+		if (nv_crtc->cursor.set_offset)
+			nv_crtc->cursor.set_offset(nv_crtc, nv_crtc->cursor.nvbo->bo.offset);
 		nv_crtc->cursor.set_pos(nv_crtc, nv_crtc->cursor_saved_x,
 						 nv_crtc->cursor_saved_y);
 	}
@@ -877,7 +879,6 @@ nouveau_display_dumb_create(struct drm_file *file_priv, struct drm_device *dev,
 	if (ret)
 		return ret;
 
-	bo->gem.dumb = true;
 	ret = drm_gem_handle_create(file_priv, &bo->gem, &args->handle);
 	drm_gem_object_unreference_unlocked(&bo->gem);
 	return ret;
@@ -893,14 +894,6 @@ nouveau_display_dumb_map_offset(struct drm_file *file_priv,
 	gem = drm_gem_object_lookup(dev, file_priv, handle);
 	if (gem) {
 		struct nouveau_bo *bo = nouveau_gem_object(gem);
-
-		/*
-		 * We don't allow dumb mmaps on objects created using another
-		 * interface.
-		 */
-		WARN_ONCE(!(gem->dumb || gem->import_attach),
-			  "Illegal dumb map of accelerated buffer.\n");
-
 		*poffset = drm_vma_node_offset_addr(&bo->bo.vma_node);
 		drm_gem_object_unreference_unlocked(gem);
 		return 0;

@@ -540,23 +540,21 @@ nvkm_i2c_create_(struct nvkm_object *parent, struct nvkm_object *engine,
 		case DCB_I2C_NV04_BIT:
 		case DCB_I2C_NV4E_BIT:
 		case DCB_I2C_NVIO_BIT:
-			nouveau_i2c_create_port(i2c, NV_I2C_PORT(index),
-						info.type, &info);
+			nvkm_i2c_create_port(i2c, NV_I2C_PORT(index),
+					     info.type, &info);
 			break;
 		case DCB_I2C_NVIO_AUX:
-			nouveau_i2c_create_port(i2c, NV_I2C_AUX(index),
-						info.type, &info);
+			nvkm_i2c_create_port(i2c, NV_I2C_AUX(index),
+					     info.type, &info);
 			break;
 		case DCB_I2C_PMGR:
 			if (info.drive != DCB_I2C_UNUSED) {
-				nouveau_i2c_create_port(i2c, NV_I2C_PORT(index),
-							DCB_I2C_NVIO_BIT,
-							&info);
+				nvkm_i2c_create_port(i2c, NV_I2C_PORT(index),
+						     DCB_I2C_NVIO_BIT, &info);
 			}
 			if (info.auxch != DCB_I2C_UNUSED) {
-				nouveau_i2c_create_port(i2c, NV_I2C_AUX(index),
-							DCB_I2C_NVIO_AUX,
-							&info);
+				nvkm_i2c_create_port(i2c, NV_I2C_AUX(index),
+						     DCB_I2C_NVIO_AUX, &info);
 			}
 			break;
 		case DCB_I2C_UNUSED:

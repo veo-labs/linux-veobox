@@ -1022,7 +1022,8 @@ static void mixer_win_disable(struct exynos_drm_crtc *crtc, int zpos)
 
 static void mixer_wait_for_vblank(struct exynos_drm_crtc *crtc)
 {
-	struct mixer_context *mixer_ctx = mgr_to_mixer(mgr);
+	struct mixer_context *mixer_ctx = crtc->ctx;
+	int err;
 
 	mutex_lock(&mixer_ctx->mixer_mutex);
 	if (!mixer_ctx->powered) {
@@ -1264,8 +1265,6 @@ static int mixer_bind(struct device *dev, struct device *manager, void *data)
 		goto free_ctx;
 	}
 
-	pm_runtime_enable(dev);
-
 	return 0;
 
 free_ctx:
@@ -1277,9 +1276,7 @@ static void mixer_unbind(struct device *dev, struct device *master, void *data)
 {
 	struct mixer_context *ctx = dev_get_drvdata(dev);
 
-	mixer_mgr_remove(&ctx->manager);
-
-	pm_runtime_disable(dev);
+	mixer_ctx_remove(ctx);
 }
 
 static const struct component_ops mixer_component_ops = {

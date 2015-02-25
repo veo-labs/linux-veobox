@@ -793,6 +793,7 @@ static int bdw_init_workarounds(struct intel_engine_cs *ring)
 	/* WaDisableFenceDestinationToSLM:bdw (GT3 pre-production) */
 	WA_SET_BIT_MASKED(HDC_CHICKEN0,
 			  HDC_FORCE_NON_COHERENT |
+			  HDC_DONOT_FETCH_MEM_WHEN_MASKED |
 			  (IS_BDW_GT3(dev) ? HDC_FENCE_DEST_SLM_DISABLE : 0));
 
 	/* From the Haswell PRM, Command Reference: Registers, CACHE_MODE_0:
@@ -844,6 +845,30 @@ static int chv_init_workarounds(struct intel_engine_cs *ring)
 	WA_SET_BIT_MASKED(HDC_CHICKEN0,
 			  HDC_FORCE_NON_COHERENT |
 			  HDC_DONOT_FETCH_MEM_WHEN_MASKED);
+
+	/* According to the CACHE_MODE_0 default value documentation, some
+	 * CHV platforms disable this optimization by default.  Turn it on.
+	 */
+	WA_CLR_BIT_MASKED(CACHE_MODE_0_GEN7, HIZ_RAW_STALL_OPT_DISABLE);
+
+	/* Wa4x4STCOptimizationDisable:chv */
+	WA_SET_BIT_MASKED(CACHE_MODE_1,
+			  GEN8_4x4_STC_OPTIMIZATION_DISABLE);
+
+	/* Improve HiZ throughput on CHV. */
+	WA_SET_BIT_MASKED(HIZ_CHICKEN, CHV_HZ_8X8_MODE_IN_1X);
+
+	/*
+	 * BSpec recommends 8x4 when MSAA is used,
+	 * however in practice 16x4 seems fastest.
+	 *
+	 * Note that PS/WM thread counts depend on the WIZ hashing
+	 * disable bit, which we don't touch here, but it's good
+	 * to keep in mind (see 3DSTATE_PS and 3DSTATE_WM).
+	 */
+	WA_SET_FIELD_MASKED(GEN7_GT_MODE,
+			    GEN6_WIZ_HASHING_MASK,
+			    GEN6_WIZ_HASHING_16x4);
 
 	return 0;
 }

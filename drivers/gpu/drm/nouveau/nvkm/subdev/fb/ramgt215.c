@@ -32,21 +32,8 @@
 #include <subdev/bios/M0205.h>
 #include <subdev/bios/rammap.h>
 #include <subdev/bios/timing.h>
-
-#include <subdev/clock/nva3.h>
-#include <subdev/clock/pll.h>
-
+#include <subdev/clk/gt215.h>
 #include <subdev/gpio.h>
-
-#include <subdev/timer.h>
-
-#include <engine/fifo.h>
-
-#include <core/option.h>
-
-#include "ramfuc.h"
-
-#include "nv50.h"
 
 /* XXX: Remove when memx gains GPIO support */
 extern int nv50_gpio_location(int line, u32 *reg, u32 *shift);
@@ -106,10 +93,10 @@ struct gt215_ltrain {
 	struct nvkm_mem *mem;
 };
 
-struct nva3_ram {
-	struct nouveau_ram base;
-	struct nva3_ramfuc fuc;
-	struct nva3_ltrain ltrain;
+struct gt215_ram {
+	struct nvkm_ram base;
+	struct gt215_ramfuc fuc;
+	struct gt215_ltrain ltrain;
 };
 
 void
@@ -360,9 +347,9 @@ gt215_link_train_fini(struct nvkm_fb *pfb)
  */
 #define T(t) cfg->timing_10_##t
 static int
-nva3_ram_timing_calc(struct nouveau_fb *pfb, u32 *timing)
+gt215_ram_timing_calc(struct nvkm_fb *pfb, u32 *timing)
 {
-	struct nva3_ram *ram = (void *)pfb->ram;
+	struct gt215_ram *ram = (void *)pfb->ram;
 	struct nvbios_ramcfg *cfg = &ram->base.target.bios;
 	int tUNK_base, tUNK_40_0, prevCL;
 	u32 cur2, cur3, cur7, cur8;
@@ -435,7 +422,7 @@ nva3_ram_timing_calc(struct nouveau_fb *pfb, u32 *timing)
 #undef T
 
 static void
-nouveau_sddr2_dll_reset(struct nva3_ramfuc *fuc)
+nvkm_sddr2_dll_reset(struct gt215_ramfuc *fuc)
 {
 	ram_mask(fuc, mr[0], 0x100, 0x100);
 	ram_nsec(fuc, 1000);
@@ -444,7 +431,7 @@ nouveau_sddr2_dll_reset(struct nva3_ramfuc *fuc)
 }
 
 static void
-nouveau_sddr3_dll_disable(struct nva3_ramfuc *fuc, u32 *mr)
+nvkm_sddr3_dll_disable(struct gt215_ramfuc *fuc, u32 *mr)
 {
 	u32 mr1_old = ram_rd32(fuc, mr[1]);
 
@@ -456,7 +443,7 @@ nouveau_sddr3_dll_disable(struct nva3_ramfuc *fuc, u32 *mr)
 }
 
 static void
-nouveau_gddr3_dll_disable(struct nva3_ramfuc *fuc, u32 *mr)
+nvkm_gddr3_dll_disable(struct gt215_ramfuc *fuc, u32 *mr)
 {
 	u32 mr1_old = ram_rd32(fuc, mr[1]);
 
@@ -467,7 +454,7 @@ nouveau_gddr3_dll_disable(struct nva3_ramfuc *fuc, u32 *mr)
 }
 
 static void
-nva3_ram_lock_pll(struct nva3_ramfuc *fuc, struct nva3_clock_info *mclk)
+gt215_ram_lock_pll(struct gt215_ramfuc *fuc, struct gt215_clk_info *mclk)
 {
 	ram_wr32(fuc, 0x004004, mclk->pll);
 	ram_mask(fuc, 0x004000, 0x00000001, 0x00000001);
@@ -477,9 +464,9 @@ nva3_ram_lock_pll(struct nva3_ramfuc *fuc, struct nva3_clock_info *mclk)
 }
 
 static void
-nva3_ram_fbvref(struct nva3_ramfuc *fuc, u32 val)
+gt215_ram_fbvref(struct gt215_ramfuc *fuc, u32 val)
 {
-	struct nouveau_gpio *gpio = nouveau_gpio(fuc->base.pfb);
+	struct nvkm_gpio *gpio = nvkm_gpio(fuc->base.pfb);
 	struct dcb_gpio_func func;
 	u32 reg, sh, gpio_val;
 	int ret;
@@ -576,13 +563,13 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 
 	switch (ram->base.type) {
 	case NV_MEM_TYPE_DDR2:
-		ret = nouveau_sddr2_calc(&ram->base);
+		ret = nvkm_sddr2_calc(&ram->base);
 		break;
 	case NV_MEM_TYPE_DDR3:
 		ret = nvkm_sddr3_calc(&ram->base);
 		break;
 	case NV_MEM_TYPE_GDDR3:
-		ret = nouveau_gddr3_calc(&ram->base);
+		ret = nvkm_gddr3_calc(&ram->base);
 		break;
 	default:
 		ret = -ENOSYS;
@@ -645,15 +632,15 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	/* If we're disabling the DLL, do it now */
 	switch (next->bios.ramcfg_10_DLLoff * ram->base.type) {
 	case NV_MEM_TYPE_DDR3:
-		nouveau_sddr3_dll_disable(fuc, ram->base.mr);
+		nvkm_sddr3_dll_disable(fuc, ram->base.mr);
 		break;
 	case NV_MEM_TYPE_GDDR3:
-		nouveau_gddr3_dll_disable(fuc, ram->base.mr);
+		nvkm_gddr3_dll_disable(fuc, ram->base.mr);
 		break;
 	}
 
 	if (fuc->r_gpioFBVREF.addr && next->bios.timing_10_ODT)
-		nva3_ram_fbvref(fuc, 0);
+		gt215_ram_fbvref(fuc, 0);
 
 	/* Brace RAM for impact */
 	ram_wr32(fuc, 0x1002d4, 0x00000001);
@@ -820,11 +807,11 @@ gt215_ram_calc(struct nvkm_fb *pfb, u32 freq)
 	ram_mask(fuc, 0x111100, 0xffffffff, r111100);
 
 	if (fuc->r_gpioFBVREF.addr && !next->bios.timing_10_ODT)
-		nva3_ram_fbvref(fuc, 1);
+		gt215_ram_fbvref(fuc, 1);
 
 	/* Reset DLL */
 	if (!next->bios.ramcfg_10_DLLoff)
-		nouveau_sddr2_dll_reset(fuc);
+		nvkm_sddr2_dll_reset(fuc);
 
 	if (ram->base.type == NV_MEM_TYPE_GDDR3) {
 		ram_nsec(fuc, 31000);

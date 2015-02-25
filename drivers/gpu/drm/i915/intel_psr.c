@@ -393,13 +393,7 @@ unlock:
 	mutex_unlock(&dev_priv->psr.lock);
 }
 
-/**
- * intel_psr_disable - Disable PSR
- * @intel_dp: Intel DP
- *
- * This function needs to be called before disabling pipe.
- */
-void intel_psr_disable(struct intel_dp *intel_dp)
+static void vlv_psr_disable(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
 	struct drm_device *dev = intel_dig_port->base.base.dev;

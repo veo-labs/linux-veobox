@@ -253,7 +253,7 @@ static void fimd_enable_shadow_channel_path(struct fimd_context *ctx, int win,
 	writel(val, ctx->regs + SHADOWCON);
 }
 
-static void fimd_clear_channel(struct exynos_drm_manager *mgr)
+static void fimd_clear_channel(struct fimd_context *ctx)
 {
 	int win, ch_enabled = 0;
 

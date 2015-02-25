@@ -2316,26 +2316,11 @@ should_alloc_retry(gfp_t gfp_mask, unsigned int order,
 
 static inline struct page *
 __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
-	struct zonelist *zonelist, enum zone_type high_zoneidx,
-	nodemask_t *nodemask, struct zone *preferred_zone,
-	int classzone_idx, int migratetype, unsigned long *did_some_progress)
+	const struct alloc_context *ac, unsigned long *did_some_progress)
 {
 	struct page *page;
 
 	*did_some_progress = 0;
-
-	if (oom_killer_disabled)
-		return NULL;
-
-	/*
-	 * Acquire the per-zone oom lock for each zone.  If that
-	 * fails, somebody else is making progress for us.
-	 */
-	if (!oom_zonelist_trylock(zonelist, gfp_mask)) {
-		*did_some_progress = 1;
-		schedule_timeout_uninterruptible(1);
-		return NULL;
-	}
 
 	/*
 	 * Acquire the per-zone oom lock for each zone.  If that
@@ -2370,9 +2355,6 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 		/* The OOM killer does not compensate for light reclaim */
 		if (!(gfp_mask & __GFP_FS))
 			goto out;
-		/* The OOM killer does not compensate for light reclaim */
-		if (!(gfp_mask & __GFP_FS))
-			goto out;
 		/*
 		 * GFP_THISNODE contains __GFP_NORETRY and we never hit this.
 		 * Sanity check for bare calls of __GFP_THISNODE, not real OOM.
@@ -2384,8 +2366,8 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 			goto out;
 	}
 	/* Exhausted what can be done so it's blamo time */
-	out_of_memory(zonelist, gfp_mask, order, nodemask, false);
-	*did_some_progress = 1;
+	if (out_of_memory(ac->zonelist, gfp_mask, order, ac->nodemask, false))
+		*did_some_progress = 1;
 out:
 	oom_zonelist_unlock(ac->zonelist, gfp_mask);
 	return page;
@@ -2644,6 +2626,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	    (gfp_mask & GFP_THISNODE) == GFP_THISNODE)
 		goto nopage;
 
+retry:
 	if (!(gfp_mask & __GFP_NO_KSWAPD))
 		wake_all_kswapds(order, ac);
 
@@ -2773,16 +2756,12 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 		 * start OOM killing tasks.
 		 */
 		if (!did_some_progress) {
-			page = __alloc_pages_may_oom(gfp_mask, order, zonelist,
-						high_zoneidx, nodemask,
-						preferred_zone, classzone_idx,
-						migratetype,&did_some_progress);
+			page = __alloc_pages_may_oom(gfp_mask, order, ac,
+							&did_some_progress);
 			if (page)
 				goto got_pg;
-			if (!did_some_progress) {
-				BUG_ON(gfp_mask & __GFP_NOFAIL);
+			if (!did_some_progress)
 				goto nopage;
-			}
 		}
 		/* Wait for some write requests to complete then retry */
 		wait_iff_congested(ac->preferred_zone, BLK_RW_ASYNC, HZ/50);
@@ -2818,8 +2797,12 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order,
 	struct page *page = NULL;
 	unsigned int cpuset_mems_cookie;
 	int alloc_flags = ALLOC_WMARK_LOW|ALLOC_CPUSET|ALLOC_FAIR;
-	int classzone_idx;
-	gfp_t mask;
+	gfp_t alloc_mask; /* The gfp_t that was actually used for allocation */
+	struct alloc_context ac = {
+		.high_zoneidx = gfp_zone(gfp_mask),
+		.nodemask = nodemask,
+		.migratetype = gfpflags_to_migratetype(gfp_mask),
+	};
 
 	gfp_mask &= gfp_allowed_mask;
 
@@ -2855,24 +2838,23 @@ retry_cpuset:
 	ac.classzone_idx = zonelist_zone_idx(preferred_zoneref);
 
 	/* First allocation attempt */
-	mask = gfp_mask|__GFP_HARDWALL;
-	page = get_page_from_freelist(mask, nodemask, order, zonelist,
-			high_zoneidx, alloc_flags, preferred_zone,
-			classzone_idx, migratetype);
+	alloc_mask = gfp_mask|__GFP_HARDWALL;
+	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
 	if (unlikely(!page)) {
 		/*
 		 * Runtime PM, block IO and its error handling path
 		 * can deadlock because I/O on the device might not
 		 * complete.
 		 */
-		mask = memalloc_noio_flags(gfp_mask);
+		alloc_mask = memalloc_noio_flags(gfp_mask);
 
-		page = __alloc_pages_slowpath(mask, order,
-				zonelist, high_zoneidx, nodemask,
-				preferred_zone, classzone_idx, migratetype);
+		page = __alloc_pages_slowpath(alloc_mask, order, &ac);
 	}
 
-	trace_mm_page_alloc(page, order, mask, migratetype);
+	if (kmemcheck_enabled && page)
+		kmemcheck_pagealloc_alloc(page, order, gfp_mask);
+
+	trace_mm_page_alloc(page, order, alloc_mask, ac.migratetype);
 
 out:
 	/*

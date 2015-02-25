@@ -41,7 +41,7 @@ gm204_sor_loff(struct nvkm_output_dp *outp)
 void
 gm204_sor_magic(struct nvkm_output *outp)
 {
-	struct nv50_disp_priv *priv = (void *)nouveau_disp(outp);
+	struct nv50_disp_priv *priv = (void *)nvkm_disp(outp);
 	const u32 soff = outp->or * 0x100;
 	const u32 data = outp->or + 1;
 	if (outp->info.sorconf.link & 1)

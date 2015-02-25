@@ -237,78 +237,7 @@ static int __gen6_gt_wait_for_fifo(struct drm_i915_private *dev_priv)
 	return ret;
 }
 
-static void vlv_force_wake_reset(struct drm_i915_private *dev_priv)
-{
-	__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
-			   _MASKED_BIT_DISABLE(0xffff));
-	__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
-			   _MASKED_BIT_DISABLE(0xffff));
-	/* something from same cacheline, but !FORCEWAKE_VLV */
-	__raw_posting_read(dev_priv, FORCEWAKE_ACK_VLV);
-}
-
-static void __vlv_force_wake_get(struct drm_i915_private *dev_priv,
-						int fw_engine)
-{
-	/* Check for Render Engine */
-	if (FORCEWAKE_RENDER & fw_engine) {
-		if (wait_for_atomic((__raw_i915_read32(dev_priv,
-						FORCEWAKE_ACK_VLV) &
-						FORCEWAKE_KERNEL) == 0,
-					FORCEWAKE_ACK_TIMEOUT_MS))
-			DRM_ERROR("Timed out: Render forcewake old ack to clear.\n");
-
-		__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
-				   _MASKED_BIT_ENABLE(FORCEWAKE_KERNEL));
-
-		if (wait_for_atomic((__raw_i915_read32(dev_priv,
-						FORCEWAKE_ACK_VLV) &
-						FORCEWAKE_KERNEL),
-					FORCEWAKE_ACK_TIMEOUT_MS))
-			DRM_ERROR("Timed out: waiting for Render to ack.\n");
-	}
-
-	/* Check for Media Engine */
-	if (FORCEWAKE_MEDIA & fw_engine) {
-		if (wait_for_atomic((__raw_i915_read32(dev_priv,
-						FORCEWAKE_ACK_MEDIA_VLV) &
-						FORCEWAKE_KERNEL) == 0,
-					FORCEWAKE_ACK_TIMEOUT_MS))
-			DRM_ERROR("Timed out: Media forcewake old ack to clear.\n");
-
-		__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
-				   _MASKED_BIT_ENABLE(FORCEWAKE_KERNEL));
-
-		if (wait_for_atomic((__raw_i915_read32(dev_priv,
-						FORCEWAKE_ACK_MEDIA_VLV) &
-						FORCEWAKE_KERNEL),
-					FORCEWAKE_ACK_TIMEOUT_MS))
-			DRM_ERROR("Timed out: waiting for media to ack.\n");
-	}
-}
-
-static void __vlv_force_wake_put(struct drm_i915_private *dev_priv,
-					int fw_engine)
-{
-
-	/* Check for Render Engine */
-	if (FORCEWAKE_RENDER & fw_engine)
-		__raw_i915_write32(dev_priv, FORCEWAKE_VLV,
-					_MASKED_BIT_DISABLE(FORCEWAKE_KERNEL));
-
-
-	/* Check for Media Engine */
-	if (FORCEWAKE_MEDIA & fw_engine)
-		__raw_i915_write32(dev_priv, FORCEWAKE_MEDIA_VLV,
-				_MASKED_BIT_DISABLE(FORCEWAKE_KERNEL));
-
-	/* something from same cacheline, but !FORCEWAKE_VLV */
-	__raw_posting_read(dev_priv, FORCEWAKE_ACK_VLV);
-	if (!IS_CHERRYVIEW(dev_priv->dev))
-		gen6_gt_check_fifodbg(dev_priv);
-}
-
-static void vlv_force_wake_get(struct drm_i915_private *dev_priv, int fw_engine)
+static void intel_uncore_fw_release_timer(unsigned long arg)
 {
 	struct intel_uncore_forcewake_domain *domain = (void *)arg;
 	unsigned long irqflags;
@@ -956,36 +885,23 @@ static bool is_gen9_shadowed(struct drm_i915_private *dev_priv, u32 reg)
 static void \
 gen9_write##x(struct drm_i915_private *dev_priv, off_t reg, u##x val, \
 		bool trace) { \
-	REG_WRITE_HEADER; \
-	if (!SKL_NEEDS_FORCE_WAKE((dev_priv), (reg)) || \
-			is_gen9_shadowed(dev_priv, reg)) { \
-		__raw_i915_write##x(dev_priv, reg, val); \
-	} else { \
-		unsigned fwengine = 0; \
-		if (FORCEWAKE_GEN9_RENDER_RANGE_OFFSET(reg)) { \
-			if (dev_priv->uncore.fw_rendercount == 0) \
-				fwengine = FORCEWAKE_RENDER; \
-		} else if (FORCEWAKE_GEN9_MEDIA_RANGE_OFFSET(reg)) { \
-			if (dev_priv->uncore.fw_mediacount == 0) \
-				fwengine = FORCEWAKE_MEDIA; \
-		} else if (FORCEWAKE_GEN9_COMMON_RANGE_OFFSET(reg)) { \
-			if (dev_priv->uncore.fw_rendercount == 0) \
-				fwengine |= FORCEWAKE_RENDER; \
-			if (dev_priv->uncore.fw_mediacount == 0) \
-				fwengine |= FORCEWAKE_MEDIA; \
-		} else { \
-			if (dev_priv->uncore.fw_blittercount == 0) \
-				fwengine = FORCEWAKE_BLITTER; \
-		} \
-		if (fwengine) \
-			dev_priv->uncore.funcs.force_wake_get(dev_priv, \
-					fwengine); \
-		__raw_i915_write##x(dev_priv, reg, val); \
-		if (fwengine) \
-			dev_priv->uncore.funcs.force_wake_put(dev_priv, \
-					fwengine); \
-	} \
-	REG_WRITE_FOOTER; \
+	enum forcewake_domains fw_engine; \
+	GEN6_WRITE_HEADER; \
+	if (!SKL_NEEDS_FORCE_WAKE((dev_priv), (reg)) ||	\
+	    is_gen9_shadowed(dev_priv, reg)) \
+		fw_engine = 0; \
+	else if (FORCEWAKE_GEN9_RENDER_RANGE_OFFSET(reg)) \
+		fw_engine = FORCEWAKE_RENDER; \
+	else if (FORCEWAKE_GEN9_MEDIA_RANGE_OFFSET(reg)) \
+		fw_engine = FORCEWAKE_MEDIA; \
+	else if (FORCEWAKE_GEN9_COMMON_RANGE_OFFSET(reg)) \
+		fw_engine = FORCEWAKE_RENDER | FORCEWAKE_MEDIA; \
+	else \
+		fw_engine = FORCEWAKE_BLITTER; \
+	if (fw_engine) \
+		__force_wake_get(dev_priv, fw_engine); \
+	__raw_i915_write##x(dev_priv, reg, val); \
+	GEN6_WRITE_FOOTER; \
 }
 
 __gen9_write(8)
