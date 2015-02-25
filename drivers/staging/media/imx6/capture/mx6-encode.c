@@ -30,6 +30,8 @@
 #include <media/imx6.h>
 #include "mx6-camif.h"
 
+#define	NFB4EOF_IRQ	0
+
 struct encoder_priv {
 	struct mx6cam_dev    *dev;
 	struct v4l2_subdev    sd;
@@ -616,7 +618,7 @@ static int encoder_start(struct encoder_priv *priv)
 		err = encoder_setup_norotation(priv, phys[0], phys[1]);
 	if (err)
 		goto out_put_ipu;
-
+#if NFB4EOF_IRQ
 	priv->nfb4eof_irq = ipu_idmac_channel_irq(dev->ipu,
 						 priv->enc_ch,
 						 IPU_IRQ_NFB4EOF);
@@ -628,6 +630,7 @@ static int encoder_start(struct encoder_priv *priv)
 			 "Error registering encode NFB4EOF irq: %d\n", err);
 		goto out_put_ipu;
 	}
+#endif
 
 	if (dev->rot_mode >= IPU_ROTATE_90_RIGHT)
 		priv->eof_irq = ipu_idmac_channel_irq(
@@ -663,7 +666,9 @@ static int encoder_start(struct encoder_priv *priv)
 out_free_eof_irq:
 	devm_free_irq(dev->dev, priv->eof_irq, priv);
 out_free_nfb4eof_irq:
+#if NFB4EOF_IRQ
 	devm_free_irq(dev->dev, priv->nfb4eof_irq, priv);
+#endif
 out_put_ipu:
 	encoder_put_ipu_resources(priv);
 	return err;
@@ -694,8 +699,9 @@ static int encoder_stop(struct encoder_priv *priv)
 	ipu_csi_disable(priv->csi);
 
 	devm_free_irq(dev->dev, priv->eof_irq, priv);
+#if NFB4EOF_IRQ
 	devm_free_irq(dev->dev, priv->nfb4eof_irq, priv);
-
+#endif
 	/* disable IC tasks and the channels */
 	if (dev->using_ic)
 		ipu_ic_task_disable(priv->ic_enc);
