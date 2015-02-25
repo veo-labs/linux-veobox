@@ -212,8 +212,12 @@ static void __init imx6q_1588_init(void)
 	 * set bit IOMUXC_GPR1[21].  Or the PTP clock must be from pad
 	 * (external OSC), and we need to clear the bit.
 	 */
+#if 0
 	clksel = ptp_clk == enet_ref ? IMX6Q_GPR1_ENET_CLK_SEL_ANATOP :
 				       IMX6Q_GPR1_ENET_CLK_SEL_PAD;
+#else
+	clksel = IMX6Q_GPR1_ENET_CLK_SEL_ANATOP;
+#endif
 	gpr = syscon_regmap_lookup_by_compatible("fsl,imx6q-iomuxc-gpr");
 	if (!IS_ERR(gpr))
 		regmap_update_bits(gpr, IOMUXC_GPR1,
