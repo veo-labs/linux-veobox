@@ -249,22 +249,6 @@ static struct m2mx6_pixfmt m2mx6_formats[] = {
 		.uv_height_dec = 1,
 		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
 	}, {
-		.name	= "4:2:0 planar, YUV",
-		.fourcc	= V4L2_PIX_FMT_YUV420,
-		.depth  = 12,
-		.ybpp	= 1,
-		.uv_width_dec = 2,
-		.uv_height_dec = 2,
-		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
-	}, {
-		.name	= "4:2:0 planar, YVU",
-		.fourcc	= V4L2_PIX_FMT_YVU420,
-		.depth  = 12,
-		.ybpp	= 1,
-		.uv_width_dec = 2,
-		.uv_height_dec = 2,
-		.types	= MEM2MEM_CAPTURE | MEM2MEM_OUTPUT,
-	}, {
 		.name   = "4:2:0 partial planar, NV12",
 		.fourcc = V4L2_PIX_FMT_NV12,
 		.depth  = 12,
