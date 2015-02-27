@@ -2223,6 +2223,8 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 	u8 reg_io_0x02 = io_read(sd, 0x02);
 	u8 edid_enabled;
 	u8 cable_det;
+	u8 tmds,tmds_frac;
+	u16 ftmds;
 
 	static const char * const csc_coeff_sel_rb[16] = {
 		"bypassed", "YPbPr601 -> RGB", "reserved", "YPbPr709 -> RGB",
@@ -2272,6 +2274,20 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 			no_signal_tmds(sd) ? "false" : "true");
 	v4l2_info(sd, "TMDS signal locked: %s\n",
 			no_lock_tmds(sd) ? "false" : "true");
+	if (!no_lock_tmds(sd)) {
+		if (state->info->type == ADV7604) {
+			tmds = hdmi_read(sd, 0x06);
+			tmds_frac = hdmi_read(sd, 0x3b) & 0x03;
+			v4l2_info(sd, "TMDS frequency measured at %u.%02u MHz\n",
+				tmds, tmds_frac/4);
+		} else {
+			tmds_frac = hdmi_read(sd, 0x52);
+			tmds = (hdmi_read(sd, 0x51) << 1) | ((tmds_frac >> 7) & 0x01);
+			tmds_frac = tmds_frac & 0x7F;
+			v4l2_info(sd, "TMDS frequency measured at %u.%02u MHz\n",
+				tmds, tmds_frac/128);
+		}
+	}
 	v4l2_info(sd, "SSPD locked: %s\n", no_lock_sspd(sd) ? "false" : "true");
 	v4l2_info(sd, "STDI locked: %s\n", no_lock_stdi(sd) ? "false" : "true");
 	v4l2_info(sd, "CP locked: %s\n", no_lock_cp(sd) ? "false" : "true");

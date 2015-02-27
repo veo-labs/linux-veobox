@@ -70,11 +70,8 @@ static int adv76xx_set_mclk_fs_n(struct snd_soc_codec *codec,
 			ADV76XX_MCLK_FS, fs);
 }
 
-static int adv76xx_codec_probe(struct snd_soc_codec * codec){
-
-	/* Do not mux SPDIF and I2S output */
-	snd_soc_write(codec, ADV7611_DST_MAP_ROT_2_0, 0x04);
-
+static int adv76xx_codec_probe(struct snd_soc_codec * codec)
+{
 	/* Configure mute conditions */
 	adv76xx_cnf_mute_conditions(codec);
 
