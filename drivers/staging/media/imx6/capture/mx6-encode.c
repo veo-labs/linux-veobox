@@ -30,7 +30,7 @@
 #include <media/imx6.h>
 #include "mx6-camif.h"
 
-#define	NFB4EOF_IRQ	0
+#define	NFB4EOF_IRQ	1
 
 struct encoder_priv {
 	struct mx6cam_dev    *dev;
@@ -266,6 +266,7 @@ unlock:
 	return IRQ_HANDLED;
 }
 
+#if NFB4EOF_IRQ
 static irqreturn_t encoder_nfb4eof_interrupt(int irq, void *dev_id)
 {
 	struct encoder_priv *priv = dev_id;
@@ -286,11 +287,13 @@ static irqreturn_t encoder_nfb4eof_interrupt(int irq, void *dev_id)
 	 * interrupt (and clearing the irq status in the IPU) seems to
 	 * be enough.
 	 */
+#if 0
 	if (!dev->using_ic)
 		v4l2_subdev_notify(&priv->sd, MX6CAM_NFB4EOF_NOTIFY, NULL);
-
+#endif
 	return IRQ_HANDLED;
 }
+#endif
 
 /*
  * EOF timeout timer function.

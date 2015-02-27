@@ -1283,6 +1283,7 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 		return 0;
 
 	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+#if 0
 	if ((q_data_src->width != q_data_dst->width &&
 	     round_up(q_data_src->width, 16) != q_data_dst->width) ||
 	    (q_data_src->height != q_data_dst->height &&
@@ -1293,7 +1294,7 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 		ret = -EINVAL;
 		goto err;
 	}
-
+#endif
 	/* Allow BIT decoder device_run with no new buffers queued */
 	if (ctx->inst_type == CODA_INST_DECODER && ctx->use_bit)
 		v4l2_m2m_set_src_buffered(ctx->fh.m2m_ctx, true);
