@@ -81,10 +81,6 @@ MODULE_LICENSE("GPL");
 
 #define ADV7604_OP_SWAP_CB_CR				(1 << 0)
 
-#define DAI_FMT_DEFAULT (SND_SOC_DAIFMT_I2S |\
-			SND_SOC_DAIFMT_NB_NF |\
-			SND_SOC_DAIFMT_CBM_CFM)
-
 enum adv7604_type {
 	ADV7604,
 	ADV7611,
@@ -93,13 +89,6 @@ enum adv7604_type {
 struct adv7604_reg_seq {
 	unsigned int reg;
 	u8 val;
-};
-
-struct adv76xx_snd_data
-{
-	struct snd_soc_dai_link dai;
-	struct snd_soc_card card;
-	struct adv7604_state *state;
 };
 
 struct adv7604_format_info {
@@ -2224,7 +2213,6 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 	u8 edid_enabled;
 	u8 cable_det;
 	u8 tmds,tmds_frac;
-	u16 ftmds;
 
 	static const char * const csc_coeff_sel_rb[16] = {
 		"bypassed", "YPbPr601 -> RGB", "reserved", "YPbPr709 -> RGB",
@@ -3000,25 +2988,12 @@ static const struct regmap_config adv76xx_snd_regmap[] = {
 	},
 };
 
-/**
- * This dapm route map exists for DPCM link only.
- * The other routes shall go through Device Tree.
- */
-static const struct snd_soc_dapm_route audio_map[] = {
-	{"CPU-Capture",  NULL, "Capture"},
-};
-
 /*
  * Unregister Sound
  */
 static void adv76xx_unregister_snd (struct adv7604_state *state){
 
-	struct adv76xx_snd_data * data;
-
 	if (state != NULL && state->pdev_snd_codec != NULL){
-
-		data = state->pdev_snd_codec->dev.driver_data;
-		snd_soc_unregister_card(&data->card);
 		platform_device_unregister(state->pdev_snd_codec);
 	}
 }
@@ -3066,10 +3041,7 @@ static int adv76xx_configure_snd(struct adv7604_state *state)
 
 	struct i2c_client *client;
 	struct platform_device *pdev;
-	struct adv76xx_snd_data * data;
-	struct device_node *cpu_np;
-	char codec_name[32], card_name[32], platform_name[32], codec_dai_name[32];
-	int ret;
+	char platform_name[32];
 
 	/* Check i2c-client */
 	if (state->i2c_clients[ADV7604_PAGE_IO] == NULL)
@@ -3079,85 +3051,24 @@ static int adv76xx_configure_snd(struct adv7604_state *state)
 
 	dev_info(&client->dev, "Configuring sound system\n");
 
-	/* Getting ssi node information from DT */
-	cpu_np = of_parse_phandle(client->dev.of_node, "ssi-controller", 0);
-	if (!cpu_np){
-		dev_err(&client->dev, "No ssi controler found\n");
-		ret = -ENODEV;
-		goto end;
-	}
-
-	/* Reserve memory associate to i2c client device */
-	data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);
-	if (!data) {
-		ret = -ENOMEM;
-		goto end;
-	}
-
 	/* Create platform name depending on the i2c client */
 	sprintf(platform_name, "%s-asoc-codec", client->name);
-	data->state = state;
 
 	/* Register the platform device */
 	pdev = platform_device_register_resndata(&client->dev,
-						 platform_name,
-						 PLATFORM_DEVID_NONE,
-						 NULL, 0,
-						 data, sizeof(struct adv76xx_snd_data));
+					platform_name,
+					PLATFORM_DEVID_NONE,
+					NULL, 0,
+					state, sizeof(struct adv7604_state));
 
 	if (IS_ERR(pdev)) {
 		dev_err(&client->dev,
 			"Fail registering platform %s\n",
 			platform_name);
-		ret = -ENODEV;
-		goto err_platform;
-	}
-
-	/* Save the reference on state */
-	state->pdev_snd_codec = pdev;
-
-	/* Configure names depending on i2c client */
-	sprintf(codec_name, "%s-asoc-codec", client->name);
-	sprintf(card_name, "%s-snd-card", client->name);
-	sprintf(codec_dai_name, "%s-dai", client->name);
-
-	/* Configure DAI data */
-	data->dai.name = "HDMI Audio";
-	data->dai.stream_name = "Sound";
-	data->dai.codec_dai_name = codec_dai_name;
-	data->dai.cpu_of_node = cpu_np;
-	data->dai.codec_name = codec_name;
-	data->dai.platform_of_node = cpu_np;
-	data->dai.dai_fmt = DAI_FMT_DEFAULT;
-
-	/* Initialize sound card */
-	data->card.dev = &pdev->dev;
-	data->card.name = card_name;
-	data->card.dai_link = &data->dai;
-	data->card.num_links = 1;
-	data->card.dapm_routes = audio_map;
-	data->card.num_dapm_routes = ARRAY_SIZE(audio_map);
-	data->card.num_dapm_widgets = 0;
-
-	/* Set the drvdata for the card */
-	snd_soc_card_set_drvdata(&data->card, data);
-
-	/* Register the card with the sound system */
-	ret = snd_soc_register_card(&data->card);
-	if (ret) {
-		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n", ret);
-		goto err_card;
+		return -ENODEV;
 	}
 
 	return 0;
-
-err_card:
-	platform_device_unregister(pdev);
-err_platform:
-	/* Clean data devm_kzalloc */
-	devm_kfree(&client->dev,data);
-end:
-	return ret;
 }
 
 static int adv7604_probe(struct i2c_client *client,
@@ -3361,7 +3272,6 @@ static int adv7604_probe(struct i2c_client *client,
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 			client->addr << 1, client->adapter->name);
 
-	/* snd configuration */
 	err = adv76xx_configure_snd(state);
 
 	if (err)

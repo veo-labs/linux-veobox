@@ -182,7 +182,16 @@ config SND_SOC_IMX_PCM_FIQ
 	select FIQ
 
 comment "SoC Audio support for Freescale i.MX boards:"
+config VIDEO_VBX3_FPGA_ASWITCH
+	tristate "Vodalys FPGA driver for audio switching"
+	depends on VIDEO_VBX3_FPGA
+	select SND_SOC_VBX3SDI
+	---help---
+	 Support for the Vodalys FPGA based on Lattice ECP3-35
+	 for audio switching
 
+	 To compile this driver as a module, choose M here: the
+	 module will be called vbx3_fpga_aswitch.
 config SND_MXC_SOC_WM1133_EV1
 	tristate "Audio on the i.MX31ADS with WM1133-EV1 fitted"
 	depends on MACH_MX31ADS_WM1133_EV1
