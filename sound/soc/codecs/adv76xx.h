@@ -26,6 +26,26 @@
 #define DAI_ADV7604_NAME	"adv7604-dai"
 #define PLATFORM_DRIVER_NAME	"adv76xx-asoc-codec"
 
+/* HDMI 0x39[3:0] - CS_DATA[27:24] 0 for reserved values*/
+static const int cs_data_fs[] = {
+	44100,
+	0,
+	48000,
+	0,
+	0,
+	0,
+	0,
+	0,
+	32000,
+	88200,
+	0,
+	768000,
+	96000,
+	176000,
+	192000,
+	0,
+};
+
 enum adv7604_type {
 	ADV7604,
 	ADV7611,
@@ -105,14 +125,6 @@ struct adv7604_state {
 	struct v4l2_ctrl *free_run_color_manual_ctrl;
 	struct v4l2_ctrl *free_run_color_ctrl;
 	struct v4l2_ctrl *rgb_quantization_range_ctrl;
-};
-
-/* Struct with dai and codec information */
-struct adv76xx_snd_data
-{
-	struct snd_soc_dai_link dai;
-	struct snd_soc_card card;
-	struct adv7604_state *state;
 };
 
 

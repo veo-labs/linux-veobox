@@ -1,4 +1,4 @@
- /*
+/*
  * Copyright (C) 2014 Vodalys-labs
  * Author: Pablo Anton <pablo.anton@vodalys-labs.com>
  * Author: Jean-Michel Hautbois <jean-michel.hautbois@vodalys.com>
@@ -46,12 +46,12 @@ static int adv76xx_cnf_mute_conditions(struct snd_soc_codec *codec)
 
 static struct regmap * adv76xx_get_regmap(struct device *dev)
 {
-	struct adv76xx_snd_data * snd_data = dev->platform_data;
+	struct adv7604_state *state = dev->platform_data;
 
-	if (snd_data == NULL)
+	if (state == NULL)
 		return NULL;
 
-	return snd_data->state->regmap[ADV7604_PAGE_HDMI];
+	return state->regmap[ADV7604_PAGE_HDMI];
 }
 
 /*
@@ -61,12 +61,12 @@ static struct regmap * adv76xx_get_regmap(struct device *dev)
 static int adv76xx_set_mclk_fs_n(struct snd_soc_codec *codec,
 				 unsigned int fs)
 {
-	struct adv76xx_snd_data * snd_data = codec->dev->platform_data;
+	struct adv7604_state *state = codec->dev->platform_data;
 
-	if (!snd_data)
+	if (!state)
 		return -ENODEV;
 
-	return regmap_write(snd_data->state->regmap[ADV7604_PAGE_AFE],
+	return regmap_write(state->regmap[ADV7604_PAGE_AFE],
 			ADV76XX_MCLK_FS, fs);
 }
 
@@ -81,6 +81,7 @@ static int adv76xx_codec_probe(struct snd_soc_codec * codec)
 	return 0;
 }
 
+
 static struct snd_soc_codec_driver adv76xx_audio_codec = {
 	.probe = adv76xx_codec_probe,
 	.get_regmap = adv76xx_get_regmap,
@@ -88,7 +89,6 @@ static struct snd_soc_codec_driver adv76xx_audio_codec = {
 
 static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
-	struct adv76xx_snd_data * snd_data = dai->dev->platform_data;
 	struct snd_soc_codec *codec = dai->codec;
 	int finalfmt = snd_soc_read(codec, ADV76XX_HDMI_REGISTER_03);
 
@@ -125,55 +125,78 @@ static int adv76xx_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 static void log_pcm_sample_info(struct snd_soc_dai *dai)
 {
-	int freq;
-	unsigned int reg;
-	struct adv76xx_snd_data * snd_data = dai->dev->platform_data;
+	unsigned int reg, aux;
+	struct adv7604_state *state = dai->dev->platform_data;
+
+	static const char * const w24_length[] = {
+		"Not indicated",
+		"20",
+		"22",
+		"reserved",
+		"23",
+		"24",
+		"21",
+	};
+
+	static const char * const w20_length[] = {
+		"Not indicated",
+		"16",
+		"18",
+		"reserved",
+		"19",
+		"20",
+		"21",
+	};
 
 	/* Check channel status data */
-	if (snd_data) {
-		regmap_read(snd_data->state->regmap[ADV7604_PAGE_IO], 0x65, &reg);
+	if (state) {
+		regmap_read(state->regmap[ADV7604_PAGE_IO], 0x65, &reg);
 		reg &= 0x80;
-		dev_info(dai->dev, "Channel status data is %s\n", reg ? "valid" : "not valid");
+		dev_dbg(dai->dev, "CS_DATA is %s\n",
+			reg ? "valid" : "not valid");
 	}
 
 	/* Check if there are PCM audio samples */
 	reg = snd_soc_read(dai->codec, 0x18) & 0x01;
-	dev_info(dai->codec->dev, "Received PCM package: %s\n", reg ? "yes":"no");
+	dev_dbg(dai->codec->dev, "Received PCM package: %s\n",
+		reg ? "yes":"no");
 
 	reg = snd_soc_read(dai->codec, 0x36) & 0x02;
-	dev_info(dai->dev, "Received PCM package(from CS_DATA): %s\n", reg ? "no":"yes");
+	dev_dbg(dai->dev, "Received PCM package(from CS_DATA): %s\n",
+			reg ? "no" : "yes");
 
 	if (!reg) {
 		/* Get audio sampling frequency */
 		reg = snd_soc_read(dai->codec, 0x39) & 0x0f;
-		dev_info(dai->dev, "Sample Freq: %x\n", reg);
+		dev_dbg(dai->dev, "Sample Freq: %d kHz\n", cs_data_fs[reg]);
 
 		reg = snd_soc_read(dai->codec, 0x39) & 0x30;
-		dev_info(dai->codec->dev, "Clock accuracy: %x\n", reg);
+		dev_dbg(dai->codec->dev, "Clock accuracy: %x\n", reg);
 
-		reg = snd_soc_read(dai->codec, 0x3a) & 0x01;
-		dev_info(dai->dev, "Max audio sample word length: %d\n", reg ? 24 : 20);
+		aux = snd_soc_read(dai->codec, 0x3a) & 0x01;
+		dev_dbg(dai->dev, "Max audio sample word length: %d\n",
+			aux ? 24 : 20);
 
-		reg = snd_soc_read(dai->codec, 0x3a) & 0x0e;
-		dev_info(dai->dev, "Audio sample word length: %x\n", reg);
+		reg = (snd_soc_read(dai->codec, 0x3a) & 0x0e) >> 1;
+		dev_dbg(dai->dev, "Audio sample word length: %s\n",
+			aux ? w24_length[reg] : w20_length[reg]);
 	}
 
 	reg = snd_soc_read(dai->codec, 0x7e);
-	dev_info(dai->dev, "FIFO Underflow %s\n", reg & 0x40 ? "true": "false");
-	dev_info(dai->dev, "FIFO Overflow %s\n", reg & 0x20 ? "true": "false");
+	dev_dbg(dai->dev, "FIFO Underflow %s\n", reg & 0x40 ? "true" : "false");
+	dev_dbg(dai->dev, "FIFO Overflow %s\n", reg & 0x20 ? "true" : "false");
 }
 
-static int adv76xx_ops_hw_params(struct snd_pcm_substream *substream,
+static int adv76xx_hw_params(struct snd_pcm_substream *substream,
 				 struct snd_pcm_hw_params *hw_params,
 				 struct snd_soc_dai *dai)
 {
 	struct snd_soc_codec *codec = dai->codec;
-	int reg;
+	int reg, freq;
 	int err = 0;
-	int linewidthreg = snd_soc_read(codec, ADV76XX_LINE_WIDTH_1);
-	struct adv76xx_snd_data * snd_data = codec->dev->platform_data;
+	struct adv7604_state *state = codec->dev->platform_data;
 
-	if (!snd_data)
+	if (!state)
 		return -ENODEV;
 
 	/* Check if there are PCM audio samples */
@@ -182,18 +205,31 @@ static int adv76xx_ops_hw_params(struct snd_pcm_substream *substream,
 		dev_dbg(dai->dev, "Warning: It seems no PCM Audio available\n");
 
 	/* Check if there Audio is muted */
-	err = regmap_read(snd_data->state->regmap[ADV7604_PAGE_IO],
+	err = regmap_read(state->regmap[ADV7604_PAGE_IO],
 			ADV7611_HDMI_LVL_RAW_STATUS_2, &reg);
-	if (!err && ((reg & 0x40) || (reg & 0x20))) {
+	if (!err && ((reg & 0x40) || (reg & 0x20)))
 		dev_dbg(dai->dev, "Warning: It seems AV Mute or Internal Audio is muted\n");
-	}
+
+
+	/* Check if params and input format correspond*/
+	freq = params_rate(hw_params);
+
+	/* Get audio sampling frequency */
+	reg = snd_soc_read(dai->codec, 0x39) & 0x0f;
+
+	if (freq != cs_data_fs[reg])
+		dev_dbg(dai->dev,
+		"Warning: Frequency selected %d is different to input audio frequency %d\n",
+			freq, cs_data_fs[reg]);
+
+	log_pcm_sample_info(dai);
 
 	return 0;
 }
 
 static int adv76xx_mute(struct snd_soc_dai *dai, int mute)
 {
-	int reg, err;
+	int reg;
 	struct snd_soc_codec *codec = dai->codec;
 
 	/* Set general MUTE_AUDIO depending on parameter mute */
@@ -210,7 +246,7 @@ static int adv76xx_mute(struct snd_soc_dai *dai, int mute)
 }
 
 static struct snd_soc_dai_ops adv76xx_dai_ops = {
-	.hw_params = adv76xx_ops_hw_params,
+	.hw_params = adv76xx_hw_params,
 	.set_fmt = adv76xx_set_dai_fmt,
 	.digital_mute = adv76xx_mute,
 };
@@ -219,6 +255,7 @@ static struct snd_soc_dai_ops adv76xx_dai_ops = {
 			SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE |\
 			SNDRV_PCM_FMTBIT_S32_LE)
+
 
 /* DAI (Digital Audio Interface) struct for the codec */
 static struct snd_soc_dai_driver adv76xx_dais[] = {
@@ -248,17 +285,17 @@ static struct snd_soc_dai_driver adv76xx_dais[] = {
 
 static int adv76xx_codec_dev_probe(struct platform_device *pdev)
 {
-	int ret, index;
-	struct adv76xx_snd_data * snd_data = pdev->dev.platform_data;
+	int ret;
+	struct adv7604_state *state = pdev->dev.platform_data;
 
 	/* Check platform data value */
-	if (!snd_data)
+	if (!state)
 		return -EINVAL;
 
 	/* Register the codec on the platform device */
 	ret = snd_soc_register_codec(&pdev->dev,
 			&adv76xx_audio_codec,
-			&adv76xx_dais[snd_data->state->info->type],
+			&adv76xx_dais[state->info->type],
 			1);
 
 	if (ret)
