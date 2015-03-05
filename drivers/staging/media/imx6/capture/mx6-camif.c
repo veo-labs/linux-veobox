@@ -2142,6 +2142,19 @@ static const struct v4l2_file_operations mx6cam_fops = {
 	.mmap		= vb2_fop_mmap,
 };
 
+static void mx6cam_send_source_change(struct mx6cam_dev *dev)
+{
+	struct v4l2_event ev = {
+		.type = V4L2_EVENT_SOURCE_CHANGE,
+		.u.src_change.changes = V4L2_EVENT_SRC_CH_RESOLUTION,
+	};
+	unsigned i;
+
+	for (i = 0; i < dev->num_eps; i++) {
+		ev.id = i;
+		v4l2_event_queue(&dev->vfd, &ev);
+	}
+}
 /*
  * Handle notifications from the subdevs.
  */
@@ -2179,14 +2192,10 @@ static void mx6cam_subdev_notification(struct v4l2_subdev *sd,
 			schedule_work(&dev->restart_work);
 		}
 		break;
-	case ADV7604_HOTPLUG:
-		if (dev) {
-			//v4l2_err(&dev->v4l2_dev, "Set hotplug for ADV7604 to %d\n", hotplug);
-			break;
-		}
 	case ADV7604_FMT_CHANGE:
 		if (dev) {
 			atomic_set(&dev->status_change, 1);
+			mx6cam_send_source_change(dev);
 			v4l2_warn(&dev->v4l2_dev, "Format change on %s\n", dev->ep->sd->name);
 			break;
 		}
