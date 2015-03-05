@@ -273,6 +273,9 @@
 	hdmiin1: adv7611@4c {
 		compatible = "adi,adv7611";
 		reset-gpios = <&gpio1 20 GPIO_ACTIVE_LOW>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <6 0x8>;
+
 		reg = <0x4c 0x68 0x66 0x64 0x62
 			0x60 0x5e 0x5c 0x5a 0x58 0x56
 			0x54 0x52>;
@@ -299,6 +302,8 @@
 	hdmiin2: adv7604@20 {
 		compatible = "adi,adv7604";
 		reset-gpios = <&gpio1 18 GPIO_ACTIVE_LOW>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <7 0x8>;
 		reg = <0x20>;
 		hpd-gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>;
 
