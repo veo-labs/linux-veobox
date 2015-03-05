@@ -30,22 +30,19 @@
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/v4l2-dv-timings.h>
 #include <linux/videodev2.h>
 #include <linux/workqueue.h>
-#include <linux/platform_device.h>
 
 #include <media/adv7604.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-of.h>
-
-#include <linux/regmap.h>
-#include <sound/soc.h>
 
 static int debug;
 module_param(debug, int, 0644);
@@ -122,7 +119,6 @@ struct adv7604_chip_info {
 	void (*setup_irqs)(struct v4l2_subdev *sd);
 	unsigned int (*read_hdmi_pixelclock)(struct v4l2_subdev *sd);
 	unsigned int (*read_cable_det)(struct v4l2_subdev *sd);
-	int (*init_core)(struct v4l2_subdev *sd);
 
 	/* 0 = AFE, 1 = HDMI */
 	const struct adv7604_reg_seq *recommended_settings[2];
@@ -142,14 +138,12 @@ struct adv7604_chip_info {
 struct adv7604_state {
 	const struct adv7604_chip_info *info;
 	struct adv7604_platform_data pdata;
-	struct platform_device *pdev_snd_codec;
 
 	struct gpio_desc *hpd_gpio[4];
 
 	struct v4l2_subdev sd;
 	struct media_pad pads[ADV7604_PAD_MAX];
 	unsigned int source_pad;
-	int irq;
 
 	struct v4l2_ctrl_handler hdl;
 
@@ -172,9 +166,6 @@ struct adv7604_state {
 
 	/* i2c clients */
 	struct i2c_client *i2c_clients[ADV7604_PAGE_MAX];
-
-	/* Regmaps */
-	struct regmap *regmap[ADV7604_PAGE_MAX];
 
 	/* controls */
 	struct v4l2_ctrl *detect_tx_5v_ctrl;
@@ -358,6 +349,7 @@ static const struct adv7604_register adv7604_secondary_names[] = {
 	[ADV7604_PAGE_VDP] = { "vdp", 0x24 },
 };
 
+/* ----------------------------------------------------------------------- */
 
 static inline struct adv7604_state *to_state(struct v4l2_subdev *sd)
 {
@@ -374,53 +366,84 @@ static inline unsigned vtotal(const struct v4l2_bt_timings *t)
 	return V4L2_DV_BT_FRAME_HEIGHT(t);
 }
 
-static int regmap_read_check(struct adv7604_state *state,
-			     int client_page, u8 reg)
+/* ----------------------------------------------------------------------- */
+
+static s32 adv_smbus_read_byte_data_check(struct i2c_client *client,
+		u8 command, bool check)
 {
-	struct i2c_client *client = state->i2c_clients[client_page];
-	int err;
-	unsigned int val;
+	union i2c_smbus_data data;
 
-	err = regmap_read(state->regmap[client_page], reg, &val);
-
-	if (err) {
+	if (!i2c_smbus_xfer(client->adapter, client->addr, client->flags,
+			I2C_SMBUS_READ, command,
+			I2C_SMBUS_BYTE_DATA, &data))
+		return data.byte;
+	if (check)
 		v4l_err(client, "error reading %02x, %02x\n",
-				client->addr, reg);
-		return err;
-	}
-	return val;
+				client->addr, command);
+	return -EIO;
 }
 
-/* regmap_write_block(): Write raw data with a maximum of I2C_SMBUS_BLOCK_MAX
- * size to one or more registers.
- *
- * A value of zero will be returned on success, a negative errno will
- * be returned in error cases.
- */
-static int regmap_write_block(struct adv7604_state *state, int client_page,
-			      unsigned int init_reg, const void *val,
-			      size_t val_len)
+static s32 adv_smbus_read_byte_data(struct adv7604_state *state,
+				    enum adv7604_page page, u8 command)
 {
-	struct regmap *regmap = state->regmap[client_page];
-
-	if (val_len > I2C_SMBUS_BLOCK_MAX)
-		val_len = I2C_SMBUS_BLOCK_MAX;
-
-	return regmap_raw_write(regmap, init_reg, val, val_len);
+	return adv_smbus_read_byte_data_check(state->i2c_clients[page],
+					      command, true);
 }
+
+static s32 adv_smbus_write_byte_data(struct adv7604_state *state,
+				     enum adv7604_page page, u8 command,
+				     u8 value)
+{
+	struct i2c_client *client = state->i2c_clients[page];
+	union i2c_smbus_data data;
+	int err;
+	int i;
+
+	data.byte = value;
+	for (i = 0; i < 3; i++) {
+		err = i2c_smbus_xfer(client->adapter, client->addr,
+				client->flags,
+				I2C_SMBUS_WRITE, command,
+				I2C_SMBUS_BYTE_DATA, &data);
+		if (!err)
+			break;
+	}
+	if (err < 0)
+		v4l_err(client, "error writing %02x, %02x, %02x\n",
+				client->addr, command, value);
+	return err;
+}
+
+static s32 adv_smbus_write_i2c_block_data(struct adv7604_state *state,
+					  enum adv7604_page page, u8 command,
+					  unsigned length, const u8 *values)
+{
+	struct i2c_client *client = state->i2c_clients[page];
+	union i2c_smbus_data data;
+
+	if (length > I2C_SMBUS_BLOCK_MAX)
+		length = I2C_SMBUS_BLOCK_MAX;
+	data.block[0] = length;
+	memcpy(data.block + 1, values, length);
+	return i2c_smbus_xfer(client->adapter, client->addr, client->flags,
+			      I2C_SMBUS_WRITE, command,
+			      I2C_SMBUS_I2C_BLOCK_DATA, &data);
+}
+
+/* ----------------------------------------------------------------------- */
 
 static inline int io_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_IO, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_IO, reg);
 }
 
 static inline int io_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_IO], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_IO, reg, val);
 }
 
 static inline int io_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 val)
@@ -432,98 +455,71 @@ static inline int avlink_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_AVLINK, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_AVLINK, reg);
 }
 
 static inline int avlink_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_AVLINK], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_AVLINK, reg, val);
 }
 
 static inline int cec_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_CEC, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_CEC, reg);
 }
 
 static inline int cec_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_CEC], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_CEC, reg, val);
 }
 
 static inline int infoframe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_INFOFRAME, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_INFOFRAME, reg);
 }
 
 static inline int infoframe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_INFOFRAME], reg, val);
-}
-
-static inline int esdp_read(struct v4l2_subdev *sd, u8 reg)
-{
-	struct adv7604_state *state = to_state(sd);
-
-	return regmap_read_check(state, ADV7604_PAGE_ESDP, reg);
-}
-
-static inline int esdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
-{
-	struct adv7604_state *state = to_state(sd);
-
-	return regmap_write(state->regmap[ADV7604_PAGE_ESDP], reg, val);
-}
-
-static inline int dpp_read(struct v4l2_subdev *sd, u8 reg)
-{
-	struct adv7604_state *state = to_state(sd);
-
-	return regmap_read_check(state, ADV7604_PAGE_DPP, reg);
-}
-
-static inline int dpp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
-{
-	struct adv7604_state *state = to_state(sd);
-
-	return regmap_write(state->regmap[ADV7604_PAGE_DPP], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_INFOFRAME,
+					 reg, val);
 }
 
 static inline int afe_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_AFE, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_AFE, reg);
 }
 
 static inline int afe_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_AFE], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_AFE, reg, val);
 }
 
 static inline int rep_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_REP, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_REP, reg);
 }
 
 static inline int rep_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_REP], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_REP, reg, val);
 }
 
 static inline int rep_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 val)
@@ -535,37 +531,28 @@ static inline int edid_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_EDID, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_EDID, reg);
 }
 
 static inline int edid_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_EDID], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_EDID, reg, val);
 }
 
 static inline int edid_write_block(struct v4l2_subdev *sd,
-					unsigned int total_len, const u8 *val)
+					unsigned len, const u8 *val)
 {
 	struct adv7604_state *state = to_state(sd);
 	int err = 0;
-	int i = 0;
-	int len = 0;
+	int i;
 
-	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n",
-				__func__, total_len);
+	v4l2_dbg(2, debug, sd, "%s: write EDID block (%d byte)\n", __func__, len);
 
-	while (!err && i < total_len) {
-		len = (total_len - i) > I2C_SMBUS_BLOCK_MAX ?
-				I2C_SMBUS_BLOCK_MAX :
-				(total_len - i);
-
-		err = regmap_write_block(state, ADV7604_PAGE_EDID,
-				i, val + i, len);
-		i += len;
-	}
-
+	for (i = 0; !err && i < len; i += I2C_SMBUS_BLOCK_MAX)
+		err = adv_smbus_write_i2c_block_data(state, ADV7604_PAGE_EDID,
+				i, I2C_SMBUS_BLOCK_MAX, val + i);
 	return err;
 }
 
@@ -599,7 +586,7 @@ static inline int hdmi_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_HDMI, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_HDMI, reg);
 }
 
 static u16 hdmi_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -611,7 +598,7 @@ static inline int hdmi_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_HDMI], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_HDMI, reg, val);
 }
 
 static inline int hdmi_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 val)
@@ -619,25 +606,18 @@ static inline int hdmi_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8
 	return hdmi_write(sd, reg, (hdmi_read(sd, reg) & ~mask) | val);
 }
 
-static inline int test_read(struct v4l2_subdev *sd, u8 reg)
-{
-	struct adv7604_state *state = to_state(sd);
-
-	return regmap_read_check(state, ADV7604_PAGE_TEST, reg);
-}
-
 static inline int test_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_TEST], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_TEST, reg, val);
 }
 
 static inline int cp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_CP, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_CP, reg);
 }
 
 static u16 cp_read16(struct v4l2_subdev *sd, u8 reg, u16 mask)
@@ -649,7 +629,7 @@ static inline int cp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_CP], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_CP, reg, val);
 }
 
 static inline int cp_write_clr_set(struct v4l2_subdev *sd, u8 reg, u8 mask, u8 val)
@@ -661,14 +641,14 @@ static inline int vdp_read(struct v4l2_subdev *sd, u8 reg)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_read_check(state, ADV7604_PAGE_VDP, reg);
+	return adv_smbus_read_byte_data(state, ADV7604_PAGE_VDP, reg);
 }
 
 static inline int vdp_write(struct v4l2_subdev *sd, u8 reg, u8 val)
 {
 	struct adv7604_state *state = to_state(sd);
 
-	return regmap_write(state->regmap[ADV7604_PAGE_VDP], reg, val);
+	return adv_smbus_write_byte_data(state, ADV7604_PAGE_VDP, reg, val);
 }
 
 #define ADV7604_REG(page, offset)	(((page) << 8) | (offset))
@@ -679,15 +659,13 @@ static int adv7604_read_reg(struct v4l2_subdev *sd, unsigned int reg)
 {
 	struct adv7604_state *state = to_state(sd);
 	unsigned int page = reg >> 8;
-	unsigned int val;
 
 	if (!(BIT(page) & state->info->page_mask))
 		return -EINVAL;
 
 	reg &= 0xff;
-	regmap_read(state->regmap[page], reg, &val);
 
-	return val;
+	return adv_smbus_read_byte_data(state, page, reg);
 }
 #endif
 
@@ -701,7 +679,7 @@ static int adv7604_write_reg(struct v4l2_subdev *sd, unsigned int reg, u8 val)
 
 	reg &= 0xff;
 
-	return regmap_write(state->regmap[page], reg, val);
+	return adv_smbus_write_byte_data(state, page, reg, val);
 }
 
 static void adv7604_write_reg_seq(struct v4l2_subdev *sd,
@@ -997,8 +975,8 @@ static void configure_custom_video_timings(struct v4l2_subdev *sd,
 		/* Should only be set in auto-graphics mode [REF_02, p. 91-92] */
 		/* setup PLL_DIV_MAN_EN and PLL_DIV_RATIO */
 		/* IO-map reg. 0x16 and 0x17 should be written in sequence */
-		if (regmap_raw_write(state->regmap[ADV7604_PAGE_IO],
-					       0x16, pll, 2))
+		if (adv_smbus_write_i2c_block_data(state, ADV7604_PAGE_IO,
+						   0x16, 2, pll))
 			v4l2_err(sd, "writing to reg 0x16 and 0x17 failed\n");
 
 		/* active video - horizontal timing */
@@ -1049,8 +1027,8 @@ static void adv7604_set_offset(struct v4l2_subdev *sd, bool auto_offset, u16 off
 	offset_buf[3] = offset_c & 0x0ff;
 
 	/* Registers must be written in this order with no i2c access in between */
-	if (regmap_raw_write(state->regmap[ADV7604_PAGE_CP],
-			     0x77, offset_buf, 4))
+	if (adv_smbus_write_i2c_block_data(state, ADV7604_PAGE_CP,
+					   0x77, 4, offset_buf))
 		v4l2_err(sd, "%s: i2c error writing to CP reg 0x77, 0x78, 0x79, 0x7a\n", __func__);
 }
 
@@ -1079,8 +1057,8 @@ static void adv7604_set_gain(struct v4l2_subdev *sd, bool auto_gain, u16 gain_a,
 	gain_buf[3] = ((gain_c & 0x0ff));
 
 	/* Registers must be written in this order with no i2c access in between */
-	if (regmap_raw_write(state->regmap[ADV7604_PAGE_CP],
-			     0x73, gain_buf, 4))
+	if (adv_smbus_write_i2c_block_data(state, ADV7604_PAGE_CP,
+					   0x73, 4, gain_buf))
 		v4l2_err(sd, "%s: i2c error writing to CP reg 0x73, 0x74, 0x75, 0x76\n", __func__);
 }
 
@@ -1291,10 +1269,6 @@ static inline bool no_lock_cp(struct v4l2_subdev *sd)
 	struct adv7604_state *state = to_state(sd);
 
 	if (!adv7604_has_afe(state))
-		return false;
-
-	/* If chip is in free run mode, consider CP locked */
-	if (cp_read(sd, 0xff) & 0x10)
 		return false;
 
 	/* CP has detected a non standard number of lines on the incoming
@@ -1969,17 +1943,6 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 	return 0;
 }
 
-static irqreturn_t adv7604_irq(int irq, void *devid)
-{
-	struct adv7604_state *state = devid;
-	struct v4l2_subdev *sd = &state->sd;
-	bool handled = false;
-
-	adv7604_isr(sd, 0, &handled);
-
-	return IRQ_HANDLED;
-}
-
 static int adv7604_get_edid(struct v4l2_subdev *sd, struct v4l2_edid *edid)
 {
 	struct adv7604_state *state = to_state(sd);
@@ -2224,7 +2187,6 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 	u8 reg_io_0x02 = io_read(sd, 0x02);
 	u8 edid_enabled;
 	u8 cable_det;
-	u8 tmds,tmds_frac;
 
 	static const char * const csc_coeff_sel_rb[16] = {
 		"bypassed", "YPbPr601 -> RGB", "reserved", "YPbPr709 -> RGB",
@@ -2274,20 +2236,6 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 			no_signal_tmds(sd) ? "false" : "true");
 	v4l2_info(sd, "TMDS signal locked: %s\n",
 			no_lock_tmds(sd) ? "false" : "true");
-	if (!no_lock_tmds(sd)) {
-		if (state->info->type == ADV7604) {
-			tmds = hdmi_read(sd, 0x06);
-			tmds_frac = hdmi_read(sd, 0x3b) & 0x03;
-			v4l2_info(sd, "TMDS frequency measured at %u.%02u MHz\n",
-				tmds, tmds_frac/4);
-		} else {
-			tmds_frac = hdmi_read(sd, 0x52);
-			tmds = (hdmi_read(sd, 0x51) << 1) | ((tmds_frac >> 7) & 0x01);
-			tmds_frac = tmds_frac & 0x7F;
-			v4l2_info(sd, "TMDS frequency measured at %u.%02u MHz\n",
-				tmds, tmds_frac/128);
-		}
-	}
 	v4l2_info(sd, "SSPD locked: %s\n", no_lock_sspd(sd) ? "false" : "true");
 	v4l2_info(sd, "STDI locked: %s\n", no_lock_stdi(sd) ? "false" : "true");
 	v4l2_info(sd, "CP locked: %s\n", no_lock_cp(sd) ? "false" : "true");
@@ -2350,13 +2298,8 @@ static int adv7604_log_status(struct v4l2_subdev *sd)
 				audio_sample_packet_detect ? "detected" : "not detected",
 				audio_mute ? "muted" : "enabled");
 		if (audio_pll_locked && audio_sample_packet_detect) {
-			/* Change for ADV7611 to ADV7604 */
-			if (state->info->type == ADV7604)
-				v4l2_info(sd, "Audio format: %s\n",
+			v4l2_info(sd, "Audio format: %s\n",
 					(hdmi_read(sd, 0x07) & 0x20) ? "multi-channel" : "stereo");
-			else
-				v4l2_info(sd, "Audio format: %s\n",
-					(hdmi_read(sd, 0x07) & 0x40) ? "multi-channel" : "stereo");
 		}
 		v4l2_info(sd, "Audio CTS: %u\n", (hdmi_read(sd, 0x5b) << 12) +
 				(hdmi_read(sd, 0x5c) << 8) +
@@ -2449,62 +2392,6 @@ static const struct v4l2_ctrl_config adv7604_ctrl_free_run_color = {
 };
 
 /* ----------------------------------------------------------------------- */
-static int adv7611_core_init(struct v4l2_subdev *sd)
-{
-	struct adv7604_state *state = to_state(sd);
-	const struct adv7604_chip_info *info = state->info;
-	struct adv7604_platform_data *pdata = &state->pdata;
-
-	hdmi_write(sd, 0x48,(pdata->disable_cable_det_rst ? 0x40 : 0));
-
-	disable_input(sd);
-
-	if (pdata->default_input >= 0 &&
-			pdata->default_input < state->source_pad) {
-
-		state->selected_input = pdata->default_input;
-		select_input(sd);
-		enable_input(sd);
-	}
-
-	/* power */
-	io_write(sd, 0x0c, 0x42);   /* Power up part and power down VDP */
-
-	/* video format */
-	io_write_clr_set(sd, 0x02, 0x0f,
-			pdata->alt_gamma << 3 |
-			pdata->op_656_range << 2 |
-			pdata->alt_data_sat << 0);
-	io_write_clr_set(sd, 0x05, 0x0e, pdata->blank_data << 3 |
-			pdata->insert_av_codes << 2 |
-			pdata->replicate_av_codes << 1);
-	adv7604_setup_format(state);
-
-	cp_write(sd, 0x69, 0x10);   /* Enable CP CSC */
-
-	/* VS, HS polarities */
-	io_write(sd, 0x06, 0xa0 | pdata->inv_vs_pol << 2 |
-			pdata->inv_hs_pol << 1 | pdata->inv_llc_pol);
-
-	/* Adjust drive strength */
-	io_write(sd, 0x14, 0x40 | pdata->dr_str_data << 4 |
-			pdata->dr_str_clk << 2 |
-			pdata->dr_str_sync);
-
-	cp_write(sd, 0xba, (pdata->hdmi_free_run_mode << 1) | 0x01); /* HDMI free run */
-	cp_write(sd, 0xf3, 0xdc); /* Low threshold to enter/exit free run mode */
-	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
-					     for digital formats */
-
-	/* interrupts */
-	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
-	io_write(sd, 0x46, 0x98); /* Enable SSPD, STDI and CP unlocked interrupts */
-	io_write(sd, 0x6e, info->fmt_change_digital_mask); /* Enable V_LOCKED and DE_REGEN_LCK interrupts */
-	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
-	info->setup_irqs(sd);
-
-	return v4l2_ctrl_handler_setup(sd->ctrl_handler);
-}
 
 static int adv7604_core_init(struct v4l2_subdev *sd)
 {
@@ -2513,8 +2400,8 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 	struct adv7604_platform_data *pdata = &state->pdata;
 
 	hdmi_write(sd, 0x48,
-				(pdata->disable_pwrdnb ? 0x80 : 0) |
-				(pdata->disable_cable_det_rst ? 0x40 : 0));
+		(pdata->disable_pwrdnb ? 0x80 : 0) |
+		(pdata->disable_cable_det_rst ? 0x40 : 0));
 
 	disable_input(sd);
 
@@ -2559,6 +2446,14 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 				      ADI recommended setting [REF_01, c. 2.3.3] */
 	cp_write(sd, 0xc9, 0x2d); /* use prim_mode and vid_std as free run resolution
 				     for digital formats */
+
+	/* HDMI audio */
+	hdmi_write_clr_set(sd, 0x15, 0x03, 0x03); /* Mute on FIFO over-/underflow [REF_01, c. 1.2.18] */
+	hdmi_write_clr_set(sd, 0x1a, 0x0e, 0x08); /* Wait 1 s before unmute */
+	hdmi_write_clr_set(sd, 0x68, 0x06, 0x06); /* FIFO reset on over-/underflow [REF_01, c. 1.2.19] */
+
+	/* TODO from platform data */
+	afe_write(sd, 0xb5, 0x01);  /* Setting MCLK to 256Fs */
 
 	if (adv7604_has_afe(state)) {
 		afe_write(sd, 0x02, pdata->ain_sel); /* Select analog input muxing mode */
@@ -2718,7 +2613,6 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_EDID) | BIT(ADV7604_PAGE_HDMI) |
 			BIT(ADV7604_PAGE_TEST) | BIT(ADV7604_PAGE_CP) |
 			BIT(ADV7604_PAGE_VDP),
-		.init_core = adv7604_core_init,
 	},
 	[ADV7611] = {
 		.type = ADV7611,
@@ -2748,7 +2642,6 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 			BIT(ADV7604_PAGE_INFOFRAME) | BIT(ADV7604_PAGE_AFE) |
 			BIT(ADV7604_PAGE_REP) |  BIT(ADV7604_PAGE_EDID) |
 			BIT(ADV7604_PAGE_HDMI) | BIT(ADV7604_PAGE_CP),
-		.init_core = adv7611_core_init,
 	},
 };
 
@@ -2799,12 +2692,8 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 		state->pdata.op_656_range = 1;
 	}
 
-#if 0
 	/* Disable the interrupt for now as no DT-based board uses it. */
 	state->pdata.int1_config = ADV7604_INT1_CONFIG_DISABLED;
-#else
-	state->pdata.int1_config = ADV7604_INT1_CONFIG_ACTIVE_LOW;
-#endif
 
 	/* Hardcode the remaining platform data fields. */
 	state->pdata.disable_pwrdnb = 1;
@@ -2818,275 +2707,6 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 	return 0;
 }
 
-static bool adv7611_hdmi_writable(struct device *dev, unsigned int reg)
-{
-
-	switch (reg) {
-	case ADV76XX_HDMI_REGISTER_00:
-	case ADV76XX_HDMI_REGISTER_01:
-	case ADV76XX_HDMI_REGISTER_03:
-	case ADV76XX_HDMI_REGISTER_0D:
-	case ADV76XX_AUDIO_MUTE_SPEED:
-	case ADV76XX_HDMI_REGISTER_10:
-	case ADV76XX_AUDIO_FIFO_ALM_OST_FULL_THRES_HOLD:
-	case ADV76XX_AUDIO_FIFO_ALM_OST_EMPTY_THRE_SHOLD:
-	case ADV76XX_AUDIO_COAST_MASK:
-	case ADV76XX_MUTE_MASK_21_16:
-	case ADV76XX_MUTE_MASK_15_8:
-	case ADV76XX_MUTE_MASK_7_0:
-	case ADV76XX_MUTE_CTRL:
-	case ADV76XX_DEEPCOLOR_FIFO_DEBUG_1:
-	case ADV76XX_REGISTER_1DH:
-	case ADV7611_REGISTER_3CH:
-	case ADV76XX_REGISTER_40H:
-	case ADV76XX_REGISTER_41H:
-	case ADV76XX_REGISTER_47H:
-	case ADV76XX_REGISTER_48H:
-	case ADV7611_REGISTER_4CH:
-	case ADV76XX_HDMI_REGISTER_50:
-	case ADV76XX_FILT_5V_DET_REG:
-	case ADV76XX_REGISTER_5AH:
-	case ADV7611_HPA_DELAY_SEL_3_0:
-	case ADV7611_DSD_MAP_ROT_2_0:
-	case ADV7611_DDC_PAD:
-	case ADV7611_HDMI_REGISTER_02:
-	case ADV76XX_EQ_DYNAMIC_FREQ:
-	case ADV76XX_EQ_DYN1_LF:
-	case ADV76XX_EQ_DYN1_HF:
-	case ADV76XX_EQ_DYN2_LF:
-	case ADV76XX_EQ_DYN2_HF:
-	case ADV76XX_EQ_DYN3_LF:
-	case ADV76XX_EQ_DYN3_HF:
-	case ADV76XX_EQ_DYNAMIC_ENABLE:
-		return true;
-	}
-
-	return false;
-}
-
-/* Default register values for the adv7611 device */
-static const struct reg_default adv7611_hdmi_reg_defaults[] = {
-	{},
-};
-
-static const struct regmap_config adv76xx_snd_regmap[] = {
-	{
-		.name			= "io",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= ADV7611_IO_MAX_REG_OFFSET,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "avlink",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "cec",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "infoframe",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "esdp",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "epp",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "afe",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= ADV76XX_DPLL_MAX_REG_OFFSET,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "rep",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "edid",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-
-	{
-		.name			= "hdmi",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-		.writeable_reg		= adv7611_hdmi_writable,
-
-		.max_register		= ADV76XX_HDMI_MAX_REG_OFFSET,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "test",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "cp",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-	{
-		.name			= "vdp",
-		.reg_bits		= 8,
-		.val_bits		= 8,
-
-		.max_register		= 0xff,
-		.cache_type		= REGCACHE_NONE,
-		.reg_defaults		= adv7611_hdmi_reg_defaults,
-		.num_reg_defaults	= ARRAY_SIZE(adv7611_hdmi_reg_defaults),
-	},
-};
-
-/*
- * Unregister Sound
- */
-static void adv76xx_unregister_snd (struct adv7604_state *state){
-
-	if (state != NULL && state->pdev_snd_codec != NULL){
-		platform_device_unregister(state->pdev_snd_codec);
-	}
-}
-
-static int configure_regmap(struct adv7604_state *state, int region)
-{
-	int err;
-
-	if (!state->i2c_clients[region])
-		return -ENODEV;
-
-	if (!state->regmap[region]) {
-
-		state->regmap[region] =
-			devm_regmap_init_i2c(state->i2c_clients[region],
-					     &adv76xx_snd_regmap[region]);
-
-		if (IS_ERR(state->regmap[region])) {
-			err = PTR_ERR(state->regmap[region]);
-			v4l_err(state->i2c_clients[region],
-					"Error initializing regmap %d with error %d\n",
-					region, err);
-			return -EINVAL;
-		}
-	}
-
-	return 0;
-}
-
-static int configure_regmaps(struct adv7604_state *state)
-{
-	int i, err;
-
-	for (i = 0 ; i < ADV7604_PAGE_MAX; i++) {
-		err = configure_regmap(state, i);
-		if (err && (err != -ENODEV))
-			return err;
-	}
-	return 0;
-}
-
-/* Audio configuration */
-static int adv76xx_configure_snd(struct adv7604_state *state)
-{
-
-	struct i2c_client *client;
-	struct platform_device *pdev;
-	char platform_name[32];
-
-	/* Check i2c-client */
-	if (state->i2c_clients[ADV7604_PAGE_IO] == NULL)
-		return -ENODEV;
-
-	client = state->i2c_clients[ADV7604_PAGE_IO];
-
-	dev_info(&client->dev, "Configuring sound system\n");
-
-	/* Create platform name depending on the i2c client */
-	sprintf(platform_name, "%s-asoc-codec", client->name);
-
-	/* Register the platform device */
-	pdev = platform_device_register_resndata(&client->dev,
-					platform_name,
-					PLATFORM_DEVID_NONE,
-					NULL, 0,
-					state, sizeof(struct adv7604_state));
-
-	if (IS_ERR(pdev)) {
-		dev_err(&client->dev,
-			"Fail registering platform %s\n",
-			platform_name);
-		return -ENODEV;
-	}
-
-	return 0;
-}
-
 static int adv7604_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -3096,7 +2716,7 @@ static int adv7604_probe(struct i2c_client *client,
 	struct v4l2_ctrl_handler *hdl;
 	struct v4l2_subdev *sd;
 	unsigned int i;
-	unsigned int val, val2;
+	u16 val;
 	int err;
 
 	/* Check if the adapter supports the needed features */
@@ -3153,7 +2773,6 @@ static int adv7604_probe(struct i2c_client *client,
 	state->timings = cea640x480;
 	state->format = adv7604_format_info(state, MEDIA_BUS_FMT_YUYV8_2X8);
 
-
 	sd = &state->sd;
 	v4l2_i2c_subdev_init(sd, client, &adv7604_ops);
 	snprintf(sd->name, sizeof(sd->name), "%s %d-%04x",
@@ -3161,32 +2780,22 @@ static int adv7604_probe(struct i2c_client *client,
 		client->addr);
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
 
-	/* Configure IO Regmap region */
-	err = configure_regmap(state, ADV7604_PAGE_IO);
-
-	if (err){
-		v4l2_info(sd, "Error configuring IO regmap region \n");
-		return -ENODEV;
-	}
-
 	/*
 	 * Verify that the chip is present. On ADV7604 the RD_INFO register only
 	 * identifies the revision, while on ADV7611 it identifies the model as
 	 * well. Use the HDMI slave address on ADV7604 and RD_INFO on ADV7611.
 	 */
 	if (state->info->type == ADV7604) {
-		regmap_read(state->regmap[ADV7604_PAGE_IO], 0xfb, &val);
+		val = adv_smbus_read_byte_data_check(client, 0xfb, false);
 		if (val != 0x68) {
 			v4l2_info(sd, "not an adv7604 on address 0x%x\n",
 					client->addr << 1);
 			return -ENODEV;
 		}
 	} else {
-		regmap_read(state->regmap[ADV7604_PAGE_IO], ADV7611_RD_INFO, &val);
-		val2 = val << 8;
-		regmap_read(state->regmap[ADV7604_PAGE_IO], ADV7611_RD_INFO_2, &val);
-		val2 |= val;
-		if (val2 != 0x2051) {
+		val = (adv_smbus_read_byte_data_check(client, 0xea, false) << 8)
+		    | (adv_smbus_read_byte_data_check(client, 0xeb, false) << 0);
+		if (val != 0x2051) {
 			v4l2_info(sd, "not an adv7611 on address 0x%x\n",
 					client->addr << 1);
 			return -ENODEV;
@@ -3276,40 +2885,18 @@ static int adv7604_probe(struct i2c_client *client,
 	if (err)
 		goto err_work_queues;
 
-	/* Configure regmaps */
-	err = configure_regmaps(state);
+	err = adv7604_core_init(sd);
 	if (err)
 		goto err_entity;
-
-	err = state->info->init_core(sd);
-	if (err)
-		goto err_entity;
-
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 			client->addr << 1, client->adapter->name);
 
-	err = adv76xx_configure_snd(state);
-
+	err = v4l2_async_register_subdev(sd);
 	if (err)
 		goto err_entity;
 
-	state->irq = client->irq;
-	if (client->irq) {
-		err = request_threaded_irq(client->irq, NULL, adv7604_irq,
-					   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
-					   KBUILD_MODNAME, state);
-		if (err)
-			goto err_entity;
-	}
-
-	err = v4l2_async_register_subdev(sd);
-	if (err)
-		goto err_irq;
-
 	return 0;
-err_irq:
-	if (client->irq)
-		free_irq(client->irq, state);
+
 err_entity:
 	media_entity_cleanup(&sd->entity);
 err_work_queues:
@@ -3329,9 +2916,6 @@ static int adv7604_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7604_state *state = to_state(sd);
 
-	if (client->irq)
-		free_irq(client->irq, state);
-	adv76xx_unregister_snd(state);
 	cancel_delayed_work(&state->delayed_work_enable_hotplug);
 	destroy_workqueue(state->work_queues);
 	v4l2_async_unregister_subdev(sd);

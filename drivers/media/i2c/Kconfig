@@ -197,7 +197,6 @@ config VIDEO_ADV7183
 config VIDEO_ADV7604
 	tristate "Analog Devices ADV7604 decoder"
 	depends on VIDEO_V4L2 && I2C && VIDEO_V4L2_SUBDEV_API && MEDIA_CONTROLLER
-	select SND_SOC_ADV76XX
 	---help---
 	  Support for the Analog Devices ADV7604 video decoder.
 
