@@ -144,6 +144,7 @@ struct adv7604_state {
 	struct v4l2_subdev sd;
 	struct media_pad pads[ADV7604_PAD_MAX];
 	unsigned int source_pad;
+	int irq;
 
 	struct v4l2_ctrl_handler hdl;
 
@@ -1943,6 +1944,17 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 	return 0;
 }
 
+static irqreturn_t adv7604_irq(int irq, void *devid)
+{
+	struct adv7604_state *state = devid;
+	struct v4l2_subdev *sd = &state->sd;
+	bool handled = false;
+
+	adv7604_isr(sd, 0, &handled);
+
+	return IRQ_HANDLED;
+}
+
 static int adv7604_get_edid(struct v4l2_subdev *sd, struct v4l2_edid *edid)
 {
 	struct adv7604_state *state = to_state(sd);
@@ -2692,8 +2704,12 @@ static int adv7604_parse_dt(struct adv7604_state *state)
 		state->pdata.op_656_range = 1;
 	}
 
+#if 0
 	/* Disable the interrupt for now as no DT-based board uses it. */
 	state->pdata.int1_config = ADV7604_INT1_CONFIG_DISABLED;
+#else
+	state->pdata.int1_config = ADV7604_INT1_CONFIG_ACTIVE_LOW;
+#endif
 
 	/* Hardcode the remaining platform data fields. */
 	state->pdata.disable_pwrdnb = 1;
@@ -2891,12 +2907,23 @@ static int adv7604_probe(struct i2c_client *client,
 	v4l2_info(sd, "%s found @ 0x%x (%s)\n", client->name,
 			client->addr << 1, client->adapter->name);
 
+	state->irq = client->irq;
+	if (client->irq) {
+		err = request_threaded_irq(client->irq, NULL, adv7604_irq,
+					   IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+					   KBUILD_MODNAME, state);
+		if (err)
+			goto err_entity;
+	}
+
 	err = v4l2_async_register_subdev(sd);
 	if (err)
-		goto err_entity;
+		goto err_irq;
 
 	return 0;
-
+err_irq:
+	if (client->irq)
+		free_irq(client->irq, state);
 err_entity:
 	media_entity_cleanup(&sd->entity);
 err_work_queues:
@@ -2916,6 +2943,8 @@ static int adv7604_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct adv7604_state *state = to_state(sd);
 
+	if (client->irq)
+		free_irq(client->irq, state);
 	cancel_delayed_work(&state->delayed_work_enable_hotplug);
 	destroy_workqueue(state->work_queues);
 	v4l2_async_unregister_subdev(sd);
