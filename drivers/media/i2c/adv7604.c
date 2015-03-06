@@ -1831,8 +1831,6 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 			"%s: fmt_change = 0x%x, fmt_change_digital = 0x%x\n",
 			__func__, fmt_change, fmt_change_digital);
 
-		v4l2_subdev_notify(sd, ADV7604_FMT_CHANGE, NULL);
-
 		if (handled)
 			*handled = true;
 	}
@@ -1864,6 +1862,8 @@ static irqreturn_t adv7604_irq(int irq, void *devid)
 	bool handled = false;
 
 	adv7604_isr(sd, 0, &handled);
+	if (handled)
+		v4l2_subdev_notify(sd, ADV7604_FMT_CHANGE, NULL);
 
 	return IRQ_HANDLED;
 }
