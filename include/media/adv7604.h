@@ -22,6 +22,10 @@
 #define _ADV7604_
 
 #include <linux/types.h>
+#include <media/v4l2-ctrls.h>
+#include <media/v4l2-device.h>
+#include <media/v4l2-dv-timings.h>
+#include <media/v4l2-of.h>
 
 /* IO Registers definition */
 enum adv7611_io_reg {
@@ -288,6 +292,87 @@ enum adv7604_pad {
 	ADV7604_PAD_SOURCE = 6,
 	ADV7611_PAD_SOURCE = 1,
 	ADV7604_PAD_MAX = 7,
+};
+
+enum adv7604_type {
+	ADV7604,
+	ADV7611,
+};
+
+struct adv7604_chip_info {
+	enum adv7604_type type;
+
+	bool has_afe;
+	unsigned int max_port;
+	unsigned int num_dv_ports;
+
+	unsigned int edid_enable_reg;
+	unsigned int edid_status_reg;
+	unsigned int lcf_reg;
+
+	unsigned int cable_det_mask;
+	unsigned int tdms_lock_mask;
+	unsigned int fmt_change_digital_mask;
+	unsigned int cp_csc;
+
+	const struct adv7604_format_info *formats;
+	unsigned int nformats;
+
+	void (*set_termination)(struct v4l2_subdev *sd, bool enable);
+	void (*setup_irqs)(struct v4l2_subdev *sd);
+	unsigned int (*read_hdmi_pixelclock)(struct v4l2_subdev *sd);
+	unsigned int (*read_cable_det)(struct v4l2_subdev *sd);
+
+	/* 0 = AFE, 1 = HDMI */
+	const struct adv7604_reg_seq *recommended_settings[2];
+	unsigned int num_recommended_settings[2];
+
+	unsigned long page_mask;
+};
+
+struct adv7604_state {
+	const struct adv7604_chip_info *info;
+	struct adv7604_platform_data pdata;
+	struct platform_device *pdev_snd_codec;
+
+	struct gpio_desc *hpd_gpio[4];
+
+	struct v4l2_subdev sd;
+	struct media_pad pads[ADV7604_PAD_MAX];
+	unsigned int source_pad;
+	int irq;
+
+	struct v4l2_ctrl_handler hdl;
+
+	enum adv7604_pad selected_input;
+
+	struct v4l2_dv_timings timings;
+	const struct adv7604_format_info *format;
+
+	struct {
+		u8 edid[256];
+		u32 present;
+		unsigned blocks;
+	} edid;
+	u16 spa_port_a[2];
+	struct v4l2_fract aspect_ratio;
+	u32 rgb_quantization_range;
+	struct workqueue_struct *work_queues;
+	struct delayed_work delayed_work_enable_hotplug;
+	bool restart_stdi_once;
+
+	/* i2c clients */
+	struct i2c_client *i2c_clients[ADV7604_PAGE_MAX];
+
+	/* Regmaps */
+	struct regmap *regmap[ADV7604_PAGE_MAX];
+
+	/* controls */
+	struct v4l2_ctrl *detect_tx_5v_ctrl;
+	struct v4l2_ctrl *analog_sampling_phase_ctrl;
+	struct v4l2_ctrl *free_run_color_manual_ctrl;
+	struct v4l2_ctrl *free_run_color_ctrl;
+	struct v4l2_ctrl *rgb_quantization_range_ctrl;
 };
 
 #define V4L2_CID_ADV_RX_ANALOG_SAMPLING_PHASE	(V4L2_CID_DV_CLASS_BASE + 0x1000)
