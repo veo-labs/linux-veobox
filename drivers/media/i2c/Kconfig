@@ -717,6 +717,16 @@ config VIDEO_VBX3_FPGA_VSWITCH
 
 	 To compile this driver as a module, choose M here: the
 	 module will be called vbx3_fpga_vswitch.
+
+config VIDEO_VBX_SDI
+	tristate "Vodalys SDI PHY driver"
+	depends on VIDEO_VBX3_FPGA && VIDEO_VBX3_FPGA_VSWITCH
+	---help---
+	 Support for the Vodalys SDI PHY
+
+	 To compile this driver as a module, choose M here: the
+	 module will be called vbx3_sdi.
+
 endmenu
 
 menu "Sensors used on soc_camera driver"

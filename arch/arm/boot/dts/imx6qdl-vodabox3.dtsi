@@ -217,8 +217,8 @@
 			};
 			port@1 {
 				reg = <1>;
-/*				sdi0_out0: endpoint {
-					remote-endpoint = <&sdi0_fpga_in>;
+/*				lmh0_out0: endpoint {
+					remote-endpoint = <&sdi0_in>;
 				};*/
 			};
 			port@2 {
@@ -238,8 +238,8 @@
 			};
 			port@1 {
 				reg = <1>;
-/*				sdi1_out0: endpoint {
-					remote-endpoint = <&sdi1_fpga_in>;
+/*				lmh1_out0: endpoint {
+					remote-endpoint = <&sdi1_in>;
 				};*/
 			};
 			port@2 {
@@ -344,6 +344,50 @@
 		reg = <0x51>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		vbx_sdi@0 {
+			compatible = "vbx,sdi";
+			reg = <0>;
+			status = "okay";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+/*					sdi0_in: endpoint {
+						remote-endpoint = <&lmh0_out0>;
+					};*/
+				};
+				port@1 {
+					reg = <1>;
+					sdi0_out: endpoint {
+						bus-width = <16>;
+						remote-endpoint = <&sdi0_fpga_in>;
+					};
+				};
+			};
+		};
+		vbx_sdi@1 {
+			compatible = "vbx,sdi";
+			reg = <1>;
+			status = "okay";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+/*					sdi1_in: endpoint {
+						remote-endpoint = <&lmh1_out0>;
+					};*/
+				};
+				port@1 {
+					reg = <1>;
+					sdi1_out: endpoint {
+						bus-width = <16>;
+						remote-endpoint = <&sdi1_fpga_in>;
+					};
+				};
+			};
+		};
 		vbx_video_switch@0 {
 			compatible = "vbx,vswitch";
 			reg = <0>;
@@ -353,9 +397,9 @@
 				#size-cells = <0>;
 				port@0 {
 					reg = <0>;
-					/*sdi0_fpga_in: endpoint {
-						remote-endpoint = <&sdi0_out0>;
-					};*/
+					sdi0_fpga_in: endpoint {
+						remote-endpoint = <&sdi0_out>;
+					};
 				};
 				port@1 {
 					reg = <1>;
@@ -381,9 +425,9 @@
 				#size-cells = <0>;
 				port@0 {
 					reg = <0>;
-					/*sdi1_fpga_in: endpoint {
-						remote-endpoint = <&sdi1_out0>;
-					};*/
+					sdi1_fpga_in: endpoint {
+						remote-endpoint = <&sdi1_out>;
+					};
 				};
 				port@1 {
 					reg = <1>;
@@ -572,6 +616,10 @@
 				MX6QDL_PAD_NANDF_D1__GPIO2_IO01		0x80000000	/* ADV7604 Hotplug */
 				MX6QDL_PAD_SD1_CLK__GPIO1_IO20		0x80000000	/* ADV7611 reset */
 				MX6QDL_PAD_SD1_CMD__GPIO1_IO18		0x80000000	/* ADV7604 reset */
+				MX6QDL_PAD_DISP0_DAT3__GPIO4_IO24	0x80000000 /* CDCM6208 */
+				MX6QDL_PAD_DISP0_DAT4__GPIO4_IO25	0x80000000 /* LMH0395 */
+				MX6QDL_PAD_DISP0_DAT7__GPIO4_IO28	0x80000000 /* LMH0395 */
+				MX6QDL_PAD_DISP0_DAT8__GPIO4_IO29	0x80000000 /* FPGA */
 			>;
 		};
 
@@ -652,10 +700,6 @@
 				MX6QDL_PAD_DISP0_DAT2__ECSPI3_MISO	0x100b1
 				MX6QDL_PAD_DISP0_DAT1__ECSPI3_MOSI	0x100b1
 				MX6QDL_PAD_DISP0_DAT0__ECSPI3_SCLK	0x100b1
-				MX6QDL_PAD_DISP0_DAT3__GPIO4_IO24 0x80000000 /* CDCM6208 */
-				MX6QDL_PAD_DISP0_DAT4__GPIO4_IO25 0x80000000 /* LMH0395 */
-				MX6QDL_PAD_DISP0_DAT7__GPIO4_IO28 0x80000000 /* LMH0395 */
-				MX6QDL_PAD_DISP0_DAT8__GPIO4_IO29 0x80000000 /* FPGA */
 			>;
 		};
 
