@@ -1830,7 +1830,7 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 		v4l2_dbg(1, debug, sd,
 			"%s: fmt_change = 0x%x, fmt_change_digital = 0x%x\n",
 			__func__, fmt_change, fmt_change_digital);
-
+		status |= V4L2_EVENT_SRC_CH_RESOLUTION;
 		if (handled)
 			*handled = true;
 	}
@@ -1839,6 +1839,7 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 		v4l2_dbg(1, debug, sd, "%s: irq %s mode\n", __func__,
 			(io_read(sd, 0x6a) & 0x01) ? "HDMI" : "DVI");
 		set_rgb_quantization_range(sd);
+		status |= V4L2_EVENT_SRC_CH_STATUS;
 		if (handled)
 			*handled = true;
 	}
@@ -1849,6 +1850,7 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 		v4l2_dbg(1, debug, sd, "%s: tx_5v: 0x%x\n", __func__, tx_5v);
 		io_write(sd, 0x71, tx_5v);
 		adv7604_s_detect_tx_5v_ctrl(sd);
+		status |= V4L2_EVENT_SRC_CH_STATUS;
 		if (handled)
 			*handled = true;
 	}
@@ -1860,10 +1862,15 @@ static irqreturn_t adv7604_irq(int irq, void *devid)
 	struct adv7604_state *state = devid;
 	struct v4l2_subdev *sd = &state->sd;
 	bool handled = false;
+	struct v4l2_event events = {
+		.type = V4L2_EVENT_SOURCE_CHANGE,
+		.u.src_change.changes = 0,
+	};
 
-	adv7604_isr(sd, 0, &handled);
-	if (handled)
-		v4l2_subdev_notify(sd, V4L2_DEVICE_NOTIFY_EVENT, NULL);
+	adv7604_isr(sd, events.u.src_change.changes, &handled);
+	if (handled) {
+		v4l2_subdev_notify(sd, V4L2_DEVICE_NOTIFY_EVENT, &events);
+	}
 
 	return IRQ_HANDLED;
 }
