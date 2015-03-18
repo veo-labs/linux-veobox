@@ -48,6 +48,7 @@ struct vbx_vswitch_state {
 	struct v4l2_subdev sd;
 	struct media_pad pads[VBX_VSWITCH_PADS_NUM];
 	struct regmap *regmap;
+	struct v4l2_dv_timings *timings;
 	unsigned int instance;
 };
 
@@ -263,7 +264,16 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 
 	return 0;
 }
+#if 0
+static int vbx_vswitch_g_dv_timings(struct v4l2_subdev *sd,
+		struct v4l2_dv_timings *timings)
+{
+	struct vbx_vswitch_state *state = to_state(sd);
 
+	*timings = state->timings;
+	return 0;
+}
+#endif
 static const struct v4l2_subdev_core_ops vbx_vswitch_core_ops = {
 	.log_status = vbx_vswitch_log_status,
 #ifdef CONFIG_VIDEO_ADV_DEBUG
@@ -272,7 +282,13 @@ static const struct v4l2_subdev_core_ops vbx_vswitch_core_ops = {
 #endif
 
 };
-
+#if 0
+static const struct v4l2_subdev_video_ops adv7604_video_ops = {
+	.s_dv_timings = vbx_vswitch_s_dv_timings,
+	.g_dv_timings = vbx_vswitch_g_dv_timings,
+	.query_dv_timings = vbx_vswitch_query_dv_timings,
+};
+#endif
 static const struct v4l2_subdev_ops vbx_vswitch_ops = {
 	.core = &vbx_vswitch_core_ops,
 };
@@ -365,8 +381,11 @@ static int vbx_vswitch_probe(struct platform_device *pdev)
 
 static int vbx_vswitch_remove(struct platform_device *pdev)
 {
-/*	v4l2_async_unregister_subdev(sd);
-	media_entity_cleanup(&sd->entity);*/
+	struct v4l2_subdev *sd = platform_get_drvdata(pdev);
+
+	v4l2_async_unregister_subdev(sd);
+	media_entity_cleanup(&sd->entity);
+
 	return 0;
 }
 
