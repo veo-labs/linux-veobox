@@ -897,16 +897,20 @@ static int mx6cam_s_ctrl(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_HFLIP:
-		hflip = (ctrl->val == 1);
+		if (ctrl->val)
+			hflip = (ctrl->val == 1);
 		break;
 	case V4L2_CID_VFLIP:
-		vflip = (ctrl->val == 1);
+		if (ctrl->val)
+			vflip = (ctrl->val == 1);
 		break;
 	case V4L2_CID_ROTATE:
-		rotation = ctrl->val;
+		if (ctrl->val)
+			rotation = ctrl->val;
 		break;
 	case V4L2_CID_IMX6_MOTION:
-		motion = ctrl->val;
+		if (ctrl->val)
+			motion = ctrl->val;
 		return mx6cam_set_motion(dev, motion);
 	default:
 		v4l2_err(&dev->v4l2_dev, "Invalid control\n");
@@ -1720,10 +1724,10 @@ static int vidioc_s_dv_timings(struct file *file, void *priv_fh,
 	update_format_from_timings(dev, timings);
 
 	sd_fmt.format.code = dev->subdev_fmt.code;
-	if (strcmp(dev->ep->sd->name, "adv7611 1-004c") == 0)
-		sd_fmt.pad = 1;
-	else
+	if (strcmp(dev->ep->sd->name, "adv7604 1-0020") == 0)
 		sd_fmt.pad = 6;
+	else
+		sd_fmt.pad = 1;
 
 	ret = v4l2_subdev_call(dev->ep->sd, pad, set_fmt, NULL, &sd_fmt);
 	return ret;
