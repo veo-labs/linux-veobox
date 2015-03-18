@@ -81,6 +81,7 @@ static int lmh0395_spi_write(struct spi_device *spi, u8 reg, u8 data)
 		dev_err(&spi->dev, "SPI write failed : %d\n", err);
 		return err;
 	}
+	dev_dbg(&spi->dev, "Wrote register %d : %02x\n", reg, data);
 
 	return err;
 }
@@ -105,6 +106,8 @@ static int lmh0395_spi_read(struct spi_device *spi, u8 reg, unsigned long *data)
 		dev_err(&spi->dev, "SPI failed to read reg : %d\n", err);
 		return err;
 	}
+
+	dev_dbg(&spi->dev, "Read register %d : [%02x,%02x]\n", reg, read_data[0], read_data[1]);
 	/* The first 8 bits is the address used, drop it */
 	*data = read_data[1];
 
@@ -321,6 +324,11 @@ static int lmh0395_probe(struct spi_device *spi)
 	if (err < 0)
 		return err;
 
+	if (device_id == 0xff) {
+		dev_dbg(&spi->dev, "SPI bus not ready, deferring probe\n");
+		return -EPROBE_DEFER;
+	}
+
 	for (i = 0 ; i < ARRAY_SIZE(lmh0395_dev) ; i++) {
 		if (device_id == lmh0395_dev[i].dev_id)
 			break;
@@ -345,7 +353,7 @@ static int lmh0395_probe(struct spi_device *spi)
 		spi->master->bus_num);
 
 	/* Default is no output */
-	lmh0395_set_output_type(sd, LMH0395_OUTPUT_TYPE_NONE);
+	lmh0395_set_output_type(sd, LMH0395_OUTPUT_TYPE_BOTH);
 
 	if (spi->dev.of_node) {
 		struct device_node *n = NULL;
