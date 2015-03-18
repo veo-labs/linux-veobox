@@ -1863,7 +1863,7 @@ static irqreturn_t adv7604_irq(int irq, void *devid)
 
 	adv7604_isr(sd, 0, &handled);
 	if (handled)
-		v4l2_subdev_notify(sd, ADV7604_FMT_CHANGE, NULL);
+		v4l2_subdev_notify(sd, V4L2_DEVICE_NOTIFY_EVENT, NULL);
 
 	return IRQ_HANDLED;
 }
