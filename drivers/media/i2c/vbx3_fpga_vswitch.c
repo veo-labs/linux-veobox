@@ -202,6 +202,10 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 	struct vbx_vswitch_state *state = to_state(sd);
 	struct media_link *link;
 	unsigned int value, reg;
+	struct v4l2_event events = {
+		.type = V4L2_EVENT_SOURCE_CHANGE,
+		.u.src_change.changes = V4L2_EVENT_SRC_CH_STATUS,
+	};
 
 	if (!flags) {
 		dev_dbg(sd->dev, "Deactivating link from %s to %s\n",
@@ -262,6 +266,7 @@ static int vbx3_fpga_link_setup(struct media_entity *entity,
 		return -EINVAL;
 	}
 
+	v4l2_subdev_notify(sd, V4L2_DEVICE_NOTIFY_EVENT, &events);
 	return 0;
 }
 #if 0
