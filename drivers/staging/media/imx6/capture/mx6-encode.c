@@ -175,9 +175,8 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 		 * Choose the direct CSI-->SMFC-->MEM channel corresponding
 		 * to the IPU and CSI IDs.
 		 */
-		csi_ch_num = IPUV3_CHANNEL_CSI0 +
-			(ipu_get_num(dev->ipu) << 1) + csi_id;
-		v4l2_err(&priv->sd, "CSI channel %d on IPU %d\n", csi_id, ipu_get_num(dev->ipu) << 1);
+		csi_ch_num = IPUV3_CHANNEL_CSI0;
+		v4l2_err(&priv->sd, "CSI channel %d on IPU %d\n", csi_id, ipu_get_num(dev->ipu) + 1);
 		priv->smfc = ipu_smfc_get(dev->ipu, csi_ch_num);
 		if (IS_ERR(priv->smfc)) {
 			v4l2_err(&priv->sd, "failed to get SMFC\n");
@@ -251,6 +250,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 		priv->active_frame[priv->buf_num] = frame;
 	} else {
+		dev_dbg(dev->dev, "Next buffer will be dropped\n");
 		phys = priv->underrun_buf.phys;
 		priv->active_frame[priv->buf_num] = NULL;
 	}
