@@ -61,6 +61,7 @@ struct encoder_priv {
 
 	bool last_eof;  /* waiting for last EOF at encoder off */
 	struct completion last_eof_comp;
+	bool nfb4eof;
 };
 
 /*
@@ -223,7 +224,10 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 		frame->vb.v4l2_buf.sequence = dev->sequence++;
 		state = dev->signal_locked ?
 			VB2_BUF_STATE_DONE : VB2_BUF_STATE_ERROR;
-//		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", frame->vb.v4l2_buf.sequence, dev->signal_locked ? "DONE" : "ERROR");
+		if (state == VB2_BUF_STATE_DONE)
+			state = priv->nfb4eof ?
+				VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE;
+//		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", frame->vb.v4l2_buf.sequence, state == VB2_BUF_STATE_DONE ? "DONE" : "ERROR");
 		vb2_buffer_done(&frame->vb, state);
 	}
 
@@ -237,6 +241,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 	/* bump the EOF timeout timer */
 	mod_timer(&priv->eof_timeout_timer,
 		  jiffies + msecs_to_jiffies(MX6CAM_EOF_TIMEOUT));
+	priv->nfb4eof = false;
 
 	if (!list_empty(&dev->buf_list)) {
 		frame = list_entry(dev->buf_list.next,
@@ -291,6 +296,7 @@ static irqreturn_t encoder_nfb4eof_interrupt(int irq, void *dev_id)
 	if (!dev->using_ic)
 		v4l2_subdev_notify(&priv->sd, MX6CAM_NFB4EOF_NOTIFY, NULL);
 #endif
+	priv->nfb4eof = true;
 	return IRQ_HANDLED;
 }
 #endif
@@ -663,6 +669,7 @@ static int encoder_start(struct encoder_priv *priv)
 	/* start the EOF timeout timer */
 	mod_timer(&priv->eof_timeout_timer,
 		  jiffies + msecs_to_jiffies(MX6CAM_EOF_TIMEOUT));
+	priv->nfb4eof = false;
 
 	return 0;
 
