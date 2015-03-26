@@ -116,6 +116,7 @@ struct m2mx6_q_data {
 	unsigned int    stride;
 	unsigned int    rot_stride;
 	unsigned int    sizeimage;
+	unsigned int    colorspace;
 	struct m2mx6_pixfmt *fmt;
 
 	dma_addr_t      phys_start;
@@ -1331,8 +1332,7 @@ static int vidioc_try_fmt_vid_out(struct file *file, void *priv,
 			 f->fmt.pix.pixelformat);
 		return -EINVAL;
 	}
-	if (!f->fmt.pix.colorspace)
-		f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
+	f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
 
 	return m2mx6_try_fmt(ctx, f, fmt);
 }
@@ -1368,6 +1368,7 @@ static int m2mx6_s_fmt(struct m2mx6_ctx *ctx, struct v4l2_format *f)
 	q_data->height		= f->fmt.pix.height;
 	q_data->bytesperline    = f->fmt.pix.bytesperline;
 	q_data->sizeimage	= f->fmt.pix.sizeimage;
+	q_data->colorspace	= f->fmt.pix.colorspace;
 	if (q_data->fmt->y_depth) {
 		q_data->stride  = (q_data->fmt->y_depth * q_data->width) >> 3;
 		q_data->rot_stride =
