@@ -183,7 +183,7 @@ static int sdi2dv_timings(struct v4l2_subdev *sd, struct v4l2_dv_timings *timing
 	u32 theo_fps;
 	int htot, vtot;
 
-	if ((ret = vbx_sdi_get_formats(sd, &sdifmt) < 0))
+	if ((ret = vbx_sdi_get_formats(sd, &sdifmt)) < 0)
 		return ret;
 
 	for (i = 0 ; vbx_sdi_timings[i].bt.height ; i++) {
@@ -467,7 +467,6 @@ static void vbx_sdi_delayed_work_poll_signal(struct work_struct *work)
 		.u.src_change.changes = 0,
 	};
 	struct v4l2_dv_timings	timings;
-	int err = 0;
 
 	if (state->status != status) {
 		v4l2_dbg(1, debug, sd, "%s: status changed : %s -> %s\n", __func__,
@@ -476,9 +475,8 @@ static void vbx_sdi_delayed_work_poll_signal(struct work_struct *work)
 		state->status = status;
 		events.u.src_change.changes |= V4L2_EVENT_SRC_CH_STATUS;
 	}
-	err = vbx_sdi_query_dv_timings(sd, &timings);
-	if (err)
-		goto finish;
+	vbx_sdi_query_dv_timings(sd, &timings);
+
 	if (!v4l2_match_dv_timings(&state->detected_timings, &timings, 0)) {
 		v4l2_dbg(1, debug, sd, "%s: resolution changed\n", __func__);
 		if (debug > 1) {
@@ -494,7 +492,6 @@ static void vbx_sdi_delayed_work_poll_signal(struct work_struct *work)
 	if (events.u.src_change.changes)
 		v4l2_subdev_notify(sd, V4L2_DEVICE_NOTIFY_EVENT, &events);
 
-finish:
 	/* Re-enable work queue */
 	queue_delayed_work(state->work_queues,
 		&state->delayed_work_poll_signal, state->polling);
