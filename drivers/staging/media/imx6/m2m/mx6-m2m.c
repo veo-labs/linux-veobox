@@ -40,6 +40,11 @@ static int instrument;
 module_param(instrument, int, 0);
 MODULE_PARM_DESC(instrument, "1 = enable conversion time measurement");
 
+static int scaler_num_buffers = 4;
+module_param(scaler_num_buffers, int, 0644);
+MODULE_PARM_DESC(scaler_num_buffers,
+		 "Number of buffers to allocate per queue (default: 4)");
+
 #define MIN_W		128
 #define MIN_H		128
 #define MAX_W		4096
@@ -1522,6 +1527,9 @@ static int m2mx6_queue_setup(struct vb2_queue *vq,
 
 	size = q_data->width * q_data->height * q_data->fmt->depth >> 3;
 
+	/* Allocate at least 4 buffers per queue */
+	if (count < scaler_num_buffers)
+		count = scaler_num_buffers;
 	while (size * count > MEM2MEM_VID_MEM_LIMIT)
 		count--;
 
