@@ -1809,7 +1809,7 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 	const u8 irq_reg_0x70 = io_read(sd, 0x70);
 	u8 fmt_change_digital;
 	u8 fmt_change;
-	u8 tx_5v;
+	u8 tx_5v = irq_reg_0x70 & info->cable_det_mask;
 
 	if (irq_reg_0x43)
 		io_write(sd, 0x44, irq_reg_0x43);
@@ -1818,7 +1818,11 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 	if (irq_reg_0x6b)
 		io_write(sd, 0x6c, irq_reg_0x6b);
 
-	v4l2_dbg(2, debug, sd, "%s: ", __func__);
+	v4l2_dbg(2, debug, sd, "%s: with 0x43: 0x%x, 0x6b: 0x%x, 0x70: 0x%x",
+		 __func__,
+		 irq_reg_0x43,
+		 irq_reg_0x6b,
+		 irq_reg_0x70);
 
 	/* format change */
 	fmt_change = irq_reg_0x43 & 0x98;
@@ -1845,7 +1849,6 @@ static int adv7604_isr(struct v4l2_subdev *sd, u32 status, bool *handled)
 	}
 
 	/* tx 5v detect */
-	tx_5v = io_read(sd, 0x70) & info->cable_det_mask;
 	if (tx_5v) {
 		v4l2_dbg(1, debug, sd, "%s: tx_5v: 0x%x\n", __func__, tx_5v);
 		io_write(sd, 0x71, tx_5v);
@@ -2423,10 +2426,6 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 	}
 
 	/* interrupts */
-	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
-	io_write(sd, 0x46, 0x98); /* Enable SSPD, STDI and CP unlocked interrupts */
-	io_write(sd, 0x6e, info->fmt_change_digital_mask); /* Enable V_LOCKED and DE_REGEN_LCK interrupts */
-	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
 	info->setup_irqs(sd);
 
 	return v4l2_ctrl_handler_setup(sd->ctrl_handler);
@@ -2434,12 +2433,27 @@ static int adv7604_core_init(struct v4l2_subdev *sd)
 
 static void adv7604_setup_irqs(struct v4l2_subdev *sd)
 {
-	io_write(sd, 0x41, 0xd7); /* STDI irq for any change, disable INT2 */
+	struct adv7604_state *state = to_state(sd);
+	const struct adv7604_chip_info *info = state->info;
+	struct adv7604_platform_data *pdata = &state->pdata;
+
+	io_write(sd, 0x40, 0xc0 | pdata->int1_config); /* Configure INT1 */
+	io_write(sd, 0x41, 0xc7); /* STDI irq for LOW->HIGH changes, disable INT2 */
+	io_write(sd, 0x46, 0x10); /* STDI interrupts */
+	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
 }
 
 static void adv7611_setup_irqs(struct v4l2_subdev *sd)
 {
-	io_write(sd, 0x41, 0xd0); /* STDI irq for any change, disable INT2 */
+	struct adv7604_state *state = to_state(sd);
+	const struct adv7604_chip_info *info = state->info;
+	struct adv7604_platform_data *pdata = &state->pdata;
+
+	io_write(sd, 0x40, 0xe0 | pdata->int1_config); /* Configure INT1 */
+	io_write(sd, 0x41, 0xe0); /* STDI irq for LOW->HIGH changes, disable INT2 */
+	io_write(sd, 0x46, 0x10); /* STDI interrupts*/
+	io_write(sd, 0x73, info->cable_det_mask); /* Enable cable detection (+5v) interrupts */
+
 }
 
 static void adv7604_unregister_clients(struct adv7604_state *state)
@@ -2552,7 +2566,7 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 		.lcf_reg = 0xb3,
 		.tdms_lock_mask = 0xe0,
 		.cable_det_mask = 0x1e,
-		.fmt_change_digital_mask = 0xc1,
+		.fmt_change_digital_mask = 0x1e,
 		.cp_csc = 0xfc,
 		.formats = adv7604_formats,
 		.nformats = ARRAY_SIZE(adv7604_formats),
@@ -2584,9 +2598,9 @@ static const struct adv7604_chip_info adv7604_chip_info[] = {
 		.edid_enable_reg = 0x74,
 		.edid_status_reg = 0x76,
 		.lcf_reg = 0xa3,
-		.tdms_lock_mask = 0x43,
+		.tdms_lock_mask = 0x40,
 		.cable_det_mask = 0x01,
-		.fmt_change_digital_mask = 0x03,
+		.fmt_change_digital_mask = 0x40,
 		.cp_csc = 0xf4,
 		.formats = adv7611_formats,
 		.nformats = ARRAY_SIZE(adv7611_formats),
