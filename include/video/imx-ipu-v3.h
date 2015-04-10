@@ -156,6 +156,7 @@ void ipu_set_csi_src_mux(struct ipu_soc *ipu, int csi_id, bool mipi_csi2);
 void ipu_set_ic_src_mux(struct ipu_soc *ipu, int csi_id, bool vdi);
 void ipu_set_vdi_src_mux(struct ipu_soc *ipu, bool csi);
 void ipu_dump(struct ipu_soc *ipu);
+int ipu_set_skip_ic_enc(struct ipu_soc *ipu, u32 skip, u32 max_ratio);
 
 /*
  * IPU Image DMA Controller (idmac) functions

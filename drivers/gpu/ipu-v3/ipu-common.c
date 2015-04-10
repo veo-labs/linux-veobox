@@ -34,6 +34,11 @@
 #include <video/imx-ipu-v3.h>
 #include "ipu-prv.h"
 
+#define CSI_MAX_RATIO_SKIP_IC_ENC_MASK		0x00000007
+#define CSI_MAX_RATIO_SKIP_IC_ENC_SHIFT		0
+#define CSI_SKIP_IC_ENC_MASK			0x000000f8
+#define CSI_SKIP_IC_ENC_SHIFT			3
+
 static inline u32 ipu_cm_read(struct ipu_soc *ipu, unsigned offset)
 {
 	return readl(ipu->cm_reg + offset);
@@ -672,6 +677,32 @@ static int ipu_memory_reset(struct ipu_soc *ipu)
 
 	return 0;
 }
+
+/*
+ * Set the skip values for IC encoding task.
+ * max_ratio should be 0 <= max_ratio <= 5
+ */
+int ipu_set_skip_ic_enc(struct ipu_soc *ipu, u32 skip, u32 max_ratio)
+{
+	unsigned long flags;
+	u32 temp;
+
+	if (max_ratio > 5)
+		return -EINVAL;
+
+	spin_lock_irqsave(&ipu->lock, flags);
+
+	temp = ipu_cm_read(ipu, IPU_SKIP);
+	temp &= ~(CSI_MAX_RATIO_SKIP_IC_ENC_MASK | CSI_SKIP_IC_ENC_MASK);
+	temp |= (max_ratio << CSI_MAX_RATIO_SKIP_IC_ENC_SHIFT) |
+		(skip << CSI_SKIP_IC_ENC_SHIFT);
+	ipu_cm_write(ipu, temp, IPU_SKIP);
+
+	spin_unlock_irqrestore(&ipu->lock, flags);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ipu_set_skip_ic_enc);
 
 /*
  * Set the source mux for the given CSI. Selects either parallel or
