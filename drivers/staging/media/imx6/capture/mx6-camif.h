@@ -52,6 +52,13 @@ static inline struct mx6cam_buffer *to_mx6cam_vb(struct vb2_buffer *vb)
 	return container_of(vb, struct mx6cam_buffer, vb);
 }
 
+struct mx6cam_fps_link {
+	int fps_in;
+	int fps_out;
+	int skip;
+	int max_ratio;
+};
+
 struct mx6cam_pixfmt {
 	char	*name;
 	u32	fourcc;
@@ -158,6 +165,10 @@ struct mx6cam_dev {
 	struct v4l2_mbus_framefmt subdev_fmt;
 	struct mx6cam_pixfmt      *subdev_pixfmt;
 	struct v4l2_mbus_config   mbus_cfg;
+	struct v4l2_streamparm in_parm;		/* input sensor parm */
+	struct v4l2_streamparm out_parm;	/* output user parm */
+	int skip;
+	int max_ratio;
 
 	struct v4l2_dv_timings		dv_timings_cap;
 

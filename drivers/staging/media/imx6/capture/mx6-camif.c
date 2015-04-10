@@ -86,6 +86,87 @@ static inline struct mx6cam_ctx *file2ctx(struct file *file)
 	return container_of(file->private_data, struct mx6cam_ctx, fh);
 }
 
+static struct mx6cam_fps_link mx6cam_fpslinks[] = {
+	{
+		.fps_in		= 30,
+		.fps_out	= 30,
+		.skip		= 0x00,
+		.max_ratio	= 0,
+	},
+	{
+		.fps_in		= 50,
+		.fps_out	= 50,
+		.skip		= 0x00,
+		.max_ratio	= 0,
+	},
+	{
+		.fps_in		= 50,
+		.fps_out	= 30,
+		.skip		= 0x05,
+		.max_ratio	= 4,
+	},
+	{
+		.fps_in		= 50,
+		.fps_out	= 25,
+		.skip		= 0x09,
+		.max_ratio	= 5,
+	},
+	{
+		.fps_in		= 50,
+		.fps_out	= 24,
+		.skip		= 0x09,
+		.max_ratio	= 5,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 60,
+		.skip		= 0x00,
+		.max_ratio	= 0,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 45,
+		.skip		= 0x04,
+		.max_ratio	= 3,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 40,
+		.skip		= 0x0a,
+		.max_ratio	= 5,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 35,
+		.skip		= 0x0a,
+		.max_ratio	= 4,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 30,
+		.skip		= 0x1a,
+		.max_ratio	= 5,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 24,
+		.skip		= 0x0b,
+		.max_ratio	= 4,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 20,
+		.skip		= 0x0b,
+		.max_ratio	= 5,
+	},
+	{
+		.fps_in		= 60,
+		.fps_out	= 10,
+		.skip		= 0x1b,
+		.max_ratio	= 5,
+	},
+};
+
 /* Supported user and sensor pixel formats */
 static struct mx6cam_pixfmt mx6cam_pixformats[] = {
 	{
@@ -228,8 +309,83 @@ static struct mx6cam_endpoint *find_ep_by_input_index(struct mx6cam_dev *dev,
 }
 #endif
 
+/*
+ * Search into mx6cam_fpslinks for a link with corresponding fps_in and fps_out,
+ * return NULL in case it does not exist
+ */
+static struct mx6cam_fps_link *mx6_find_skip_link(int fps_in, int fps_out)
+{
+	struct mx6cam_fps_link *link;
+	bool found = false;
+	int i = 0;
+
+	while (!found && i < ARRAY_SIZE(mx6cam_fpslinks)) {
+		link = &mx6cam_fpslinks[i];
+		found = link->fps_in == fps_in && link->fps_out == fps_out;
+		i++;
+	}
+
+	link = found ? link : NULL;
+
+	return link;
+}
+
+/*
+ * Calculate the number of skip frames to get the desired fps capture set by
+ * s_parm IOCTL.
+ *
+ * Return value will be -EINVAL if:
+ * - fps src (set by dv_timings) is less < 30
+ * - fps capture (set by s_parm) > fps src
+ * - fps capture has not been specified by s_parm IOCTL
+ * - It is not possible to make that change of fps
+ */
+static int mx6_calculate_skip(struct mx6cam_dev *dev)
+{
+	int ret = 0;
+	struct mx6cam_fps_link *link = NULL;
+	int fps_in = dev->in_parm.parm.capture.timeperframe.denominator /
+			dev->in_parm.parm.capture.timeperframe.numerator;
+	int fps_out = dev->out_parm.parm.capture.timeperframe.denominator /
+			dev->out_parm.parm.capture.timeperframe.numerator;
+
+	if (!dev->out_parm.parm.capture.capability || fps_in < 30 ||
+		!fps_out || fps_out > fps_in)
+		return -EINVAL;
+
+	dev_dbg(dev->v4l2_dev.dev, "Calculating skip for fpsin %d, psout %d\n",
+			fps_in,
+			fps_out);
+
+	link = mx6_find_skip_link(fps_in, fps_out);
+
+	if (!link && (fps_in % 2 == 0)) {
+
+		/* We try to reduce by half of fps_in */
+		dev_dbg(dev->v4l2_dev.dev,
+			"Not a perfect match, reducing fps to %d\n",
+			fps_in / 2);
+		link = mx6_find_skip_link(fps_in, fps_in / 2);
+	}
+
+	if (link) {
+		dev->max_ratio = link->max_ratio;
+		dev->skip = link->skip;
+	} else {
+		dev->max_ratio = 0;
+		dev->skip = 0;
+		dev_dbg(dev->v4l2_dev.dev,
+			"Change of fps not supported\n");
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_timings *timings)
 {
+	int fps, hsize, vsize;
+
 	dev->format.pixelformat = V4L2_PIX_FMT_YUYV;
 	dev->format.width = timings->bt.width;
 	dev->format.height = timings->bt.height;
@@ -255,6 +411,27 @@ static void update_format_from_timings(struct mx6cam_dev *dev, struct v4l2_dv_ti
 	dev->subdev_fmt.colorspace = V4L2_COLORSPACE_REC709;
 	dev->subdev_fmt.code = MEDIA_BUS_FMT_YUYV8_1X16;
 	dev->subdev_pixfmt = mx6cam_get_format(0, dev->subdev_fmt.code);
+
+	/* Update fps from timings */
+	hsize = timings->bt.hfrontporch + timings->bt.hsync +
+			timings->bt.hbackporch + timings->bt.width;
+	vsize = timings->bt.vfrontporch + timings->bt.vsync +
+			timings->bt.vbackporch + timings->bt.il_vfrontporch +
+			timings->bt.il_vsync + timings->bt.il_vbackporch +
+			timings->bt.height;
+	fps = (unsigned)timings->bt.pixelclock / (hsize * vsize);
+
+	/* Update in/out parm */
+	dev->in_parm.parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+	dev->in_parm.parm.capture.timeperframe.numerator = 1;
+	dev->in_parm.parm.capture.timeperframe.denominator = fps;
+
+	if (dev->out_parm.parm.capture.capability) {
+		dev_dbg(dev->v4l2_dev.dev,
+			"Recalculating skip parameters for %dfps\n",
+			fps);
+		mx6_calculate_skip(dev);
+	}
 }
 
 /*
@@ -1475,11 +1652,27 @@ static int vidioc_g_parm(struct file *file, void *fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	int ret;
 
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	return v4l2_subdev_call(dev->ep->sd, video, g_parm, a);
+	dev_dbg(dev->v4l2_dev.dev, "Calling to g_parm of subdev %s\n",
+		 dev->ep->sd->name);
+	ret = v4l2_subdev_call(dev->ep->sd, video, g_parm, a);
+
+	if (ret) {
+
+		/* FPS has not been set yet */
+		if (dev->out_parm.parm.capture.capability == 0) {
+			memcpy(&dev->out_parm, &dev->in_parm,
+				sizeof(struct v4l2_streamparm));
+		}
+
+		memcpy(a, &dev->out_parm, sizeof(struct v4l2_streamparm));
+		ret = 0;
+	}
+	return ret;
 }
 
 static int vidioc_s_parm(struct file *file, void *fh,
@@ -1487,11 +1680,27 @@ static int vidioc_s_parm(struct file *file, void *fh,
 {
 	struct mx6cam_ctx *ctx = file2ctx(file);
 	struct mx6cam_dev *dev = ctx->dev;
+	int ret;
 
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	return v4l2_subdev_call(dev->ep->sd, video, s_parm, a);
+	dev_dbg(dev->v4l2_dev.dev, "Calling to s_parm of subdev %s\n",
+			 dev->ep->sd->name);
+	ret = v4l2_subdev_call(dev->ep->sd, video, s_parm, a);
+
+	if (!ret)
+		return 0;
+
+	/* Update out_parm */
+	memcpy(&dev->out_parm, a, sizeof(struct v4l2_captureparm));
+	dev->out_parm.parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+	ret = mx6_calculate_skip(dev);
+
+	if (ret)
+		dev->out_parm.parm.capture.capability = 0;
+
+	return ret;
 }
 
 static int vidioc_cropcap(struct file *file, void *priv,
@@ -2624,6 +2833,11 @@ static int mx6cam_probe_complete(struct mx6cam_dev *dev)
 	dev->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	atomic_set(&dev->status_change, 1);
 	dev->signal_locked = 0;
+	dev->in_parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	dev->out_parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	dev->out_parm.parm.capture.capability = 0; /* Still not configure */
+	dev->skip = 0;
+	dev->max_ratio = 0;
 
 	/* Initialize the buffer queues */
 	vfd->queue = &dev->buffer_queue;

@@ -621,6 +621,12 @@ static int encoder_start(struct encoder_priv *priv)
 
 	priv->buf_num = 0;
 
+	/* Set skip parameter */
+	dev_info(dev->v4l2_dev.dev, "Setting skip %d with max_ratio %d\n",
+	        dev->skip,dev->max_ratio);
+	ipu_csi_set_skip_smfc(priv->csi, dev->skip, dev->max_ratio, 0);
+	ipu_set_skip_ic_enc(dev->ipu, dev->skip, dev->max_ratio);
+
 	if (dev->rot_mode >= IPU_ROTATE_90_RIGHT)
 		err = encoder_setup_rotation(priv, phys[0], phys[1]);
 	else
