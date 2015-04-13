@@ -616,6 +616,9 @@ int ipu_csi_set_skip_smfc(struct ipu_csi *csi, u32 skip,
 		(skip << CSI_SKIP_SMFC_SHIFT);
 	ipu_csi_write(csi, temp, CSI_SKIP);
 
+	dev_dbg(csi->ipu->dev, "CSI_SKIP:     %08x\n",
+		ipu_csi_read(csi, CSI_SKIP));
+
 	spin_unlock_irqrestore(&csi->lock, flags);
 
 	return 0;

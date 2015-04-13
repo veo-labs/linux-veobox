@@ -85,7 +85,7 @@ static void encoder_setup_csi(struct encoder_priv *priv)
 	dev->pdata->set_video_mux(ipu_id, csi_id, is_csi2, dev->ep->ep.base.id);
 	/* select either parallel or MIPI-CSI2 as input to our CSI */
 	ipu_csi_set_src(priv->csi, dev->ep->ep.base.id, is_csi2);
-
+#if 0
 	/* set CSI destination to IC or direct to mem via SMFC */
 	ipu_csi_set_dest(priv->csi, dev->using_ic ?
 			 IPU_CSI_DEST_IC : IPU_CSI_DEST_IDMAC);
@@ -93,6 +93,8 @@ static void encoder_setup_csi(struct encoder_priv *priv)
 		/* set IC to receive from CSI */
 		ipu_ic_set_src(priv->ic_enc, csi_id, false);
 	}
+#endif
+	ipu_csi_set_dest(priv->csi, IPU_CSI_DEST_IDMAC);
 }
 
 static void encoder_put_ipu_resources(struct encoder_priv *priv)
@@ -133,7 +135,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 		v4l2_err(&priv->sd, "failed to get CSI %d\n", csi_id);
 		return PTR_ERR(priv->csi);
 	}
-
+#if 0
 	if (dev->using_ic) {
 		v4l2_err(&priv->sd, "Using IC\n");
 		priv->ic_enc = ipu_ic_get(dev->ipu, IC_TASK_ENCODER);
@@ -170,6 +172,7 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 			goto out;
 		}
 	} else {
+#endif
 		v4l2_err(&priv->sd, "Direct CSI -> SMFC -> MEM\n");
 		/*
 		 * Choose the direct CSI-->SMFC-->MEM channel corresponding
@@ -191,7 +194,9 @@ static int encoder_get_ipu_resources(struct encoder_priv *priv)
 			err = PTR_ERR(priv->enc_ch);
 			goto out;
 		}
+#if 0
 	}
+#endif
 
 	return 0;
 out:
@@ -470,7 +475,7 @@ static int encoder_setup_rotation(struct encoder_priv *priv,
 		v4l2_err(&priv->sd, "failed to alloc rot_buf[1], %d\n", err);
 		goto free_rot0;
 	}
-
+#if 0
 	err = ipu_ic_task_init(priv->ic_enc,
 			       priv->inf.width, priv->inf.height,
 			       priv->outf.height, priv->outf.width,
@@ -479,7 +484,7 @@ static int encoder_setup_rotation(struct encoder_priv *priv,
 		v4l2_err(&priv->sd, "ipu_ic_task_init failed, %d\n", err);
 		goto free_rot1;
 	}
-
+#endif
 	/* init the IC ENC-->MEM IDMAC channel */
 	encoder_setup_channel(priv, priv->enc_ch,
 			      IPU_ROTATE_NONE,
@@ -543,7 +548,7 @@ static int encoder_setup_norotation(struct encoder_priv *priv,
 		v4l2_err(&priv->sd, "failed to alloc underrun_buf, %d\n", err);
 		return err;
 	}
-
+#if 0
 	if (dev->using_ic) {
 		err = ipu_ic_task_init(priv->ic_enc,
 				       priv->inf.width, priv->inf.height,
@@ -555,14 +560,15 @@ static int encoder_setup_norotation(struct encoder_priv *priv,
 			goto free_underrun;
 		}
 	}
-
+#endif
 	/* init the IC PRP-->MEM IDMAC channel */
 	encoder_setup_channel(priv, priv->enc_ch, dev->rot_mode,
 			      phys0, phys1, false);
-
+#if 0
 	if (dev->using_ic)
 		ipu_ic_enable(priv->ic_enc);
 	else
+#endif
 		ipu_smfc_enable(priv->smfc);
 
 	/* set buffers ready */
@@ -571,12 +577,12 @@ static int encoder_setup_norotation(struct encoder_priv *priv,
 
 	/* enable the channels */
 	ipu_idmac_enable_channel(priv->enc_ch);
-
+#if 0
 	if (dev->using_ic) {
 		/* enable the IC ENCODE task */
 		ipu_ic_task_enable(priv->ic_enc);
 	}
-
+#endif
 	return 0;
 
 free_underrun:
@@ -625,7 +631,9 @@ static int encoder_start(struct encoder_priv *priv)
 	dev_info(dev->v4l2_dev.dev, "Setting skip %d with max_ratio %d\n",
 	        dev->skip,dev->max_ratio);
 	ipu_csi_set_skip_smfc(priv->csi, dev->skip, dev->max_ratio, 0);
+#if 0
 	ipu_set_skip_ic_enc(dev->ipu, dev->skip, dev->max_ratio);
+#endif
 
 	if (dev->rot_mode >= IPU_ROTATE_90_RIGHT)
 		err = encoder_setup_rotation(priv, phys[0], phys[1]);
@@ -718,10 +726,11 @@ static int encoder_stop(struct encoder_priv *priv)
 #if NFB4EOF_IRQ
 	devm_free_irq(dev->dev, priv->nfb4eof_irq, priv);
 #endif
+#if 0
 	/* disable IC tasks and the channels */
 	if (dev->using_ic)
 		ipu_ic_task_disable(priv->ic_enc);
-
+#endif
 	ipu_idmac_disable_channel(priv->enc_ch);
 	if (dev->rot_mode >= IPU_ROTATE_90_RIGHT) {
 		ipu_idmac_disable_channel(priv->enc_rot_in_ch);
@@ -730,10 +739,11 @@ static int encoder_stop(struct encoder_priv *priv)
 
 	if (dev->rot_mode >= IPU_ROTATE_90_RIGHT)
 		ipu_idmac_unlink(priv->enc_ch, priv->enc_rot_in_ch);
-
+#if 0
 	if (dev->using_ic)
 		ipu_ic_disable(priv->ic_enc);
 	else
+#endif
 		ipu_smfc_disable(priv->smfc);
 
 	encoder_free_dma_buf(priv, &priv->rot_buf[0]);

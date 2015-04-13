@@ -108,7 +108,7 @@ static struct mx6cam_fps_link mx6cam_fpslinks[] = {
 	{
 		.fps_in		= 50,
 		.fps_out	= 25,
-		.skip		= 0x02,
+		.skip		= 0x2,
 		.max_ratio	= 1,
 	},
 	{
@@ -483,13 +483,15 @@ static bool need_ic(struct mx6cam_dev *dev,
 
 	sensor_cs = ipu_mbus_code_to_colorspace(sf->code);
 	user_cs = ipu_pixelformat_to_colorspace(uf->pixelformat);
-
+#if 0
 	ret = (uf->width != crop->width ||
 	       uf->height != crop->height ||
 	       user_cs != sensor_cs ||
 	       dev->preview_on ||
 	       dev->rot_mode != IPU_ROTATE_NONE);
-
+#else
+	ret = false;
+#endif
 	if (!ret)
 		v4l2_err(&dev->v4l2_dev, "No need for IC\n");
 	else {
@@ -520,31 +522,34 @@ static bool can_use_ic(struct mx6cam_dev *dev,
 		       struct v4l2_pix_format *uf)
 {
 	struct mx6cam_endpoint *ep = dev->ep;
-	int ret;
+	bool ret;
 
+#if 0
 	ret = (ep->ep.bus_type == V4L2_MBUS_CSI2 ||
 		ep->ep.bus.parallel.bus_width < 16) &&
 		ep->ep.base.id == 0 &&
 		uf->width <= MAX_W_IC &&
 		uf->height <= MAX_H_IC;
 
-	if (!ret) {
-		v4l2_err(&dev->v4l2_dev, "IC can't be used :\n");
-		if (ep->ep.bus_type != V4L2_MBUS_CSI2)
-			v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", ep->ep.bus_type, V4L2_MBUS_CSI2);
-		if (ep->ep.bus.parallel.bus_width >= 16)
-			v4l2_err(&dev->v4l2_dev, "bus width : %d > 16\n", ep->ep.bus.parallel.bus_width);
-		if (ep->ep.base.id != 0)
-			v4l2_err(&dev->v4l2_dev, "base id : %d != 0", ep->ep.base.id);
-		if (uf->width > MAX_W_IC)
-			v4l2_err(&dev->v4l2_dev, "width %d > %d", uf->width, MAX_W_IC);
-		if (uf->height > MAX_H_IC)
-			v4l2_err(&dev->v4l2_dev, "height %d > %d", uf->height, MAX_H_IC);
+		if (!ret) {
+			v4l2_err(&dev->v4l2_dev, "IC can't be used :\n");
+			if (ep->ep.bus_type != V4L2_MBUS_CSI2)
+				v4l2_err(&dev->v4l2_dev, "bus type is not CSI2 : %d != %d\n", ep->ep.bus_type, V4L2_MBUS_CSI2);
+			if (ep->ep.bus.parallel.bus_width >= 16)
+				v4l2_err(&dev->v4l2_dev, "bus width : %d > 16\n", ep->ep.bus.parallel.bus_width);
+			if (ep->ep.base.id != 0)
+				v4l2_err(&dev->v4l2_dev, "base id : %d != 0", ep->ep.base.id);
+			if (uf->width > MAX_W_IC)
+				v4l2_err(&dev->v4l2_dev, "width %d > %d", uf->width, MAX_W_IC);
+			if (uf->height > MAX_H_IC)
+				v4l2_err(&dev->v4l2_dev, "height %d > %d", uf->height, MAX_H_IC);
 	} else {
 		v4l2_err(&dev->v4l2_dev, "IC is usuable\n");
 	}
-
-
+#else
+	ret = false;
+	v4l2_err(&dev->v4l2_dev, "IC can't be used :\n");
+#endif
 	return ret;
 }
 
@@ -3216,7 +3221,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 		ret = PTR_ERR(dev->encoder_sd);
 		goto unreg_subdevs;
 	}
-
+#if 0
 	dev->preview_sd = mx6cam_preview_init(dev);
 	if (IS_ERR(dev->preview_sd)) {
 		ret = PTR_ERR(dev->preview_sd);
@@ -3228,7 +3233,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 		ret = PTR_ERR(dev->vdic_sd);
 		goto unreg_subdevs;
 	}
-
+#endif
 	ret = v4l2_device_register_subdev(&dev->v4l2_dev, dev->encoder_sd);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev,
@@ -3237,7 +3242,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->encoder_sd->name);
-
+#if 0
 	ret = v4l2_device_register_subdev(&dev->v4l2_dev, dev->preview_sd);
 	if (ret < 0) {
 		v4l2_err(&dev->v4l2_dev,
@@ -3255,7 +3260,7 @@ static int mx6cam_probe(struct platform_device *pdev)
 	}
 	v4l2_info(&dev->v4l2_dev, "Registered subdev %s\n",
 		  dev->vdic_sd->name);
-
+#endif
 	return 0;
 
 unreg_subdevs:
