@@ -108,14 +108,8 @@ static struct mx6cam_fps_link mx6cam_fpslinks[] = {
 	{
 		.fps_in		= 50,
 		.fps_out	= 25,
-		.skip		= 0x09,
-		.max_ratio	= 5,
-	},
-	{
-		.fps_in		= 50,
-		.fps_out	= 24,
-		.skip		= 0x09,
-		.max_ratio	= 5,
+		.skip		= 0x02,
+		.max_ratio	= 1,
 	},
 	{
 		.fps_in		= 60,
@@ -131,21 +125,9 @@ static struct mx6cam_fps_link mx6cam_fpslinks[] = {
 	},
 	{
 		.fps_in		= 60,
-		.fps_out	= 40,
-		.skip		= 0x0a,
-		.max_ratio	= 5,
-	},
-	{
-		.fps_in		= 60,
-		.fps_out	= 35,
-		.skip		= 0x0a,
-		.max_ratio	= 4,
-	},
-	{
-		.fps_in		= 60,
 		.fps_out	= 30,
-		.skip		= 0x1a,
-		.max_ratio	= 5,
+		.skip		= 0x02,
+		.max_ratio	= 1,
 	},
 	{
 		.fps_in		= 60,
@@ -155,9 +137,9 @@ static struct mx6cam_fps_link mx6cam_fpslinks[] = {
 	},
 	{
 		.fps_in		= 60,
-		.fps_out	= 20,
-		.skip		= 0x0b,
-		.max_ratio	= 5,
+		.fps_out	= 15,
+		.skip		= 0x07,
+		.max_ratio	= 3,
 	},
 	{
 		.fps_in		= 60,
@@ -2848,7 +2830,7 @@ static int mx6cam_probe_complete(struct mx6cam_dev *dev)
 	}
 
 	dev->buffer_queue.type = dev->type;
-	dev->buffer_queue.io_modes = VB2_MMAP | VB2_DMABUF;/* | VB2_USERPTR;*/
+	dev->buffer_queue.io_modes = VB2_MMAP | VB2_DMABUF | VB2_USERPTR;
 	dev->buffer_queue.lock = &dev->mutex;
 	dev->buffer_queue.drv_priv = dev;
 	dev->buffer_queue.buf_struct_size = sizeof(struct mx6cam_buffer);
