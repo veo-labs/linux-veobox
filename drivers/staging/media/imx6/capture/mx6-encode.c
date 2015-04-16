@@ -231,7 +231,7 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 		if (state == VB2_BUF_STATE_DONE)
 			state = priv->nfb4eof ?
 				VB2_BUF_STATE_ERROR : VB2_BUF_STATE_DONE;
-//		v4l2_err(&priv->sd, "[EOF int]frame seq: %d, state %s\n", frame->vb.v4l2_buf.sequence, state == VB2_BUF_STATE_DONE ? "DONE" : "ERROR");
+		dev_dbg(dev->dev, "frame seq: %d, state %s\n", frame->vb.v4l2_buf.sequence, state == VB2_BUF_STATE_DONE ? "DONE" : "ERROR");
 		vb2_buffer_done(&frame->vb, state);
 	}
 
@@ -252,10 +252,10 @@ static irqreturn_t encoder_eof_interrupt(int irq, void *dev_id)
 				   struct mx6cam_buffer, list);
 		phys = vb2_dma_contig_plane_dma_addr(&frame->vb, 0);
 		list_del(&frame->list);
-		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
+//		dev_dbg(dev->dev, "buffer %d done\n", frame->vb.v4l2_buf.index);
 		priv->active_frame[priv->buf_num] = frame;
 	} else {
-		dev_dbg(dev->dev, "Next buffer will be dropped\n");
+//		dev_dbg(dev->dev, "Next buffer will be dropped\n");
 		phys = priv->underrun_buf.phys;
 		priv->active_frame[priv->buf_num] = NULL;
 	}
