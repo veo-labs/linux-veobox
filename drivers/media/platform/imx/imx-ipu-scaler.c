@@ -47,6 +47,11 @@
 /* In bytes, per queue */
 #define MEM2MEM_VID_MEM_LIMIT	(64 * 1024 * 1024)
 
+static int ipu_scale_num_buffers = 8;
+module_param(ipu_scale_num_buffers, int, 0644);
+MODULE_PARM_DESC(ipu_scale_num_buffers,
+		 "Number of buffers to allocate for GStreamer (default: 8)");
+
 #define fh_to_ctx(__fh)	container_of(__fh, struct ipu_scale_ctx, fh)
 
 enum {
@@ -140,6 +145,7 @@ static void ipu_complete(void *priv, int err)
 
 	curr_ctx = v4l2_m2m_get_curr_priv(ipu_scaler->m2m_dev);
 
+	dev_dbg(ipu_scaler->dev, "end scaling\n");
 	if (NULL == curr_ctx) {
 		dev_dbg(ipu_scaler->dev,
 			"Instance released before the end of transaction\n");
@@ -215,6 +221,7 @@ static void ipu_scaler_work(struct work_struct *work)
 		}
 	}
 
+	dev_dbg(ipu_scaler->dev, "start scaling\n");
 	ipu_image_convert_run(ipu_scaler->ipu, &in, &out, ctx->icc,
 			      ctx->num_tiles, ipu_complete, ipu_scaler, false);
 
@@ -540,6 +547,9 @@ static int ipu_scale_queue_setup(struct vb2_queue *vq,
 
 	while (size * count > MEM2MEM_VID_MEM_LIMIT)
 		(count)--;
+
+	if (vq->num_buffers + *nbuffers < ipu_scale_num_buffers)
+		count = ipu_scale_num_buffers - vq->num_buffers;
 
 	*nplanes = 1;
 	*nbuffers = count;
