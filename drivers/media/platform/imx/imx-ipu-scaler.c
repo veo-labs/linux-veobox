@@ -76,6 +76,7 @@ struct ipu_scale_dev {
 struct ipu_scale_q_data {
 	struct v4l2_pix_format	cur_fmt;
 	struct v4l2_rect	rect;
+	int sequence;
 };
 
 struct ipu_scale_ctx {
@@ -236,6 +237,8 @@ static void ipu_scaler_work(struct work_struct *work)
 
 	src_buf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
 	dst_buf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
+	dst_buf->v4l2_buf.sequence = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE)->sequence++;
+	src_buf->v4l2_buf.sequence = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT)->sequence++;
 
 	dst_buf->v4l2_buf.timestamp = src_buf->v4l2_buf.timestamp;
 	dst_buf->v4l2_buf.timecode = src_buf->v4l2_buf.timecode;
@@ -606,6 +609,15 @@ static void ipu_scale_buf_queue(struct vb2_buffer *vb)
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vb);
 }
 
+static int ipu_scale_start_streaming(struct vb2_queue *q, unsigned count)
+{
+	struct ipu_scale_ctx *ctx = vb2_get_drv_priv(q);
+	struct ipu_scale_q_data *q_data = get_q_data(ctx, q->type);
+
+	q_data->sequence = 0;
+	return 0;
+}
+
 static void ipu_scale_stop_streaming(struct vb2_queue *q)
 {
 	struct ipu_scale_ctx *ctx = vb2_get_drv_priv(q);
@@ -626,6 +638,7 @@ static struct vb2_ops ipu_scale_qops = {
 	.buf_queue	= ipu_scale_buf_queue,
 	.wait_prepare	= vb2_ops_wait_prepare,
 	.wait_finish	= vb2_ops_wait_finish,
+	.start_streaming = ipu_scale_start_streaming,
 	.stop_streaming = ipu_scale_stop_streaming,
 };
 
