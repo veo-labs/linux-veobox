@@ -472,13 +472,12 @@ static int coda_try_pixelformat(struct coda_ctx *ctx, struct v4l2_format *f)
 static unsigned int coda_estimate_sizeimage(struct coda_ctx *ctx, u32 sizeimage,
 					    u32 width, u32 height)
 {
-	/*
-	 * This is a rough estimate for sensible compressed buffer
-	 * sizes (between 1 and 16 bits per pixel). This could be
-	 * improved by better format specific worst case estimates.
-	 */
-	return round_up(clamp(sizeimage, width * height / 8,
-					 width * height * 2), PAGE_SIZE);
+	/* FIXME: This should be revised in order to take into account
+	  the bitrate and be more precise.
+		If width and height are not correctly specified by the user
+		it should be calculated correctly to !
+		*/
+	return round_up(1920*1088*2, PAGE_SIZE);
 }
 
 static int coda_try_fmt(struct coda_ctx *ctx, const struct coda_codec *codec,
